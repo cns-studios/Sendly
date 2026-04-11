@@ -54,6 +54,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 		"cnsUserId":        userIDOrZero(user),
 		"cnsUsername":      username,
 		"allowedDurations": tier.AllowedDurations,
+		"tosVersion":       h.cfg.TOSVersion,
 	}
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
@@ -66,6 +67,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
 		"authenticated":    authenticated,
 		"allowedDurations": tier.AllowedDurations,
+		"tosVersion":       h.cfg.TOSVersion,
 		"authLoginURL":     authLoginURL,
 		"username":         username,
 		"configJSON":       template.JS(string(configJSON)),

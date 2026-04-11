@@ -159,6 +159,80 @@
         width: 100%;
     }
 }
+
+    .tos-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 5000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+        background: rgba(0, 0, 0, 0.78);
+        backdrop-filter: blur(4px);
+    }
+
+    .tos-modal {
+        width: min(34rem, 100%);
+        border: 1px solid #2f2f2f;
+        border-top: 3px solid var(--accent);
+        border-radius: 8px;
+        background: #101010;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+        padding: 1.4rem;
+    }
+
+    .tos-modal-kicker {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.68rem;
+        text-transform: uppercase;
+        letter-spacing: 0.22em;
+        color: var(--accent);
+        margin-bottom: 0.5rem;
+    }
+
+    .tos-modal h2 {
+        margin: 0;
+        font-size: 1.3rem;
+        line-height: 1.25;
+    }
+
+    .tos-modal-description {
+        margin-top: 0.9rem;
+        color: #d3d3d3;
+        line-height: 1.6;
+    }
+
+    .tos-modal-description a {
+        color: var(--accent);
+    }
+
+    .tos-modal-actions {
+        margin-top: 1.2rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    body.tos-gate-open {
+        overflow: hidden;
+    }
+
+    @media (max-width: 640px) {
+        .tos-modal {
+            padding: 1rem;
+        }
+
+        .tos-modal-actions {
+            justify-content: stretch;
+        }
+
+        .tos-modal-actions .btn {
+            width: 100%;
+        }
+    }
+
  
 *, *::before, *::after {
     box-sizing: border-box;

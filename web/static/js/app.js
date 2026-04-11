@@ -6,6 +6,8 @@
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
+    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
+    const TOS_COOKIE_NAME = 'shareit_tos_accepted';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const ALLOWED_DURATIONS = window.CONFIG?.allowedDurations || ['24h', '7d'];    const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
@@ -38,7 +40,6 @@
     const fileSize = document.getElementById('file-size');
     const resetVault = document.getElementById('reset-vault');
     const startOverBtn = document.getElementById('start-over-btn');
-    const tosCheck = document.getElementById('tos-check');
     const finalizeBtn = document.getElementById('finalize-btn');
     const statusText = document.getElementById('status-text');
     const errorBanner = document.getElementById('error-banner');
@@ -72,6 +73,9 @@
     const deviceApprovalCount = document.getElementById('device-approval-count');
     const deviceApprovalDecline = document.getElementById('device-approval-decline');
     const deviceApprovalApprove = document.getElementById('device-approval-approve');
+    const tosOverlay = document.getElementById('tos-overlay');
+    const tosAcceptBtn = document.getElementById('tos-accept-btn');
+    const tosDeclineBtn = document.getElementById('tos-decline-btn');
 
     let pendingEnrollmentItems = [];
     let activePendingEnrollment = null;
@@ -86,7 +90,53 @@
         return '';
     }
 
+    function setCookie(name, value, maxAgeSeconds) {
+        document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAgeSeconds}; SameSite=Lax`;
+    }
+
+    function hasAcceptedCurrentTOS() {
+        return getCookieValue(TOS_COOKIE_NAME) === TOS_VERSION;
+    }
+
+    function showTOSGate() {
+        if (!tosOverlay) return;
+        tosOverlay.classList.remove('hidden');
+        tosOverlay.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('tos-gate-open');
+    }
+
+    function hideTOSGate() {
+        if (!tosOverlay) return;
+        tosOverlay.classList.add('hidden');
+        tosOverlay.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('tos-gate-open');
+    }
+
+    function setupTOSGate() {
+        if (!tosOverlay) return true;
+
+        if (hasAcceptedCurrentTOS()) {
+            hideTOSGate();
+            return true;
+        }
+
+        showTOSGate();
+
+        tosAcceptBtn?.addEventListener('click', () => {
+            setCookie(TOS_COOKIE_NAME, TOS_VERSION, 31536000);
+            hideTOSGate();
+        });
+
+        tosDeclineBtn?.addEventListener('click', () => {
+            window.location.href = 'https://cns-studios.com';
+        });
+
+        return false;
+    }
+
     async function init() {
+        setupTOSGate();
+
          
         try {
             await SecureCrypto.loadWordList();
@@ -547,7 +597,6 @@
             resetUpload();
         });
         startOverBtn.addEventListener('click', () => resetUpload());
-        tosCheck.addEventListener('change', updateFinalizeButtonState);
         finalizeBtn.addEventListener('click', handleFinalize);
 
          
@@ -643,14 +692,13 @@
         stageOutput.classList.add('hidden');
         statusText.textContent = 'Ready';
         statusText.style.color = 'var(--accent)';
-        tosCheck.checked = false;
         updateFinalizeButtonState();
 
         runProtocolInBackground();
     }
 
     function handleFinalize() {
-        if (!tosCheck.checked || isFinalizing) return;
+        if (isFinalizing) return;
 
         isFinalizing = true;
         updateFinalizeButtonState();
@@ -686,7 +734,7 @@
     }
 
     function updateFinalizeButtonState() {
-        finalizeBtn.disabled = !tosCheck.checked || isFinalizing;
+        finalizeBtn.disabled = isFinalizing;
     }
     function updateUploadProgress() {
         if (totalChunks === 0) return;
@@ -994,7 +1042,6 @@
         stageOutput.classList.add('hidden');
         statusText.textContent = uploadError ? 'Upload Failed' : 'Pending Finalization';
         statusText.style.color = uploadError ? '#f44336' : 'var(--accent)';
-        tosCheck.checked = false;
         updateFinalizeButtonState();
     }
 
@@ -1300,7 +1347,6 @@
         fileInput.value = '';
         dropZone.classList.remove('hidden');
         fileDetails.classList.add('hidden');
-        tosCheck.checked = false;
         finalizeBtn.disabled = true;
         statusText.textContent = 'Ready';
         statusText.style.color = 'var(--accent)';

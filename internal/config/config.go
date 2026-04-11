@@ -11,8 +11,9 @@ import (
 )
 
 type Config struct {
-	Port    string
-	BaseURL string
+	Port       string
+	BaseURL    string
+	TOSVersion string
 
 	PostgresHost     string
 	PostgresPort     string
@@ -47,6 +48,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                  getEnv("PORT", "8085"),
 		BaseURL:               getEnv("BASE_URL", "http://localhost:8085"),
+		TOSVersion:            getEnv("TOS_VERSION", "2026-04-05"),
 		PostgresHost:          getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:          getEnv("POSTGRES_PORT", "5432"),
 		PostgresUser:          getEnv("POSTGRES_USER", "shareit"),

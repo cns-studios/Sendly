@@ -10,6 +10,20 @@
     <link rel="alternate icon" href="/static/favicon.svg">
 </head>
 <body>
+    <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
+            <p class="tos-modal-kicker">Hold up, not so fast</p>
+            <h2 id="tos-modal-title">Terms of Service Approval Required</h2>
+            <p id="tos-modal-description" class="tos-modal-description">
+                Please review and accept our <a href="/tos" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> to use ShareIt.
+            </p>
+            <div class="tos-modal-actions">
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">Decline</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">Accept</button>
+            </div>
+        </div>
+    </div>
+
     <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:1rem;font-size:0.85rem;color:#888;">
         <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 30/90 day retention.</span>
     </div>
@@ -157,7 +171,7 @@
                         </div>
 
                         <p class="info-text">
-                            Select expiration and accept our Terms of Service to share this file.
+                            Select expiration to share this file.
                         </p>
 
                         <div class="form-group">
@@ -182,20 +196,13 @@
                             </div>
                         </div>
 
-                        <div class="checkbox-wrapper">
-                            <input type="checkbox" id="tos-check">
-                            <label for="tos-check" class="checkbox-label">
-                                I agree to the <a href="/tos" target="_blank" rel="noopener">Terms of Service</a>.
-                            </label>
-                        </div>
-
                         <div class="info-box" style="margin-top: 0;">
                             <p class="info-text">
                                 Upload your file, session expires in <span id="pending-countdown">10:00</span>.
                             </p>
                         </div>
 
-                        <button id="finalize-btn" class="btn-accent btn-large" disabled>
+                        <button id="finalize-btn" class="btn-accent btn-large">
                             Upload
                         </button>
                     </div>
