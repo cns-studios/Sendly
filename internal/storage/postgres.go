@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"shareit/internal/config"
@@ -16,18 +17,71 @@ type Postgres struct {
 	db *sqlx.DB
 }
 
+func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope) error {
+	tx, err := p.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	insertFile := `
+		INSERT INTO files (
+			id,
+			numeric_code,
+			original_name,
+			size_bytes,
+			uploader_ip,
+			owner_cns_user_id,
+			owner_cns_username,
+			expires_at,
+			created_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+	if _, err = tx.ExecContext(ctx, insertFile,
+		file.ID,
+		file.NumericCode,
+		file.OriginalName,
+		file.SizeBytes,
+		file.UploaderIP,
+		file.OwnerCNSUserID,
+		file.OwnerCNSUserName,
+		file.ExpiresAt,
+		file.CreatedAt,
+	); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if envelope != nil {
+		insertEnvelope := `
+			INSERT INTO file_key_envelopes (file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)
+			VALUES ($1, $2, $3, $4, $5)
+		`
+		if _, err = tx.ExecContext(ctx, insertEnvelope,
+			envelope.FileID,
+			envelope.WrappedDEK,
+			envelope.DEKWrapAlg,
+			envelope.DEKWrapNonce,
+			envelope.DEKWrapVersion,
+		); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
 func NewPostgres(cfg *config.Config) (*Postgres, error) {
 	db, err := sqlx.Connect("postgres", cfg.PostgresDSN())
 	if err != nil {
 		return nil, err
 	}
 
-	 
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -42,11 +96,20 @@ func (p *Postgres) Close() error {
 	return p.db.Close()
 }
 
- 
 func (p *Postgres) CreateFile(ctx context.Context, file *models.File) error {
 	query := `
-		INSERT INTO files (id, numeric_code, original_name, size_bytes, uploader_ip, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO files (
+			id,
+			numeric_code,
+			original_name,
+			size_bytes,
+			uploader_ip,
+			owner_cns_user_id,
+			owner_cns_username,
+			expires_at,
+			created_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
 	_, err := p.db.ExecContext(ctx, query,
 		file.ID,
@@ -54,13 +117,14 @@ func (p *Postgres) CreateFile(ctx context.Context, file *models.File) error {
 		file.OriginalName,
 		file.SizeBytes,
 		file.UploaderIP,
+		file.OwnerCNSUserID,
+		file.OwnerCNSUserName,
 		file.ExpiresAt,
 		file.CreatedAt,
 	)
 	return err
 }
 
- 
 func (p *Postgres) GetFileByID(ctx context.Context, id string) (*models.File, error) {
 	var file models.File
 	query := `SELECT * FROM files WHERE id = $1`
@@ -72,12 +136,10 @@ func (p *Postgres) GetFileByID(ctx context.Context, id string) (*models.File, er
 		return nil, err
 	}
 
-	 
 	if file.IsDeleted {
 		return nil, models.ErrFileDeleted
 	}
 
-	 
 	if time.Now().After(file.ExpiresAt) {
 		return nil, models.ErrFileExpired
 	}
@@ -85,7 +147,6 @@ func (p *Postgres) GetFileByID(ctx context.Context, id string) (*models.File, er
 	return &file, nil
 }
 
- 
 func (p *Postgres) GetFileByNumericCode(ctx context.Context, code string) (*models.File, error) {
 	var file models.File
 	query := `SELECT * FROM files WHERE numeric_code = $1`
@@ -97,12 +158,10 @@ func (p *Postgres) GetFileByNumericCode(ctx context.Context, code string) (*mode
 		return nil, err
 	}
 
-	 
 	if file.IsDeleted {
 		return nil, models.ErrFileDeleted
 	}
 
-	 
 	if time.Now().After(file.ExpiresAt) {
 		return nil, models.ErrFileExpired
 	}
@@ -110,7 +169,6 @@ func (p *Postgres) GetFileByNumericCode(ctx context.Context, code string) (*mode
 	return &file, nil
 }
 
- 
 func (p *Postgres) IncrementReportCount(ctx context.Context, fileID string) (int, error) {
 	var reportCount int
 	query := `
@@ -123,14 +181,12 @@ func (p *Postgres) IncrementReportCount(ctx context.Context, fileID string) (int
 	return reportCount, err
 }
 
- 
 func (p *Postgres) MarkFileDeleted(ctx context.Context, fileID string) error {
 	query := `UPDATE files SET is_deleted = TRUE WHERE id = $1`
 	_, err := p.db.ExecContext(ctx, query, fileID)
 	return err
 }
 
- 
 func (p *Postgres) CreateReport(ctx context.Context, report *models.Report) error {
 	query := `
 		INSERT INTO reports (file_id, reporter_ip, created_at)
@@ -144,7 +200,6 @@ func (p *Postgres) CreateReport(ctx context.Context, report *models.Report) erro
 	return err
 }
 
- 
 func (p *Postgres) GetReportsByFileID(ctx context.Context, fileID string) ([]models.Report, error) {
 	var reports []models.Report
 	query := `SELECT * FROM reports WHERE file_id = $1 ORDER BY created_at DESC`
@@ -152,7 +207,6 @@ func (p *Postgres) GetReportsByFileID(ctx context.Context, fileID string) ([]mod
 	return reports, err
 }
 
- 
 func (p *Postgres) HasUserReportedFile(ctx context.Context, fileID, reporterIP string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM reports WHERE file_id = $1 AND reporter_ip = $2`
@@ -160,7 +214,6 @@ func (p *Postgres) HasUserReportedFile(ctx context.Context, fileID, reporterIP s
 	return count > 0, err
 }
 
- 
 func (p *Postgres) GetExpiredFiles(ctx context.Context) ([]models.File, error) {
 	var files []models.File
 	query := `SELECT * FROM files WHERE expires_at < $1 AND is_deleted = FALSE`
@@ -168,7 +221,6 @@ func (p *Postgres) GetExpiredFiles(ctx context.Context) ([]models.File, error) {
 	return files, err
 }
 
- 
 func (p *Postgres) DeleteExpiredFiles(ctx context.Context) (int64, error) {
 	query := `UPDATE files SET is_deleted = TRUE WHERE expires_at < $1 AND is_deleted = FALSE`
 	result, err := p.db.ExecContext(ctx, query, time.Now())
@@ -178,7 +230,6 @@ func (p *Postgres) DeleteExpiredFiles(ctx context.Context) (int64, error) {
 	return result.RowsAffected()
 }
 
- 
 func (p *Postgres) GetDeletedFiles(ctx context.Context) ([]models.File, error) {
 	var files []models.File
 	query := `SELECT * FROM files WHERE is_deleted = TRUE`
@@ -186,7 +237,6 @@ func (p *Postgres) GetDeletedFiles(ctx context.Context) ([]models.File, error) {
 	return files, err
 }
 
- 
 func (p *Postgres) GetFileForAdmin(ctx context.Context, id string) (*models.File, error) {
 	var file models.File
 	query := `SELECT * FROM files WHERE id = $1`
@@ -197,7 +247,6 @@ func (p *Postgres) GetFileForAdmin(ctx context.Context, id string) (*models.File
 	return &file, err
 }
 
- 
 func (p *Postgres) GetAllFiles(ctx context.Context, limit, offset int) ([]models.File, error) {
 	var files []models.File
 	query := `SELECT * FROM files ORDER BY created_at DESC LIMIT $1 OFFSET $2`
@@ -205,14 +254,12 @@ func (p *Postgres) GetAllFiles(ctx context.Context, limit, offset int) ([]models
 	return files, err
 }
 
- 
 func (p *Postgres) DeleteFilePermanently(ctx context.Context, fileID string) error {
 	query := `DELETE FROM files WHERE id = $1`
 	_, err := p.db.ExecContext(ctx, query, fileID)
 	return err
 }
 
- 
 func (p *Postgres) NumericCodeExists(ctx context.Context, code string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM files WHERE numeric_code = $1`
@@ -220,7 +267,6 @@ func (p *Postgres) NumericCodeExists(ctx context.Context, code string) (bool, er
 	return count > 0, err
 }
 
- 
 func (p *Postgres) GetStats(ctx context.Context) (totalFiles, activeFiles, totalReports int64, totalSize int64, err error) {
 	err = p.db.GetContext(ctx, &totalFiles, `SELECT COUNT(*) FROM files`)
 	if err != nil {
@@ -239,4 +285,290 @@ func (p *Postgres) GetStats(ctx context.Context) (totalFiles, activeFiles, total
 
 	err = p.db.GetContext(ctx, &totalSize, `SELECT COALESCE(SUM(size_bytes), 0) FROM files WHERE is_deleted = FALSE`)
 	return
+}
+
+func (p *Postgres) CreateOrUpdateUserDevice(ctx context.Context, device *models.UserDevice) error {
+	query := `
+		INSERT INTO user_devices (
+			id,
+			cns_user_id,
+			device_label,
+			public_key_jwk,
+			key_algorithm,
+			key_version,
+			created_at,
+			last_seen_at,
+			revoked_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL)
+		ON CONFLICT (id) DO UPDATE
+		SET cns_user_id = EXCLUDED.cns_user_id,
+			device_label = EXCLUDED.device_label,
+			public_key_jwk = EXCLUDED.public_key_jwk,
+			key_algorithm = EXCLUDED.key_algorithm,
+			key_version = EXCLUDED.key_version,
+			last_seen_at = NOW(),
+			revoked_at = NULL
+	`
+	_, err := p.db.ExecContext(ctx, query,
+		device.ID,
+		device.CNSUserID,
+		device.DeviceLabel,
+		device.PublicKeyJWK,
+		device.KeyAlgorithm,
+		device.KeyVersion,
+	)
+	return err
+}
+
+func (p *Postgres) GetActiveDevicesByUser(ctx context.Context, userID int64) ([]models.UserDevice, error) {
+	query := `
+		SELECT id, cns_user_id, device_label, public_key_jwk, key_algorithm, key_version, created_at, last_seen_at, revoked_at
+		FROM user_devices
+		WHERE cns_user_id = $1 AND revoked_at IS NULL
+		ORDER BY created_at ASC
+	`
+	var devices []models.UserDevice
+	err := p.db.SelectContext(ctx, &devices, query, userID)
+	return devices, err
+}
+
+func (p *Postgres) SaveFileKeyEnvelope(ctx context.Context, envelope *models.FileKeyEnvelope) error {
+	query := `
+		INSERT INTO file_key_envelopes (file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (file_id) DO UPDATE
+		SET wrapped_dek = EXCLUDED.wrapped_dek,
+			dek_wrap_alg = EXCLUDED.dek_wrap_alg,
+			dek_wrap_nonce = EXCLUDED.dek_wrap_nonce,
+			dek_wrap_version = EXCLUDED.dek_wrap_version
+	`
+	_, err := p.db.ExecContext(ctx, query,
+		envelope.FileID,
+		envelope.WrappedDEK,
+		envelope.DEKWrapAlg,
+		envelope.DEKWrapNonce,
+		envelope.DEKWrapVersion,
+	)
+	return err
+}
+
+func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, limit int) ([]models.OwnedFileListItem, error) {
+	query := `
+		SELECT
+			id AS file_id,
+			original_name AS filename,
+			size_bytes,
+			created_at,
+			expires_at
+		FROM files
+		WHERE owner_cns_user_id = $1
+		  AND is_deleted = FALSE
+		ORDER BY created_at DESC
+		LIMIT $2
+	`
+	var items []models.OwnedFileListItem
+	err := p.db.SelectContext(ctx, &items, query, userID, limit)
+	return items, err
+}
+
+func (p *Postgres) GetOwnedFileWithEnvelope(ctx context.Context, userID int64, fileID string) (*models.File, *models.FileKeyEnvelope, error) {
+	file := &models.File{}
+	fileQuery := `
+		SELECT *
+		FROM files
+		WHERE id = $1
+		  AND owner_cns_user_id = $2
+		  AND is_deleted = FALSE
+	`
+	if err := p.db.GetContext(ctx, file, fileQuery, fileID, userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, models.ErrFileNotFound
+		}
+		return nil, nil, err
+	}
+
+	env := &models.FileKeyEnvelope{}
+	envQuery := `
+		SELECT file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version, created_at
+		FROM file_key_envelopes
+		WHERE file_id = $1
+	`
+	if err := p.db.GetContext(ctx, env, envQuery, fileID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, models.ErrFileNotFound
+		}
+		return nil, nil, err
+	}
+
+	if time.Now().After(file.ExpiresAt) {
+		return nil, nil, models.ErrFileExpired
+	}
+
+	return file, env, nil
+}
+
+func (p *Postgres) SaveUserKeyEnvelope(ctx context.Context, envelope *models.UserKeyEnvelope) error {
+	query := `
+		INSERT INTO user_key_envelopes (id, cns_user_id, device_id, wrapped_user_key, uk_wrap_alg, uk_wrap_meta, key_version)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
+		ON CONFLICT (cns_user_id, device_id) DO UPDATE
+		SET wrapped_user_key = EXCLUDED.wrapped_user_key,
+			uk_wrap_alg = EXCLUDED.uk_wrap_alg,
+			uk_wrap_meta = EXCLUDED.uk_wrap_meta,
+			key_version = EXCLUDED.key_version,
+			created_at = NOW()
+	`
+	_, err := p.db.ExecContext(ctx, query,
+		envelope.CNSUserID,
+		envelope.DeviceID,
+		envelope.WrappedUserKey,
+		envelope.UKWrapAlg,
+		envelope.UKWrapMeta,
+		envelope.KeyVersion,
+	)
+	return err
+}
+
+func (p *Postgres) GetUserKeyEnvelopeForDevice(ctx context.Context, userID int64, deviceID string) (*models.UserKeyEnvelope, error) {
+	query := `
+		SELECT id, cns_user_id, device_id, wrapped_user_key, uk_wrap_alg, uk_wrap_meta, key_version, created_at
+		FROM user_key_envelopes
+		WHERE cns_user_id = $1 AND device_id = $2
+	`
+	var env models.UserKeyEnvelope
+	err := p.db.GetContext(ctx, &env, query, userID, deviceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrFileNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &env, nil
+}
+
+func (p *Postgres) CreateEnrollmentRequest(ctx context.Context, enrollment *models.DeviceEnrollment) error {
+	query := `
+		INSERT INTO device_enrollments (
+			id,
+			cns_user_id,
+			request_device_id,
+			verification_code,
+			status,
+			expires_at,
+			created_at
+		)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW())
+		RETURNING id, created_at
+	`
+	err := p.db.QueryRowContext(ctx, query,
+		enrollment.CNSUserID,
+		enrollment.RequestDeviceID,
+		enrollment.VerificationCode,
+		enrollment.Status,
+		enrollment.ExpiresAt,
+	).Scan(&enrollment.ID, &enrollment.CreatedAt)
+	return err
+}
+
+func (p *Postgres) ListPendingEnrollments(ctx context.Context, userID int64) ([]models.DeviceEnrollment, error) {
+	query := `
+		SELECT id, cns_user_id, request_device_id, verification_code, status, approved_by_device_id, expires_at, created_at, approved_at
+		FROM device_enrollments
+		WHERE cns_user_id = $1
+		  AND status = $2
+		  AND expires_at > NOW()
+		ORDER BY created_at DESC
+	`
+	items := []models.DeviceEnrollment{}
+	err := p.db.SelectContext(ctx, &items, query, userID, models.EnrollmentStatusPending)
+	return items, err
+}
+
+func (p *Postgres) GetEnrollmentByID(ctx context.Context, userID int64, enrollmentID string) (*models.DeviceEnrollment, error) {
+	query := `
+		SELECT id, cns_user_id, request_device_id, verification_code, status, approved_by_device_id, expires_at, created_at, approved_at
+		FROM device_enrollments
+		WHERE id = $1 AND cns_user_id = $2
+	`
+	var item models.DeviceEnrollment
+	err := p.db.GetContext(ctx, &item, query, enrollmentID, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrFileNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (p *Postgres) ApproveEnrollment(ctx context.Context, userID int64, enrollmentID, approverDeviceID string) error {
+	query := `
+		UPDATE device_enrollments
+		SET status = $1,
+			approved_by_device_id = $2,
+			approved_at = NOW()
+		WHERE id = $3
+		  AND cns_user_id = $4
+		  AND status = $5
+		  AND expires_at > NOW()
+	`
+	res, err := p.db.ExecContext(ctx, query,
+		models.EnrollmentStatusApproved,
+		approverDeviceID,
+		enrollmentID,
+		userID,
+		models.EnrollmentStatusPending,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return models.ErrFileNotFound
+	}
+	return nil
+}
+
+func (p *Postgres) RejectEnrollment(ctx context.Context, userID int64, enrollmentID string) error {
+	query := `
+		UPDATE device_enrollments
+		SET status = $1
+		WHERE id = $2
+		  AND cns_user_id = $3
+		  AND status = $4
+		  AND expires_at > NOW()
+	`
+	res, err := p.db.ExecContext(ctx, query,
+		models.EnrollmentStatusRejected,
+		enrollmentID,
+		userID,
+		models.EnrollmentStatusPending,
+	)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return models.ErrUploadNotPending
+	}
+	return nil
+}
+
+func (p *Postgres) TouchExpiredEnrollments(ctx context.Context, userID int64) error {
+	query := `
+		UPDATE device_enrollments
+		SET status = $1
+		WHERE cns_user_id = $2
+		  AND status = $3
+		  AND expires_at <= NOW()
+	`
+	_, err := p.db.ExecContext(ctx, query, models.EnrollmentStatusExpired, userID, models.EnrollmentStatusPending)
+	return err
 }

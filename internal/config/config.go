@@ -11,43 +11,37 @@ import (
 )
 
 type Config struct {
-	 
 	Port    string
 	BaseURL string
 
-	 
 	PostgresHost     string
 	PostgresPort     string
 	PostgresUser     string
 	PostgresPassword string
 	PostgresDB       string
 
-	 
 	RedisHost string
 	RedisPort string
 
-	 
 	DataDir  string
 	ChunkDir string
 
-	 
 	BehindCloudflare bool
 
-	 
 	MaxFileSize           int64
 	AutoDeleteReportCount int
 
-	 
 	DiscordWebhookURL string
 
 	CNSAuthURL        string
 	CNSAuthClientID   string
 	CNSAuthServiceKey string
 	AuthMaxFileSize   int64
+	MigrationsDir     string
 }
 
 func Load() (*Config, error) {
-	 
+
 	_ = godotenv.Load()
 
 	cfg := &Config{
@@ -63,16 +57,16 @@ func Load() (*Config, error) {
 		DataDir:               getEnv("DATA_DIR", "./data"),
 		ChunkDir:              getEnv("CHUNK_DIR", ""),
 		BehindCloudflare:      getEnvBool("BEHIND_CLOUDFLARE", false),
-		MaxFileSize:           getEnvInt64("MAX_FILE_SIZE", 786432000),  
+		MaxFileSize:           getEnvInt64("MAX_FILE_SIZE", 786432000),
 		AutoDeleteReportCount: getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
 		DiscordWebhookURL:     getEnv("DISCORD_WEBHOOK_URL", ""),
 		CNSAuthURL:            getEnv("CNS_AUTH_URL", ""),
 		CNSAuthClientID:       getEnv("CNS_AUTH_CLIENT_ID", ""),
 		CNSAuthServiceKey:     getEnv("CNS_AUTH_SERVICE_KEY", ""),
 		AuthMaxFileSize:       getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
+		MigrationsDir:         getEnv("MIGRATIONS_DIR", "db/migrations"),
 	}
 
-	 
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}

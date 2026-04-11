@@ -23,6 +23,24 @@
         </div>
     </div>
 
+    <div id="device-approval-banner" class="device-approval-banner" aria-live="polite" aria-hidden="true">
+        <div class="device-approval-header">
+            <div>
+                <p class="device-approval-kicker">Approval required</p>
+                <h2 id="device-approval-title">New device wants access</h2>
+            </div>
+            <span id="device-approval-count" class="device-approval-count"></span>
+        </div>
+        <p id="device-approval-message" class="device-approval-message">
+            A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.
+        </p>
+        <div id="device-approval-meta" class="device-approval-meta"></div>
+        <div class="device-approval-actions">
+            <button id="device-approval-decline" class="btn btn-secondary btn-large">Decline</button>
+            <button id="device-approval-approve" class="btn btn-accent btn-large">Approve</button>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 2rem;">
@@ -224,6 +242,17 @@
                         </button>
                     </div>
                 </div>
+
+                <section id="recent-uploads-section" class="recent-uploads hidden" style="margin-top: 1.25rem;">
+                    <div class="recent-header">
+                        <h3>Recently Uploaded</h3>
+                        <span id="recent-count" class="recent-count">0 files</span>
+                    </div>
+                    <div id="recent-loading" class="recent-state">Loading recent uploads...</div>
+                    <div id="recent-error" class="recent-state hidden">Unable to load recent uploads.</div>
+                    <div id="recent-empty" class="recent-state hidden">No uploads yet on this account.</div>
+                    <div id="recent-list" class="recent-list hidden"></div>
+                </section>
             </div>
         </main>
 

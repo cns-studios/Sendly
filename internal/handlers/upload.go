@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 
@@ -37,7 +38,6 @@ func NewUploadHandler(
 	}
 }
 
- 
 func (h *UploadHandler) Init(c *gin.Context) {
 	var req models.UploadInitRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -49,20 +49,17 @@ func (h *UploadHandler) Init(c *gin.Context) {
 		return
 	}
 
-	 
 	tier := middleware.GetTier(h.cfg, middleware.GetCNSUser(c))
 	if req.FileSize > tier.MaxFileSize {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: models.ErrFileTooLarge.Message,
 			Code:  models.ErrFileTooLarge.Code,
 		})
 		return
 	}
 
-	 
 	clientIP := middleware.GetClientIP(c)
 
-	 
 	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, clientIP)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -134,7 +131,46 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.uploadService.FinalizeUpload(c.Request.Context(), req.SessionID, req.Duration)
+	user := middleware.GetCNSUser(c)
+	var opts *services.FinalizeUploadOptions
+	if user != nil {
+		uid := int64(user.ID)
+		uname := user.Username
+		opts = &services.FinalizeUploadOptions{
+			OwnerCNSUserID:   &uid,
+			OwnerCNSUserName: &uname,
+		}
+
+		if req.WrappedDEKB64 != "" {
+			wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
+			if decodeErr != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{
+					Error:   "Invalid wrapped DEK",
+					Code:    "INVALID_WRAPPED_DEK",
+					Details: decodeErr.Error(),
+				})
+				return
+			}
+			opts.WrappedDEK = wrappedDEK
+			opts.DEKWrapAlg = req.DEKWrapAlg
+			opts.DEKWrapVersion = req.DEKWrapVersion
+
+			if req.DEKWrapNonceB64 != "" {
+				nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
+				if nonceErr != nil {
+					c.JSON(http.StatusBadRequest, models.ErrorResponse{
+						Error:   "Invalid DEK wrap nonce",
+						Code:    "INVALID_DEK_WRAP_NONCE",
+						Details: nonceErr.Error(),
+					})
+					return
+				}
+				opts.DEKWrapNonce = nonce
+			}
+		}
+	}
+
+	resp, err := h.uploadService.FinalizeUploadWithOptions(c.Request.Context(), req.SessionID, req.Duration, opts)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			status := http.StatusBadRequest
@@ -158,10 +194,9 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
- 
 func (h *UploadHandler) Chunk(c *gin.Context) {
-	 
-	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {  
+
+	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error:   "Failed to parse multipart form",
 			Code:    "PARSE_ERROR",
@@ -170,7 +205,6 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 		return
 	}
 
-	 
 	sessionID := c.PostForm("session_id")
 	if sessionID == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -180,7 +214,6 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 		return
 	}
 
-	 
 	chunkIndexStr := c.PostForm("chunk_index")
 	if chunkIndexStr == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -200,7 +233,6 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 		return
 	}
 
-	 
 	file, _, err := c.Request.FormFile("chunk")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -212,7 +244,6 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 	}
 	defer file.Close()
 
-	 
 	err = h.uploadService.UploadChunk(c.Request.Context(), sessionID, chunkIndex, file)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -233,10 +264,9 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 		return
 	}
 
-	 
 	uploaded, total, err := h.uploadService.GetUploadProgress(c.Request.Context(), sessionID)
 	if err != nil {
-		 
+
 		c.JSON(http.StatusOK, gin.H{
 			"success":     true,
 			"chunk_index": chunkIndex,
@@ -252,7 +282,6 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 	})
 }
 
- 
 func (h *UploadHandler) Complete(c *gin.Context) {
 	var req models.UploadCompleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -272,7 +301,6 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 		return
 	}
 
-	 
 	resp, err := h.uploadService.CompleteUpload(c.Request.Context(), req.SessionID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -297,7 +325,6 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
- 
 func (h *UploadHandler) Cancel(c *gin.Context) {
 	var req models.UploadCancelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -309,7 +336,6 @@ func (h *UploadHandler) Cancel(c *gin.Context) {
 		return
 	}
 
-	 
 	err := h.uploadService.CancelUpload(c.Request.Context(), req.SessionID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -332,7 +358,6 @@ func (h *UploadHandler) Cancel(c *gin.Context) {
 	})
 }
 
- 
 func (h *UploadHandler) Progress(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	if sessionID == "" {

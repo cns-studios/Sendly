@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +21,15 @@ type Upload struct {
 	fs       *storage.Filesystem
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+}
+
+type FinalizeUploadOptions struct {
+	OwnerCNSUserID   *int64
+	OwnerCNSUserName *string
+	WrappedDEK       []byte
+	DEKWrapAlg       string
+	DEKWrapNonce     []byte
+	DEKWrapVersion   int
 }
 
 func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem) *Upload {
@@ -235,6 +245,10 @@ func (u *Upload) GetAssemblyStatus(ctx context.Context, sessionID string) (strin
 }
 
 func (u *Upload) FinalizeUpload(ctx context.Context, sessionID, duration string) (*models.UploadFinalizeResponse, error) {
+	return u.FinalizeUploadWithOptions(ctx, sessionID, duration, nil)
+}
+
+func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, duration string, opts *FinalizeUploadOptions) (*models.UploadFinalizeResponse, error) {
 	session, err := u.redis.GetUploadSession(ctx, sessionID)
 	if err != nil {
 		if err == models.ErrSessionNotFound {
@@ -277,7 +291,31 @@ func (u *Upload) FinalizeUpload(ctx context.Context, sessionID, duration string)
 		CreatedAt:    time.Now(),
 	}
 
-	if err := u.db.CreateFile(ctx, file); err != nil {
+	if opts != nil {
+		if opts.OwnerCNSUserID != nil {
+			file.OwnerCNSUserID = sql.NullInt64{Int64: *opts.OwnerCNSUserID, Valid: true}
+		}
+		if opts.OwnerCNSUserName != nil {
+			file.OwnerCNSUserName = sql.NullString{String: *opts.OwnerCNSUserName, Valid: true}
+		}
+	}
+
+	var envelope *models.FileKeyEnvelope
+	if opts != nil && len(opts.WrappedDEK) > 0 {
+		wrapVersion := opts.DEKWrapVersion
+		if wrapVersion <= 0 {
+			wrapVersion = 1
+		}
+		envelope = &models.FileKeyEnvelope{
+			FileID:         session.FileID,
+			WrappedDEK:     opts.WrappedDEK,
+			DEKWrapAlg:     opts.DEKWrapAlg,
+			DEKWrapNonce:   opts.DEKWrapNonce,
+			DEKWrapVersion: wrapVersion,
+		}
+	}
+
+	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope); err != nil {
 		return nil, fmt.Errorf("error creating file record: %w", err)
 	}
 

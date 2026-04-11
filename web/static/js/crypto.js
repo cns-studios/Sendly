@@ -11,6 +11,10 @@ const SecureCrypto = (function() {
         wordCount: 5
     };
 
+    const DEVICE_STORAGE_KEY = 'shareit_device_identity_v1';
+    const USER_KEY_PREFIX = 'shareit_user_key_v1_';
+    const FILE_KEY_PREFIX = 'shareit_file_key_v1_';
+
      
     let wordList = null;
 
@@ -81,6 +85,143 @@ const SecureCrypto = (function() {
         const bytes = new Uint8Array(length);
         crypto.getRandomValues(bytes);
         return bytes;
+    }
+
+    function toBase64(data) {
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    function fromBase64(value) {
+        const binary = atob(value);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
+
+    async function getOrCreateDeviceIdentity() {
+        const cached = localStorage.getItem(DEVICE_STORAGE_KEY);
+        if (cached) {
+            return JSON.parse(cached);
+        }
+
+        const keyPair = await crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: 'SHA-256'
+            },
+            true,
+            ['encrypt', 'decrypt']
+        );
+        const publicJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+        const privateJWK = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+        const identity = {
+            deviceId: crypto.randomUUID(),
+            keyAlgorithm: 'RSA-OAEP-2048',
+            keyVersion: 1,
+            publicKeyJWK: publicJWK,
+            privateKeyJWK: privateJWK
+        };
+        localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(identity));
+        return identity;
+    }
+
+    function userKeyStorageKey(userId) {
+        return `${USER_KEY_PREFIX}${userId || 'guest'}`;
+    }
+
+    function saveUserKeyRaw(userId, keyRaw) {
+        localStorage.setItem(userKeyStorageKey(userId), toBase64(keyRaw));
+    }
+
+    function getUserKeyRaw(userId) {
+        const value = localStorage.getItem(userKeyStorageKey(userId));
+        return value ? fromBase64(value) : null;
+    }
+
+    function cacheFileKey(fileId, keyString) {
+        if (!fileId || !keyString) return;
+        sessionStorage.setItem(`${FILE_KEY_PREFIX}${fileId}`, keyString);
+    }
+
+    function getCachedFileKey(fileId) {
+        if (!fileId) return null;
+        return sessionStorage.getItem(`${FILE_KEY_PREFIX}${fileId}`);
+    }
+
+    function removeCachedFileKey(fileId) {
+        if (!fileId) return;
+        sessionStorage.removeItem(`${FILE_KEY_PREFIX}${fileId}`);
+    }
+
+    function generateUserKeyRaw() {
+        return generateRandomBytes(32);
+    }
+
+    async function importUserKey(rawKey) {
+        return crypto.subtle.importKey(
+            'raw',
+            rawKey,
+            { name: 'AES-GCM' },
+            false,
+            ['encrypt', 'decrypt']
+        );
+    }
+
+    async function wrapSecretWithUserKey(secretBytes, userKeyRaw) {
+        const iv = generateRandomBytes(12);
+        const key = await importUserKey(userKeyRaw);
+        const wrapped = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            secretBytes
+        );
+        return {
+            wrapped: new Uint8Array(wrapped),
+            nonce: iv
+        };
+    }
+
+    async function unwrapSecretWithUserKey(wrappedBytes, nonceBytes, userKeyRaw) {
+        const key = await importUserKey(userKeyRaw);
+        const raw = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: nonceBytes },
+            key,
+            wrappedBytes
+        );
+        return new Uint8Array(raw);
+    }
+
+    async function wrapUserKeyForDevice(userKeyRaw, publicKeyJWK) {
+        const publicKey = await crypto.subtle.importKey(
+            'jwk',
+            publicKeyJWK,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            false,
+            ['encrypt']
+        );
+        const wrapped = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, userKeyRaw);
+        return new Uint8Array(wrapped);
+    }
+
+    async function unwrapUserKeyForDevice(wrappedUserKeyBytes, privateKeyJWK) {
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            privateKeyJWK,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            false,
+            ['decrypt']
+        );
+        const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedUserKeyBytes);
+        return new Uint8Array(raw);
     }
 
 
@@ -275,7 +416,20 @@ const SecureCrypto = (function() {
         formatFileSize,
         formatDate,
         getTimeRemaining,
-        loadWordList
+        loadWordList,
+        toBase64,
+        fromBase64,
+        getOrCreateDeviceIdentity,
+        saveUserKeyRaw,
+        getUserKeyRaw,
+        generateUserKeyRaw,
+        wrapSecretWithUserKey,
+        unwrapSecretWithUserKey,
+        wrapUserKeyForDevice,
+        unwrapUserKeyForDevice,
+        cacheFileKey,
+        getCachedFileKey,
+        removeCachedFileKey
     };
 })();
 

@@ -74,6 +74,23 @@ AUTO_DELETE_REPORT_COUNT=3
 
 # Notifications
 DISCORD_WEBHOOK_URL=   # Optional: for file report notifications
+
+# Migrations
+MIGRATIONS_DIR=db/migrations
+```
+
+### Database Migrations
+
+ShareIt now applies SQL migrations automatically at server startup.
+
+- Migration files are loaded from `MIGRATIONS_DIR` (default: `db/migrations`).
+- Applied migrations are tracked in `schema_migrations`.
+- If a previously-applied migration file changes, startup fails with a checksum mismatch.
+
+To run migrations manually:
+
+```bash
+make migrate
 ```
 
 ---
@@ -431,6 +448,204 @@ Reports a file for inappropriate content. File is automatically deleted after re
 - `409` - User has already reported this file
 - `404` - File not found
 - `410` - File already expired or deleted
+
+---
+
+### Authenticated User API Routes
+
+All `/api/me/*` routes require a valid CNS-authenticated browser session.
+
+#### `GET /api/me/recent-uploads` - List Recent Owned Uploads
+Returns recent uploads that belong to the authenticated CNS user.
+
+**Headers**:
+- `X-CSRF-Token: <token>` (required)
+
+**Response** (200 OK):
+```json
+{
+  "items": [
+    {
+      "file_id": "f8f8f8f8f8f8f8f8f",
+      "filename": "document.pdf",
+      "size_bytes": 5242880,
+      "created_at": "2026-04-06T12:34:56Z",
+      "expires_at": "2026-04-13T12:34:56Z",
+      "share_url": "http://localhost:8085/shared/f8f8f8f8f8f8f8f8f"
+    }
+  ]
+}
+```
+
+---
+
+#### `GET /api/me/files/:id/access` - Get Wrapped Key Access Data
+Returns file metadata and key envelopes for an owned file and requesting device.
+
+**Parameters**:
+- `id` (path, required) - File ID
+
+**Query Parameters**:
+- `device_id` (string, required) - Registered device ID requesting access
+
+**Headers**:
+- `X-CSRF-Token: <token>` (required)
+
+**Response** (200 OK):
+```json
+{
+  "file": {
+    "id": "f8f8f8f8f8f8f8f8f",
+    "numeric_code": "123456789012",
+    "original_name": "document.pdf",
+    "size_bytes": 5242880,
+    "expires_at": "2026-04-13T12:34:56Z",
+    "created_at": "2026-04-06T12:34:56Z"
+  },
+  "file_key_envelope": {
+    "wrapped_dek_b64": "...",
+    "dek_wrap_alg": "AES-GCM-UK-v1",
+    "dek_wrap_nonce_b64": "...",
+    "dek_wrap_version": 1
+  },
+  "user_key_envelope": {
+    "wrapped_uk_b64": "...",
+    "uk_wrap_alg": "RSA-OAEP-2048-v1",
+    "uk_wrap_meta": {
+      "type": "self-wrap",
+      "device_id": "11111111-2222-3333-4444-555555555555"
+    },
+    "key_version": 1
+  }
+}
+```
+
+**Status Codes**:
+- `200` - Access data returned
+- `400` - Missing or invalid request parameters
+- `403` - Device not authorized
+- `404` - File not owned/not found/expired
+
+---
+
+#### `POST /api/me/devices/register` - Register or Refresh Device
+Registers device key material for the authenticated user. If a wrapped user key is provided,
+the device is immediately trusted.
+
+**Headers**:
+- `Content-Type: application/json`
+- `X-CSRF-Token: <token>` (required)
+
+**Request Body**:
+```json
+{
+  "device_id": "11111111-2222-3333-4444-555555555555",
+  "device_label": "Aaron Laptop",
+  "public_key_jwk": {
+    "kty": "RSA",
+    "n": "...",
+    "e": "AQAB"
+  },
+  "key_algorithm": "RSA-OAEP-2048",
+  "key_version": 1,
+  "wrapped_user_key_b64": "...",
+  "uk_wrap_alg": "RSA-OAEP-2048-v1",
+  "uk_wrap_meta": {
+    "type": "self-wrap",
+    "device_id": "11111111-2222-3333-4444-555555555555"
+  }
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "device_id": "11111111-2222-3333-4444-555555555555",
+  "needs_enrollment": false
+}
+```
+
+---
+
+#### `POST /api/me/devices/enrollments` - Create Enrollment Request
+Creates a pending trusted-device enrollment request for the authenticated user.
+
+**Headers**:
+- `Content-Type: application/json`
+- `X-CSRF-Token: <token>` (required)
+
+**Request Body**:
+```json
+{
+  "request_device_id": "11111111-2222-3333-4444-555555555555"
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "enrollment_id": "aaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  "verification_code": "123456",
+  "expires_at": "2026-04-11T10:25:00Z"
+}
+```
+
+---
+
+#### `GET /api/me/devices/enrollments/pending` - List Pending Enrollments
+Lists non-expired pending enrollments for the authenticated user.
+
+**Headers**:
+- `X-CSRF-Token: <token>` (required)
+
+**Response** (200 OK):
+```json
+{
+  "items": [
+    {
+      "id": "aaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "cns_user_id": 123,
+      "request_device_id": "11111111-2222-3333-4444-555555555555",
+      "verification_code": "123456",
+      "status": "pending",
+      "expires_at": "2026-04-11T10:25:00Z",
+      "created_at": "2026-04-11T10:15:00Z"
+    }
+  ]
+}
+```
+
+---
+
+#### `POST /api/me/devices/enrollments/:id/approve` - Approve Enrollment
+Approves a pending enrollment from a trusted device and stores wrapped user key for the request device.
+
+**Parameters**:
+- `id` (path, required) - Enrollment ID
+
+**Headers**:
+- `Content-Type: application/json`
+- `X-CSRF-Token: <token>` (required)
+
+**Request Body**:
+```json
+{
+  "approver_device_id": "99999999-2222-3333-4444-555555555555",
+  "verification_code": "123456",
+  "wrapped_user_key_b64": "...",
+  "uk_wrap_alg": "RSA-OAEP-2048-v1",
+  "uk_wrap_meta": {
+    "approved_from": "99999999-2222-3333-4444-555555555555"
+  }
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "success": true
+}
+```
 
 ---
 

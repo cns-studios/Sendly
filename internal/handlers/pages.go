@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"crypto/rand"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"html/template"
 	"net/http"
 
@@ -47,10 +47,12 @@ func (h *PageHandler) Index(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	configData := map[string]interface{}{
-		"baseURL":         h.cfg.BaseURL,
-		"maxFileSize":     tier.MaxFileSize,
-		"authMaxFileSize": h.cfg.AuthMaxFileSize,
-		"authenticated":   authenticated,
+		"baseURL":          h.cfg.BaseURL,
+		"maxFileSize":      tier.MaxFileSize,
+		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
+		"authenticated":    authenticated,
+		"cnsUserId":        userIDOrZero(user),
+		"cnsUsername":      username,
 		"allowedDurations": tier.AllowedDurations,
 	}
 	configJSON, err := json.Marshal(configData)
@@ -58,15 +60,15 @@ func (h *PageHandler) Index(c *gin.Context) {
 		configJSON = []byte("{}")
 	}
 	c.HTML(http.StatusOK, "index.html", gin.H{
-		"title":       "ShareIt - End-to-End Encrypted File Sharing",
-		"baseURL":     h.cfg.BaseURL,
-		"maxFileSize": tier.MaxFileSize,
-		"authMaxFileSize": h.cfg.AuthMaxFileSize,
-		"authenticated": authenticated,
+		"title":            "ShareIt - End-to-End Encrypted File Sharing",
+		"baseURL":          h.cfg.BaseURL,
+		"maxFileSize":      tier.MaxFileSize,
+		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
+		"authenticated":    authenticated,
 		"allowedDurations": tier.AllowedDurations,
-		"authLoginURL": authLoginURL,
-		"username":    username,
-		"configJSON":  template.JS(string(configJSON)),
+		"authLoginURL":     authLoginURL,
+		"username":         username,
+		"configJSON":       template.JS(string(configJSON)),
 	})
 }
 
@@ -108,8 +110,15 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 func (h *PageHandler) Limits(c *gin.Context) {
 	tier := middleware.GetTier(h.cfg, middleware.GetCNSUser(c))
 	c.JSON(http.StatusOK, gin.H{
-		"max_file_size":      tier.MaxFileSize,
-		"allowed_durations":  tier.AllowedDurations,
-		"authenticated":      middleware.GetCNSUser(c) != nil,
+		"max_file_size":     tier.MaxFileSize,
+		"allowed_durations": tier.AllowedDurations,
+		"authenticated":     middleware.GetCNSUser(c) != nil,
 	})
+}
+
+func userIDOrZero(user *middleware.CNSUser) int {
+	if user == nil {
+		return 0
+	}
+	return user.ID
 }

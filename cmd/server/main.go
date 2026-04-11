@@ -33,6 +33,13 @@ func main() {
 	defer db.Close()
 	log.Println("Connected to PostgreSQL")
 
+	migrationCtx, migrationCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer migrationCancel()
+	if err := db.RunMigrations(migrationCtx, cfg.MigrationsDir); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+	log.Println("Database migrations complete")
+
 	rdb, err := storage.NewRedis(cfg)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
@@ -88,6 +95,7 @@ func main() {
 	downloadHandler := handlers.NewDownloadHandler(cfg, db, fs)
 	reportHandler := handlers.NewReportHandler(cfg, db, discord)
 	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService)
+	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db)
 
 	staticFS := http.StripPrefix("/static", http.FileServer(http.Dir("./web/static")))
 	serveStatic := func(c *gin.Context) {
@@ -120,7 +128,7 @@ func main() {
 	api.Use(middleware.CSRFMiddleware())
 	{
 		api.GET("/limits", pageHandler.Limits)
-		
+
 		upload := api.Group("/upload")
 		{
 			upload.POST("/init", rateLimiter.Handler(), uploadHandler.Init)
@@ -137,6 +145,21 @@ func main() {
 			file.GET("/:id/download", downloadHandler.Download)
 			file.GET("/code/:code", downloadHandler.GetByCode)
 			file.POST("/:id/report", reportHandler.Report)
+		}
+
+		me := api.Group("/me")
+		{
+			me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
+			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
+
+			devices := me.Group("/devices")
+			{
+				devices.POST("/register", recentUploadsHandler.RegisterDevice)
+				devices.POST("/enrollments", rateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
+				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
+				devices.POST("/enrollments/:id/approve", rateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
+				devices.POST("/enrollments/:id/reject", rateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+			}
 		}
 	}
 

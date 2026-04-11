@@ -4,6 +4,8 @@
      
     const CHUNK_SIZE = 5 * 1024 * 1024;  
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
+    const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
+    const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const ALLOWED_DURATIONS = window.CONFIG?.allowedDurations || ['24h', '7d'];    const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
@@ -24,6 +26,9 @@
     let pendingAutoCopyText = null;
     let pendingAutoCopyBanner = false;
     let pendingAutoCopyBound = false;
+    let authDeviceIdentity = null;
+    let authUserKeyRaw = null;
+    let finalizeEnvelopePayload = null;
 
      
     const dropZone = document.getElementById('drop-zone');
@@ -54,6 +59,23 @@
     const outPin = document.getElementById('out-pin');
     const outKey = document.getElementById('out-key');
     const outExpiryLabel = document.getElementById('out-expiry-label');
+    const recentSection = document.getElementById('recent-uploads-section');
+    const recentLoading = document.getElementById('recent-loading');
+    const recentError = document.getElementById('recent-error');
+    const recentEmpty = document.getElementById('recent-empty');
+    const recentList = document.getElementById('recent-list');
+    const recentCount = document.getElementById('recent-count');
+    const deviceApprovalBanner = document.getElementById('device-approval-banner');
+    const deviceApprovalTitle = document.getElementById('device-approval-title');
+    const deviceApprovalMessage = document.getElementById('device-approval-message');
+    const deviceApprovalMeta = document.getElementById('device-approval-meta');
+    const deviceApprovalCount = document.getElementById('device-approval-count');
+    const deviceApprovalDecline = document.getElementById('device-approval-decline');
+    const deviceApprovalApprove = document.getElementById('device-approval-approve');
+
+    let pendingEnrollmentItems = [];
+    let activePendingEnrollment = null;
+    let pendingEnrollmentBusy = false;
 
     function getCookieValue(name) {
         const value = `; ${document.cookie}`;
@@ -74,6 +96,12 @@
 
         applyTierUI();
         setupEventListeners();
+
+        if (AUTHENTICATED) {
+            await ensureDeviceReady();
+            await loadRecentUploads();
+            await loadPendingEnrollments();
+        }
     }
 
     function applyTierUI() {
@@ -97,6 +125,412 @@
 
         const firstAllowed = document.querySelector('input[name="expiration"]:not([disabled])');
         if (firstAllowed) firstAllowed.checked = true;
+    }
+
+    async function ensureDeviceReady() {
+        try {
+            authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+            authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+
+            let wrappedUserKeyB64 = '';
+            let ukWrapAlg = '';
+            let ukWrapMeta = {};
+
+            if (!authUserKeyRaw) {
+                authUserKeyRaw = SecureCrypto.generateUserKeyRaw();
+                const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, authDeviceIdentity.publicKeyJWK);
+                wrappedUserKeyB64 = SecureCrypto.toBase64(wrappedUserKey);
+                ukWrapAlg = 'RSA-OAEP-2048-v1';
+                ukWrapMeta = { type: 'self-wrap', device_id: authDeviceIdentity.deviceId };
+            }
+
+            const response = await fetch('/api/me/devices/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCookieValue('csrf_token')
+                },
+                body: JSON.stringify({
+                    device_id: authDeviceIdentity.deviceId,
+                    device_label: `${CNS_USERNAME || 'ShareIt User'} device`,
+                    public_key_jwk: authDeviceIdentity.publicKeyJWK,
+                    key_algorithm: authDeviceIdentity.keyAlgorithm,
+                    key_version: authDeviceIdentity.keyVersion,
+                    wrapped_user_key_b64: wrappedUserKeyB64,
+                    uk_wrap_alg: ukWrapAlg,
+                    uk_wrap_meta: ukWrapMeta
+                })
+            });
+
+            if (!response.ok) {
+                const errorPayload = await response.json().catch(() => ({}));
+                throw new Error(errorPayload.error || 'Device registration failed');
+            }
+
+            if (authUserKeyRaw) {
+                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
+            }
+        } catch (error) {
+            console.error('Failed to initialize authenticated device state:', error);
+            showErrorBanner('Authenticated key setup failed. Recent uploads may be unavailable on this device.');
+        }
+    }
+
+    async function loadRecentUploads() {
+        if (!recentSection || !AUTHENTICATED) return;
+        recentSection.classList.remove('hidden');
+        setRecentState('loading');
+
+        try {
+            const response = await fetch('/api/me/recent-uploads', {
+                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to load recent uploads');
+            }
+            const payload = await response.json();
+            renderRecentUploads(payload.items || []);
+        } catch (error) {
+            console.error(error);
+            setRecentState('error');
+        }
+    }
+
+    async function loadPendingEnrollments() {
+        if (!AUTHENTICATED || !deviceApprovalBanner) return;
+
+        try {
+            const response = await fetch('/api/me/devices/enrollments/pending', {
+                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load pending device approvals');
+            }
+
+            const payload = await response.json();
+            pendingEnrollmentItems = Array.isArray(payload.items) ? payload.items : [];
+
+            if (pendingEnrollmentItems.length > 0) {
+                setActivePendingEnrollment(pendingEnrollmentItems[0], pendingEnrollmentItems.length);
+                showPendingEnrollmentBanner();
+            } else {
+                activePendingEnrollment = null;
+                hidePendingEnrollmentBanner();
+            }
+        } catch (error) {
+            console.error('Failed to load pending enrollments:', error);
+            pendingEnrollmentItems = [];
+            activePendingEnrollment = null;
+            hidePendingEnrollmentBanner();
+        }
+    }
+
+    function setActivePendingEnrollment(item, count) {
+        activePendingEnrollment = item;
+        if (!deviceApprovalTitle || !deviceApprovalMessage || !deviceApprovalMeta) {
+            return;
+        }
+
+        const device = item?.request_device || {};
+        const enrollment = item?.enrollment || {};
+        const deviceName = device.device_label || device.id || 'Unknown device';
+        const deviceId = device.id || enrollment.request_device_id || 'unknown';
+        const keyAlgorithm = device.key_algorithm || 'unknown';
+        const requestedAt = enrollment.created_at ? formatUploadDate(enrollment.created_at) : 'just now';
+
+        deviceApprovalTitle.textContent = 'New device wants access';
+        deviceApprovalMessage.textContent = 'A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.';
+        deviceApprovalMeta.innerHTML = [
+            `<span>Device: ${escapeHtml(deviceName)}</span>`,
+            `<span>Device ID: ${escapeHtml(deviceId)}</span>`,
+            `<span>Key: ${escapeHtml(keyAlgorithm)}</span>`,
+            `<span>Requested: ${escapeHtml(requestedAt)}</span>`
+        ].join('');
+
+        if (deviceApprovalCount) {
+            deviceApprovalCount.textContent = count > 1 ? `${count} pending` : '1 pending';
+        }
+    }
+
+    function showPendingEnrollmentBanner() {
+        if (!deviceApprovalBanner || !activePendingEnrollment) return;
+        deviceApprovalBanner.classList.add('visible');
+        deviceApprovalBanner.setAttribute('aria-hidden', 'false');
+    }
+
+    function hidePendingEnrollmentBanner() {
+        if (!deviceApprovalBanner) return;
+        deviceApprovalBanner.classList.remove('visible');
+        deviceApprovalBanner.setAttribute('aria-hidden', 'true');
+    }
+
+    async function handleApprovePendingEnrollment() {
+        if (!activePendingEnrollment || pendingEnrollmentBusy) return;
+
+        pendingEnrollmentBusy = true;
+        deviceApprovalBanner?.classList.add('is-busy');
+        if (deviceApprovalApprove) deviceApprovalApprove.disabled = true;
+        if (deviceApprovalDecline) deviceApprovalDecline.disabled = true;
+
+        try {
+            if (!authDeviceIdentity) {
+                await ensureDeviceReady();
+            }
+            if (!authUserKeyRaw) {
+                authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+            }
+            if (!authUserKeyRaw) {
+                throw new Error('Trusted user key is not available on this device');
+            }
+
+            const requestDevice = activePendingEnrollment.request_device || {};
+            const requestPublicKey = requestDevice.public_key_jwk;
+            if (!requestPublicKey) {
+                throw new Error('Request device public key is missing');
+            }
+
+            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, requestPublicKey);
+            const response = await fetch(`/api/me/devices/enrollments/${encodeURIComponent(activePendingEnrollment.enrollment.id)}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCookieValue('csrf_token')
+                },
+                body: JSON.stringify({
+                    approver_device_id: authDeviceIdentity.deviceId,
+                    verification_code: activePendingEnrollment.enrollment.verification_code,
+                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedUserKey),
+                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
+                    uk_wrap_meta: {
+                        type: 'enrollment-approval',
+                        approver_device_id: authDeviceIdentity.deviceId,
+                        request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorPayload = await response.json().catch(() => ({}));
+                throw new Error(errorPayload.error || 'Failed to approve device');
+            }
+
+            await loadPendingEnrollments();
+            await loadRecentUploads();
+        } catch (error) {
+            console.error('Approve enrollment failed:', error);
+            showErrorBanner('Approval failed: ' + error.message);
+        } finally {
+            pendingEnrollmentBusy = false;
+            if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
+            if (deviceApprovalDecline) deviceApprovalDecline.disabled = false;
+            deviceApprovalBanner?.classList.remove('is-busy');
+        }
+    }
+
+    async function handleDeclinePendingEnrollment() {
+        if (!activePendingEnrollment || pendingEnrollmentBusy) return;
+
+        pendingEnrollmentBusy = true;
+        deviceApprovalBanner?.classList.add('is-busy');
+        if (deviceApprovalApprove) deviceApprovalApprove.disabled = true;
+        if (deviceApprovalDecline) deviceApprovalDecline.disabled = true;
+
+        try {
+            if (!authDeviceIdentity) {
+                await ensureDeviceReady();
+            }
+
+            const response = await fetch(`/api/me/devices/enrollments/${encodeURIComponent(activePendingEnrollment.enrollment.id)}/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCookieValue('csrf_token')
+                },
+                body: JSON.stringify({
+                    approver_device_id: authDeviceIdentity.deviceId
+                })
+            });
+
+            if (!response.ok) {
+                const errorPayload = await response.json().catch(() => ({}));
+                throw new Error(errorPayload.error || 'Failed to decline device');
+            }
+
+            await loadPendingEnrollments();
+        } catch (error) {
+            console.error('Reject enrollment failed:', error);
+            showErrorBanner('Decline failed: ' + error.message);
+        } finally {
+            pendingEnrollmentBusy = false;
+            if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
+            if (deviceApprovalDecline) deviceApprovalDecline.disabled = false;
+            deviceApprovalBanner?.classList.remove('is-busy');
+        }
+    }
+
+    function setRecentState(state) {
+        if (!recentLoading || !recentError || !recentEmpty || !recentList) return;
+        recentLoading.classList.toggle('hidden', state !== 'loading');
+        recentError.classList.toggle('hidden', state !== 'error');
+        recentEmpty.classList.toggle('hidden', state !== 'empty');
+        recentList.classList.toggle('hidden', state !== 'ready');
+    }
+
+    function renderRecentUploads(items) {
+        if (!recentList) return;
+        if (!items.length) {
+            setRecentState('empty');
+            if (recentCount) recentCount.textContent = '0 files';
+            return;
+        }
+
+        setRecentState('ready');
+        if (recentCount) recentCount.textContent = `${items.length} file${items.length === 1 ? '' : 's'}`;
+
+        recentList.innerHTML = items.map((item) => `
+            <article class="recent-item" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}">
+                <div class="recent-main">
+                    <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
+                    <div class="recent-actions">
+                        <button class="recent-action" data-action="download">Download</button>
+                        <button class="recent-action" data-action="copy">Copy Link</button>
+                    </div>
+                </div>
+                <div class="recent-meta">
+                    <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
+                    <span>Uploaded ${formatUploadDate(item.created_at)}</span>
+                    <span>Expires ${formatExpiryDate(item.expires_at)}</span>
+                </div>
+            </article>
+        `).join('');
+
+        recentList.querySelectorAll('.recent-action').forEach((btn) => {
+            btn.addEventListener('click', handleRecentAction);
+        });
+    }
+
+    async function handleRecentAction(event) {
+        const button = event.currentTarget;
+        const item = button.closest('.recent-item');
+        if (!item) return;
+
+        const fileId = item.dataset.fileId;
+        const fileName = item.dataset.fileName;
+        const shareUrl = item.dataset.shareUrl;
+        const action = button.dataset.action;
+
+        try {
+            if (action === 'download') {
+                button.disabled = true;
+                await downloadOwnedFile(fileId, fileName);
+            } else if (action === 'copy') {
+                const passphrase = await getOwnedFilePassphrase(fileId);
+                const copied = await copyToClipboard(`${shareUrl}#${passphrase}`, false, true);
+                if (!copied) {
+                    showToast('Copy failed. Please use Ctrl+C.');
+                }
+            }
+        } catch (error) {
+            console.error(error);
+            showErrorBanner(`Action failed: ${error.message}`);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function downloadOwnedFile(fileId, fileName) {
+        const passphrase = await getOwnedFilePassphrase(fileId);
+        const response = await fetch(`/api/file/${fileId}/download`);
+        if (!response.ok) {
+            throw new Error('Failed to download encrypted payload');
+        }
+        const encryptedBlob = await response.blob();
+        const decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase);
+        const blob = new Blob([decrypted], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName || `${fileId}.bin`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    async function getOwnedFilePassphrase(fileId) {
+        const cached = SecureCrypto.getCachedFileKey(fileId);
+        if (cached) {
+            return cached;
+        }
+
+        if (!authDeviceIdentity) {
+            await ensureDeviceReady();
+        }
+        const response = await fetch(`/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`, {
+            headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+        });
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => ({}));
+            throw new Error(errorPayload.error || 'Unable to access wrapped key for this file');
+        }
+
+        const payload = await response.json();
+        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+        if (!userKeyRaw) {
+            const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
+            userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
+        }
+
+        const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
+        const nonce = payload.file_key_envelope.dek_wrap_nonce_b64
+            ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64)
+            : new Uint8Array();
+        const dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
+        const passphrase = new TextDecoder().decode(dekBytes);
+        SecureCrypto.cacheFileKey(fileId, passphrase);
+        return passphrase;
+    }
+
+    function formatUploadDate(dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const dayDiff = Math.round((dateStart - todayStart) / 86400000);
+        const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (dayDiff === 0) return `Today ${time}`;
+        if (dayDiff === -1) return `Yesterday ${time}`;
+        return date.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatExpiryDate(dateStr) {
+        const date = new Date(dateStr);
+        const now = new Date();
+        if (date <= now) return 'Expired';
+
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        const dayDiff = Math.round((dateStart - todayStart) / 86400000);
+
+        if (dayDiff === 0) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        if (dayDiff === 1) {
+            return 'Tomorrow';
+        }
+        return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function escapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function setupEventListeners() {
@@ -146,6 +580,9 @@
         if (errorBannerClose) {
             errorBannerClose.addEventListener('click', hideErrorBanner);
         }
+
+        deviceApprovalApprove?.addEventListener('click', handleApprovePendingEnrollment);
+        deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
     }
 
     function handleDragOver(e) {
@@ -269,9 +706,25 @@
         isUploading = true;
         uploadComplete = false;
         uploadError = null;
+        finalizeEnvelopePayload = null;
 
         try {
             generatedPassword = await SecureCrypto.generatePassword();
+            if (AUTHENTICATED) {
+                if (!authUserKeyRaw) {
+                    await ensureDeviceReady();
+                    authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+                }
+                if (authUserKeyRaw) {
+                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(new TextEncoder().encode(generatedPassword), authUserKeyRaw);
+                    finalizeEnvelopePayload = {
+                        wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
+                        dek_wrap_alg: 'AES-GCM-UK-v1',
+                        dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
+                        dek_wrap_version: 1
+                    };
+                }
+            }
             encryptedBlob = await SecureCrypto.encryptFile(selectedFile, generatedPassword, () => {});
             await startUploadInBackground();
             uploadComplete = true;
@@ -580,7 +1033,8 @@
                 },
                 body: JSON.stringify({
                     session_id: uploadSessionId,
-                    duration: selectedDuration()
+                    duration: selectedDuration(),
+                    ...(finalizeEnvelopePayload || {})
                 })
             });
 
@@ -623,6 +1077,9 @@
     function showSuccess(response) {
         clearPendingCountdown();
         isFinalizing = false;
+        if (response.file_id && generatedPassword) {
+            SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
+        }
 
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         outUrl.value = fullShareUrl;
@@ -638,6 +1095,10 @@
         stageOutput.classList.remove('hidden');
         statusText.textContent = 'Secure';
         statusText.style.color = 'var(--accent)';
+
+        if (AUTHENTICATED) {
+            loadRecentUploads().catch(() => {});
+        }
     }
 
     function showErrorBanner(message) {
@@ -817,6 +1278,7 @@
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null;
         pendingExpiresAt = null;
+        finalizeEnvelopePayload = null;
         isFinalizing = false;
         isUploading = false;
         uploadComplete = false;
