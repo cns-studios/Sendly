@@ -472,6 +472,24 @@ func (p *Postgres) GetUserKeyEnvelopeForDevice(ctx context.Context, userID int64
 	return &env, nil
 }
 
+func (p *Postgres) UserHasTrustedKeyEnvelope(ctx context.Context, userID int64) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1
+			FROM user_key_envelopes uke
+			INNER JOIN user_devices ud ON ud.id = uke.device_id
+			WHERE uke.cns_user_id = $1
+			  AND ud.revoked_at IS NULL
+		)
+	`
+	var hasTrusted bool
+	err := p.db.GetContext(ctx, &hasTrusted, query, userID)
+	if err != nil {
+		return false, err
+	}
+	return hasTrusted, nil
+}
+
 func (p *Postgres) CreateEnrollmentRequest(ctx context.Context, enrollment *models.DeviceEnrollment) error {
 	query := `
 		INSERT INTO device_enrollments (

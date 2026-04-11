@@ -30,6 +30,8 @@
     let pendingAutoCopyText = null;
     let pendingAutoCopyBanner = false;
     let pendingAutoCopyBound = false;
+    let errorBannerHideTimer = null;
+    let errorBannerCloseTimer = null;
     let authDeviceIdentity = null;
     let authUserKeyRaw = null;
     let finalizeEnvelopePayload = null;
@@ -196,13 +198,14 @@
             authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
             authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
 
+            let bootstrapUserKeyRaw = null;
             let wrappedUserKeyB64 = '';
             let ukWrapAlg = '';
             let ukWrapMeta = {};
 
             if (!authUserKeyRaw) {
-                authUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-                const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, authDeviceIdentity.publicKeyJWK);
+                bootstrapUserKeyRaw = SecureCrypto.generateUserKeyRaw();
+                const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(bootstrapUserKeyRaw, authDeviceIdentity.publicKeyJWK);
                 wrappedUserKeyB64 = SecureCrypto.toBase64(wrappedUserKey);
                 ukWrapAlg = 'RSA-OAEP-2048-v1';
                 ukWrapMeta = { type: 'self-wrap', device_id: authDeviceIdentity.deviceId };
@@ -231,12 +234,55 @@
                 throw new Error(errorPayload.error || 'Device registration failed');
             }
 
+            const payload = await response.json().catch(() => ({}));
+
+            if (payload.needs_enrollment) {
+                authUserKeyRaw = null;
+                await requestDeviceEnrollment(authDeviceIdentity.deviceId);
+                showErrorBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
+                return;
+            }
+
+            if (!authUserKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
+                const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
+                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+            }
+
+            if (!authUserKeyRaw && bootstrapUserKeyRaw) {
+                authUserKeyRaw = bootstrapUserKeyRaw;
+            }
+
             if (authUserKeyRaw) {
                 SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             }
         } catch (error) {
             console.error('Failed to initialize authenticated device state:', error);
             showErrorBanner('Authenticated key setup failed. Recent uploads may be unavailable on this device.');
+        }
+    }
+
+    async function requestDeviceEnrollment(deviceId) {
+        try {
+            const response = await fetch('/api/me/devices/enrollments', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': getCookieValue('csrf_token')
+                },
+                body: JSON.stringify({ request_device_id: deviceId })
+            });
+
+            if (response.ok) {
+                return;
+            }
+
+            const errorPayload = await response.json().catch(() => ({}));
+            if (errorPayload.code === 'ENROLLMENT_CREATE_FAILED') {
+                return;
+            }
+            throw new Error(errorPayload.error || 'Failed to request device approval');
+        } catch (error) {
+            console.error('Failed to request enrollment:', error);
         }
     }
 
@@ -883,6 +929,9 @@
                     await ensureDeviceReady();
                     authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
                 }
+                if (!authUserKeyRaw) {
+                    throw new Error('Approve this device from a trusted browser before uploading as an authenticated user');
+                }
                 if (authUserKeyRaw) {
                     const wrapped = await SecureCrypto.wrapSecretWithUserKey(new TextEncoder().encode(generatedPassword), authUserKeyRaw);
                     finalizeEnvelopePayload = {
@@ -1273,12 +1322,48 @@
         if (errorBannerText) {
             errorBannerText.textContent = message;
         }
+
+        if (errorBannerHideTimer) {
+            clearTimeout(errorBannerHideTimer);
+            errorBannerHideTimer = null;
+        }
+        if (errorBannerCloseTimer) {
+            clearTimeout(errorBannerCloseTimer);
+            errorBannerCloseTimer = null;
+        }
+
         errorBanner.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            errorBanner.classList.add('visible');
+        });
+
+        errorBannerHideTimer = setTimeout(() => {
+            hideErrorBanner();
+        }, 4500);
     }
 
     function hideErrorBanner() {
         if (!errorBanner) return;
-        errorBanner.classList.add('hidden');
+
+        if (errorBannerHideTimer) {
+            clearTimeout(errorBannerHideTimer);
+            errorBannerHideTimer = null;
+        }
+        if (errorBannerCloseTimer) {
+            clearTimeout(errorBannerCloseTimer);
+            errorBannerCloseTimer = null;
+        }
+
+        if (errorBanner.classList.contains('hidden')) {
+            return;
+        }
+
+        errorBanner.classList.remove('visible');
+        errorBannerCloseTimer = setTimeout(() => {
+            if (!errorBanner.classList.contains('visible')) {
+                errorBanner.classList.add('hidden');
+            }
+        }, 320);
     }
 
     function updateProgress(percent, sub, main) {

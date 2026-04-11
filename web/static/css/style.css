@@ -692,7 +692,16 @@ header h1::before {
     border-bottom: 1px solid #901a1a;
     padding: 1rem 1.5rem;
     z-index: 2000;
-    animation: slideDown 0.3s ease;
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.3s ease, opacity 0.25s ease;
+}
+
+.error-banner.visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .error-banner.hidden {
@@ -729,17 +738,6 @@ header h1::before {
 
 .error-banner-close:hover {
     opacity: 0.8;
-}
-
-@keyframes slideDown {
-    from {
-        transform: translateY(-100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
 }
 
 .expiration-options {

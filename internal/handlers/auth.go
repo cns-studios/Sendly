@@ -29,15 +29,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Use Hex for state and verifier to avoid any Base64 encoding/decoding issues in URLs or cookies
-	state := generateRandomHex(16)    // 32 chars
-	verifier := generateRandomHex(32) // 64 chars
+	state := generateRandomHex(16)
+	verifier := generateRandomHex(32)
 	challenge := generateChallenge(verifier)
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
-	// Store verifier and state in cookies (short-lived)
-	// We use empty domain string to set a Host-Only cookie for the current host.
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("pkce_verifier", verifier, 600, "/", "", isSecure, true)
 	c.SetCookie("pkce_state", state, 600, "/", "", isSecure, true)
@@ -80,11 +77,9 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
-	// Clear PKCE cookies
 	c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
 	c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 
-	// Exchange code for tokens
 	tokenURL := h.cfg.CNSAuthURL + "/v2/token"
 	redirectURI := h.cfg.BaseURL + "/auth/callback"
 
@@ -116,7 +111,6 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	// Set auth_token as a host-only cookie
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("auth_token", result.AccessToken, 3600*24*7, "/", "", isSecure, true)
 

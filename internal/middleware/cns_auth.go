@@ -18,8 +18,6 @@ type CNSUser struct {
 	Username string `json:"username"`
 }
 
-// CNSAuthMiddleware is optional — it never blocks guests.
-// If the auth_token cookie is present and valid, it sets cns_user in context.
 func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if cfg.CNSAuthURL == "" || cfg.CNSAuthServiceKey == "" {
@@ -63,7 +61,6 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// GetCNSUser returns the authenticated user from context, or nil for guests.
 func GetCNSUser(c *gin.Context) *CNSUser {
 	val, exists := c.Get(CNSUserKey)
 	if !exists {

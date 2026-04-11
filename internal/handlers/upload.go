@@ -141,6 +141,14 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			OwnerCNSUserName: &uname,
 		}
 
+		if req.WrappedDEKB64 == "" {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Error: "Trusted device approval is required before authenticated uploads can be finalized",
+				Code:  "WRAPPED_DEK_REQUIRED",
+			})
+			return
+		}
+
 		if req.WrappedDEKB64 != "" {
 			wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
 			if decodeErr != nil {

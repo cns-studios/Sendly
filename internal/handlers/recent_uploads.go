@@ -174,34 +174,66 @@ func (h *RecentUploadsHandler) RegisterDevice(c *gin.Context) {
 		return
 	}
 
-	needsEnrollment := true
-	if req.WrappedUserKeyB64 != "" {
-		wrappedUserKey, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped user key", Code: "INVALID_WRAPPED_UK", Details: err.Error()})
-			return
-		}
-
-		envelope := &models.UserKeyEnvelope{
-			CNSUserID:      int64(user.ID),
-			DeviceID:       req.DeviceID,
-			WrappedUserKey: wrappedUserKey,
-			UKWrapAlg:      req.UKWrapAlg,
-			UKWrapMeta:     req.UKWrapMeta,
-			KeyVersion:     keyVersion,
-		}
-		if err := h.db.SaveUserKeyEnvelope(c.Request.Context(), envelope); err != nil {
-			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to store user key envelope", Code: "SAVE_UK_ENVELOPE_FAILED"})
-			return
-		}
-		needsEnrollment = false
-	} else {
-		if _, err := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); err == nil {
-			needsEnrollment = false
-		}
+	existingEnvelope, existingErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID)
+	if existingErr == nil {
+		c.JSON(http.StatusOK, models.DeviceRegisterResponse{
+			DeviceID:        req.DeviceID,
+			NeedsEnrollment: false,
+			UserKeyEnvelope: &models.UserKeyEnvelopeResponse{
+				WrappedUKB64: base64.StdEncoding.EncodeToString(existingEnvelope.WrappedUserKey),
+				UKWrapAlg:    existingEnvelope.UKWrapAlg,
+				UKWrapMeta:   existingEnvelope.UKWrapMeta,
+				KeyVersion:   existingEnvelope.KeyVersion,
+			},
+		})
+		return
 	}
 
-	c.JSON(http.StatusOK, models.DeviceRegisterResponse{DeviceID: req.DeviceID, NeedsEnrollment: needsEnrollment})
+	hasTrustedEnvelope, err := h.db.UserHasTrustedKeyEnvelope(c.Request.Context(), int64(user.ID))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to inspect trusted devices", Code: "DEVICE_REGISTER_FAILED"})
+		return
+	}
+
+	if hasTrustedEnvelope {
+		c.JSON(http.StatusOK, models.DeviceRegisterResponse{DeviceID: req.DeviceID, NeedsEnrollment: true})
+		return
+	}
+
+	if req.WrappedUserKeyB64 == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Wrapped user key is required for first trusted device", Code: "WRAPPED_UK_REQUIRED"})
+		return
+	}
+
+	wrappedUserKey, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped user key", Code: "INVALID_WRAPPED_UK", Details: err.Error()})
+		return
+	}
+
+	envelope := &models.UserKeyEnvelope{
+		CNSUserID:      int64(user.ID),
+		DeviceID:       req.DeviceID,
+		WrappedUserKey: wrappedUserKey,
+		UKWrapAlg:      req.UKWrapAlg,
+		UKWrapMeta:     req.UKWrapMeta,
+		KeyVersion:     keyVersion,
+	}
+	if err := h.db.SaveUserKeyEnvelope(c.Request.Context(), envelope); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to store user key envelope", Code: "SAVE_UK_ENVELOPE_FAILED"})
+		return
+	}
+
+	c.JSON(http.StatusOK, models.DeviceRegisterResponse{
+		DeviceID:        req.DeviceID,
+		NeedsEnrollment: false,
+		UserKeyEnvelope: &models.UserKeyEnvelopeResponse{
+			WrappedUKB64: base64.StdEncoding.EncodeToString(envelope.WrappedUserKey),
+			UKWrapAlg:    envelope.UKWrapAlg,
+			UKWrapMeta:   envelope.UKWrapMeta,
+			KeyVersion:   envelope.KeyVersion,
+		},
+	})
 }
 
 func (h *RecentUploadsHandler) CreateEnrollment(c *gin.Context) {

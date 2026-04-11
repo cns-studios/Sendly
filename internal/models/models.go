@@ -208,8 +208,9 @@ type DeviceRegisterRequest struct {
 }
 
 type DeviceRegisterResponse struct {
-	DeviceID        string `json:"device_id"`
-	NeedsEnrollment bool   `json:"needs_enrollment"`
+	DeviceID        string                   `json:"device_id"`
+	NeedsEnrollment bool                     `json:"needs_enrollment"`
+	UserKeyEnvelope *UserKeyEnvelopeResponse `json:"user_key_envelope,omitempty"`
 }
 
 type CreateEnrollmentRequest struct {
