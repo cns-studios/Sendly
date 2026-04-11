@@ -353,8 +353,27 @@ func (p *Postgres) SaveFileKeyEnvelope(ctx context.Context, envelope *models.Fil
 	return err
 }
 
-func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, limit int) ([]models.OwnedFileListItem, error) {
-	query := `
+func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, searchQuery string, page, perPage int) ([]models.OwnedFileListItem, int, error) {
+	offset := (page - 1) * perPage
+	searchPattern := "%"
+	if searchQuery != "" {
+		searchPattern = "%" + searchQuery + "%"
+	}
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM files
+		WHERE owner_cns_user_id = $1
+		  AND is_deleted = FALSE
+		  AND ($2 = '%' OR original_name ILIKE $2)
+	`
+
+	var total int
+	if err := p.db.GetContext(ctx, &total, countQuery, userID, searchPattern); err != nil {
+		return nil, 0, err
+	}
+
+	itemsQuery := `
 		SELECT
 			id AS file_id,
 			original_name AS filename,
@@ -364,12 +383,18 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, limit 
 		FROM files
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
+		  AND ($2 = '%' OR original_name ILIKE $2)
 		ORDER BY created_at DESC
-		LIMIT $2
+		LIMIT $3 OFFSET $4
 	`
+
 	var items []models.OwnedFileListItem
-	err := p.db.SelectContext(ctx, &items, query, userID, limit)
-	return items, err
+	err := p.db.SelectContext(ctx, &items, itemsQuery, userID, searchPattern, perPage, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return items, total, nil
 }
 
 func (p *Postgres) GetOwnedFileWithEnvelope(ctx context.Context, userID int64, fileID string) (*models.File, *models.FileKeyEnvelope, error) {

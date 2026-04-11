@@ -1446,6 +1446,12 @@ main:has(.legal-document) {
     margin-bottom: 0.75rem;
 }
 
+.recent-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .recent-header h3 {
     font-size: 0.9rem;
     text-transform: uppercase;
@@ -1456,6 +1462,44 @@ main:has(.legal-document) {
     color: #777;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.7rem;
+}
+
+.recent-search-toggle {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #333;
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+}
+
+.recent-search-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.recent-search-wrap {
+    margin-bottom: 0.65rem;
+}
+
+.recent-search-input {
+    width: 100%;
+    border: 1px solid #2d2d2d;
+    background: #0f0f0f;
+    color: var(--color-text);
+    padding: 0.5rem 0.6rem;
+    border-radius: var(--radius-md);
+    font-size: 0.78rem;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.recent-search-input:focus {
+    outline: none;
+    border-color: var(--accent);
 }
 
 .recent-state {
@@ -1508,19 +1552,60 @@ main:has(.legal-document) {
 }
 
 .recent-action {
+    width: 1.9rem;
+    height: 1.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 1px solid #333;
     background: transparent;
     color: var(--color-text);
-    font-size: 0.68rem;
-    font-family: 'JetBrains Mono', monospace;
-    text-transform: uppercase;
-    padding: 0.35rem 0.6rem;
+    padding: 0;
     cursor: pointer;
+    border-radius: var(--radius-md);
 }
 
 .recent-action:hover {
     border-color: var(--accent);
     color: var(--accent);
+}
+
+.recent-action:disabled,
+.recent-page-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.recent-pagination {
+    margin-top: 0.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+}
+
+.recent-page-btn {
+    width: 1.8rem;
+    height: 1.8rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #333;
+    background: transparent;
+    color: var(--color-text);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+}
+
+.recent-page-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.recent-page-label {
+    color: #777;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
 }
 
  
@@ -1579,8 +1664,8 @@ main:has(.legal-document) {
     }
 
     .recent-action {
-        flex: 1;
-        text-align: center;
+        width: 2rem;
+        height: 2rem;
     }
 }
 

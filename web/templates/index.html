@@ -253,12 +253,29 @@
                 <section id="recent-uploads-section" class="recent-uploads hidden" style="margin-top: 1.25rem;">
                     <div class="recent-header">
                         <h3>Recently Uploaded</h3>
-                        <span id="recent-count" class="recent-count">0 files</span>
+                        <div class="recent-header-actions">
+                            <span id="recent-count" class="recent-count">0 files</span>
+                            <button id="recent-search-toggle" class="recent-search-toggle" title="Search uploads" aria-label="Search uploads" aria-expanded="false">
+                                <i data-lucide="search" style="width: 0.9rem; height: 0.9rem;"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="recent-search-wrap" class="recent-search-wrap hidden">
+                        <input id="recent-search-input" type="text" class="recent-search-input" placeholder="Search by file name" autocomplete="off" spellcheck="false">
                     </div>
                     <div id="recent-loading" class="recent-state">Loading recent uploads...</div>
                     <div id="recent-error" class="recent-state hidden">Unable to load recent uploads.</div>
                     <div id="recent-empty" class="recent-state hidden">No uploads yet on this account.</div>
                     <div id="recent-list" class="recent-list hidden"></div>
+                    <div id="recent-pagination" class="recent-pagination hidden">
+                        <button id="recent-prev" class="recent-page-btn" aria-label="Previous page">
+                            <i data-lucide="chevron-left" style="width: 0.85rem; height: 0.85rem;"></i>
+                        </button>
+                        <span id="recent-page-label" class="recent-page-label">Page 1 of 1</span>
+                        <button id="recent-next" class="recent-page-btn" aria-label="Next page">
+                            <i data-lucide="chevron-right" style="width: 0.85rem; height: 0.85rem;"></i>
+                        </button>
+                    </div>
                 </section>
             </div>
         </main>

@@ -11,6 +11,8 @@
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const ALLOWED_DURATIONS = window.CONFIG?.allowedDurations || ['24h', '7d'];    const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
+    const RECENT_UPLOADS_PER_PAGE = 10;
+    const RECENT_SEARCH_DEBOUNCE_MS = 180;
 
     let totalChunks = 0;
     let uploadedChunks = 0;
@@ -31,6 +33,11 @@
     let authDeviceIdentity = null;
     let authUserKeyRaw = null;
     let finalizeEnvelopePayload = null;
+    let recentCurrentPage = 1;
+    let recentTotalPages = 0;
+    let recentSearchQuery = '';
+    let recentSearchDebounceTimer = null;
+    let recentSearchOpen = false;
 
      
     const dropZone = document.getElementById('drop-zone');
@@ -66,6 +73,13 @@
     const recentEmpty = document.getElementById('recent-empty');
     const recentList = document.getElementById('recent-list');
     const recentCount = document.getElementById('recent-count');
+    const recentSearchToggle = document.getElementById('recent-search-toggle');
+    const recentSearchWrap = document.getElementById('recent-search-wrap');
+    const recentSearchInput = document.getElementById('recent-search-input');
+    const recentPagination = document.getElementById('recent-pagination');
+    const recentPrev = document.getElementById('recent-prev');
+    const recentNext = document.getElementById('recent-next');
+    const recentPageLabel = document.getElementById('recent-page-label');
     const deviceApprovalBanner = document.getElementById('device-approval-banner');
     const deviceApprovalTitle = document.getElementById('device-approval-title');
     const deviceApprovalMessage = document.getElementById('device-approval-message');
@@ -226,20 +240,28 @@
         }
     }
 
-    async function loadRecentUploads() {
+    async function loadRecentUploads(page = 1) {
         if (!recentSection || !AUTHENTICATED) return;
         recentSection.classList.remove('hidden');
         setRecentState('loading');
 
         try {
-            const response = await fetch('/api/me/recent-uploads', {
+            const params = new URLSearchParams({
+                page: String(page),
+                per_page: String(RECENT_UPLOADS_PER_PAGE),
+            });
+            if (recentSearchQuery) {
+                params.set('q', recentSearchQuery);
+            }
+
+            const response = await fetch(`/api/me/recent-uploads?${params.toString()}`, {
                 headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
             });
             if (!response.ok) {
                 throw new Error('Failed to load recent uploads');
             }
             const payload = await response.json();
-            renderRecentUploads(payload.items || []);
+            renderRecentUploads(payload);
         } catch (error) {
             console.error(error);
             setRecentState('error');
@@ -425,26 +447,46 @@
         recentError.classList.toggle('hidden', state !== 'error');
         recentEmpty.classList.toggle('hidden', state !== 'empty');
         recentList.classList.toggle('hidden', state !== 'ready');
+        if (recentPagination && state !== 'ready') {
+            recentPagination.classList.add('hidden');
+        }
     }
 
-    function renderRecentUploads(items) {
+    function renderRecentUploads(payload) {
         if (!recentList) return;
+        const items = payload?.items || [];
+        recentCurrentPage = payload?.page || 1;
+        recentTotalPages = payload?.total_pages || 0;
+        const totalItems = payload?.total || 0;
+
         if (!items.length) {
             setRecentState('empty');
-            if (recentCount) recentCount.textContent = '0 files';
+            if (recentEmpty) {
+                recentEmpty.textContent = recentSearchQuery
+                    ? 'No uploads match this search.'
+                    : 'No uploads yet on this account.';
+            }
+            if (recentCount) recentCount.textContent = `${totalItems} files`;
+            updateRecentPagination();
             return;
         }
 
         setRecentState('ready');
-        if (recentCount) recentCount.textContent = `${items.length} file${items.length === 1 ? '' : 's'}`;
+        if (recentCount) {
+            recentCount.textContent = `${totalItems} file${totalItems === 1 ? '' : 's'}`;
+        }
 
         recentList.innerHTML = items.map((item) => `
             <article class="recent-item" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}">
                 <div class="recent-main">
                     <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
                     <div class="recent-actions">
-                        <button class="recent-action" data-action="download">Download</button>
-                        <button class="recent-action" data-action="copy">Copy Link</button>
+                        <button class="recent-action" data-action="download" aria-label="Download file" title="Download file">
+                            <i data-lucide="download" style="width: 0.85rem; height: 0.85rem;"></i>
+                        </button>
+                        <button class="recent-action" data-action="copy" aria-label="Copy share link" title="Copy share link">
+                            <i data-lucide="link" style="width: 0.85rem; height: 0.85rem;"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="recent-meta">
@@ -458,6 +500,69 @@
         recentList.querySelectorAll('.recent-action').forEach((btn) => {
             btn.addEventListener('click', handleRecentAction);
         });
+        updateRecentPagination();
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
+        }
+    }
+
+    function updateRecentPagination() {
+        if (!recentPagination || !recentPrev || !recentNext || !recentPageLabel) return;
+
+        const hasPages = recentTotalPages > 1;
+        recentPagination.classList.toggle('hidden', !hasPages);
+        if (!hasPages) {
+            return;
+        }
+
+        recentPrev.disabled = recentCurrentPage <= 1;
+        recentNext.disabled = recentCurrentPage >= recentTotalPages;
+        recentPageLabel.textContent = `Page ${recentCurrentPage} of ${recentTotalPages}`;
+    }
+
+    function setRecentSearchOpen(isOpen) {
+        recentSearchOpen = isOpen;
+        if (!recentSearchWrap || !recentSearchToggle) return;
+
+        recentSearchWrap.classList.toggle('hidden', !isOpen);
+        recentSearchToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        recentSearchToggle.innerHTML = isOpen
+            ? '<i data-lucide="x" style="width: 0.9rem; height: 0.9rem;"></i>'
+            : '<i data-lucide="search" style="width: 0.9rem; height: 0.9rem;"></i>';
+
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
+        }
+
+        if (isOpen) {
+            recentSearchInput?.focus();
+            return;
+        }
+
+        if (recentSearchQuery) {
+            recentSearchQuery = '';
+            if (recentSearchInput) {
+                recentSearchInput.value = '';
+            }
+            recentCurrentPage = 1;
+            loadRecentUploads(1);
+        }
+    }
+
+    function handleRecentSearchInput() {
+        if (!recentSearchInput) return;
+        const nextQuery = recentSearchInput.value.trim();
+        if (nextQuery === recentSearchQuery) return;
+
+        recentSearchQuery = nextQuery;
+        recentCurrentPage = 1;
+
+        if (recentSearchDebounceTimer) {
+            clearTimeout(recentSearchDebounceTimer);
+        }
+        recentSearchDebounceTimer = setTimeout(() => {
+            loadRecentUploads(1);
+        }, RECENT_SEARCH_DEBOUNCE_MS);
     }
 
     async function handleRecentAction(event) {
@@ -624,6 +729,21 @@
 
         document.querySelectorAll('input[name="expiration"]').forEach(input => {
             input.addEventListener('change', updateFinalizeButtonState);
+        });
+
+        recentSearchToggle?.addEventListener('click', () => {
+            setRecentSearchOpen(!recentSearchOpen);
+        });
+        recentSearchInput?.addEventListener('input', handleRecentSearchInput);
+        recentPrev?.addEventListener('click', () => {
+            if (recentCurrentPage > 1) {
+                loadRecentUploads(recentCurrentPage - 1);
+            }
+        });
+        recentNext?.addEventListener('click', () => {
+            if (recentCurrentPage < recentTotalPages) {
+                loadRecentUploads(recentCurrentPage + 1);
+            }
         });
 
         if (errorBannerClose) {

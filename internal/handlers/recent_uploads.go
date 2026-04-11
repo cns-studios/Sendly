@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -33,17 +34,64 @@ func (h *RecentUploadsHandler) RecentUploads(c *gin.Context) {
 		return
 	}
 
-	items, err := h.db.GetOwnedRecentFiles(c.Request.Context(), int64(user.ID), 50)
+	page := 1
+	if rawPage := strings.TrimSpace(c.Query("page")); rawPage != "" {
+		parsedPage, err := strconv.Atoi(rawPage)
+		if err != nil || parsedPage < 1 {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid page parameter", Code: "INVALID_PAGINATION"})
+			return
+		}
+		page = parsedPage
+	}
+
+	perPage := 10
+	if rawPerPage := strings.TrimSpace(c.Query("per_page")); rawPerPage != "" {
+		parsedPerPage, err := strconv.Atoi(rawPerPage)
+		if err != nil || parsedPerPage < 1 {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid per_page parameter", Code: "INVALID_PAGINATION"})
+			return
+		}
+		if parsedPerPage > 50 {
+			parsedPerPage = 50
+		}
+		perPage = parsedPerPage
+	}
+
+	searchQuery := strings.TrimSpace(c.Query("q"))
+
+	items, total, err := h.db.GetOwnedRecentFiles(c.Request.Context(), int64(user.ID), searchQuery, page, perPage)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch recent uploads", Code: "RECENT_UPLOADS_FAILED"})
 		return
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + perPage - 1) / perPage
+	}
+
+	if totalPages > 0 && page > totalPages {
+		page = totalPages
+		items, total, err = h.db.GetOwnedRecentFiles(c.Request.Context(), int64(user.ID), searchQuery, page, perPage)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch recent uploads", Code: "RECENT_UPLOADS_FAILED"})
+			return
+		}
+		totalPages = (total + perPage - 1) / perPage
 	}
 
 	for i := range items {
 		items[i].ShareURL = h.cfg.BaseURL + "/shared/" + items[i].FileID
 	}
 
-	c.JSON(http.StatusOK, models.RecentUploadsResponse{Items: items})
+	c.JSON(http.StatusOK, models.RecentUploadsResponse{
+		Items:      items,
+		Page:       page,
+		PerPage:    perPage,
+		Total:      total,
+		TotalPages: totalPages,
+		Query:      searchQuery,
+	})
 }
 
 func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {

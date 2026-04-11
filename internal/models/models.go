@@ -168,7 +168,12 @@ type UploadFinalizeResponse struct {
 }
 
 type RecentUploadsResponse struct {
-	Items []OwnedFileListItem `json:"items"`
+	Items      []OwnedFileListItem `json:"items"`
+	Page       int                 `json:"page"`
+	PerPage    int                 `json:"per_page"`
+	Total      int                 `json:"total"`
+	TotalPages int                 `json:"total_pages"`
+	Query      string              `json:"query,omitempty"`
 }
 
 type FileAccessResponse struct {
