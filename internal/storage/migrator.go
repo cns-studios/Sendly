@@ -32,7 +32,7 @@ func (p *Postgres) RunMigrations(ctx context.Context, migrationDir string) error
 	files, err := loadMigrationFiles(migrationDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return fmt.Errorf("migration directory %q not found", migrationDir)
 		}
 		return err
 	}

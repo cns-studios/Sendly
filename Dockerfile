@@ -27,6 +27,7 @@ COPY --from=builder /app/server .
 COPY --from=builder /app/admin .
 
 COPY --from=builder /app/web ./web
+COPY --from=builder /app/db ./db
 
 COPY --from=builder /app/wordlist.txt ./web/static/wordlist.txt
 
