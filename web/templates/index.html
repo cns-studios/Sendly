@@ -32,7 +32,6 @@
         <div class="error-banner-content">
             <span id="error-banner-text" class="error-banner-text"></span>
             <div class="error-banner-actions">
-                <button id="error-banner-recover" class="error-banner-recover hidden" type="button">Recover device</button>
                 <button id="error-banner-close" class="error-banner-close" title="Close">
                     <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
                 </button>
@@ -277,6 +276,7 @@
                         <h3>Recently Uploaded</h3>
                         <div class="recent-header-actions">
                             <span id="recent-count" class="recent-count">0 files</span>
+                            <button id="recent-recover-device" class="btn btn-secondary recent-recover-btn hidden" type="button">Recover trusted device</button>
                             <button id="recent-search-toggle" class="recent-search-toggle" title="Search uploads" aria-label="Search uploads" aria-expanded="false">
                                 <i data-lucide="search" style="width: 0.9rem; height: 0.9rem;"></i>
                             </button>
@@ -285,7 +285,13 @@
                     <div id="recent-search-wrap" class="recent-search-wrap hidden">
                         <input id="recent-search-input" type="text" class="recent-search-input" placeholder="Search by file name" autocomplete="off" spellcheck="false">
                     </div>
-                    <div id="recent-loading" class="recent-state">Loading recent uploads...</div>
+                    <div id="recent-loading" class="recent-state">
+                        <div class="recent-skeleton-list" aria-hidden="true">
+                            <div class="recent-skeleton-item"></div>
+                            <div class="recent-skeleton-item"></div>
+                            <div class="recent-skeleton-item"></div>
+                        </div>
+                    </div>
                     <div id="recent-error" class="recent-state hidden">Unable to load recent uploads.</div>
                     <div id="recent-empty" class="recent-state hidden">No uploads yet on this account.</div>
                     <div id="recent-list" class="recent-list hidden"></div>
@@ -320,6 +326,25 @@
         <button id="close-share-banner" class="share-banner-close" title="Close">
             <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
         </button>
+    </div>
+
+    <div id="download-activity-overlay" class="download-activity-overlay hidden" aria-hidden="true">
+        <div class="download-activity-panel" role="status" aria-live="polite">
+            <div class="spinner"></div>
+            <p>Downloading and decrypting your file...</p>
+        </div>
+    </div>
+
+    <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal action-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
+            <p id="action-modal-kicker" class="tos-modal-kicker">Heads up</p>
+            <h2 id="action-modal-title">Confirm action</h2>
+            <p id="action-modal-description" class="tos-modal-description"></p>
+            <div class="tos-modal-actions">
+                <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
+                <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>
+            </div>
+        </div>
     </div>
 
     <script>

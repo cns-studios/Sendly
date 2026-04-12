@@ -53,7 +53,6 @@
     const statusText = document.getElementById('status-text');
     const errorBanner = document.getElementById('error-banner');
     const errorBannerText = document.getElementById('error-banner-text');
-    const errorBannerRecover = document.getElementById('error-banner-recover');
     const errorBannerClose = document.getElementById('error-banner-close');
 
     const stageEntry = document.getElementById('stage-entry');
@@ -79,6 +78,7 @@
     const recentSearchToggle = document.getElementById('recent-search-toggle');
     const recentSearchWrap = document.getElementById('recent-search-wrap');
     const recentSearchInput = document.getElementById('recent-search-input');
+    const recentRecoverDevice = document.getElementById('recent-recover-device');
     const recentPagination = document.getElementById('recent-pagination');
     const recentPrev = document.getElementById('recent-prev');
     const recentNext = document.getElementById('recent-next');
@@ -95,6 +95,13 @@
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
+    const downloadActivityOverlay = document.getElementById('download-activity-overlay');
+    const actionModal = document.getElementById('action-modal');
+    const actionModalKicker = document.getElementById('action-modal-kicker');
+    const actionModalTitle = document.getElementById('action-modal-title');
+    const actionModalDescription = document.getElementById('action-modal-description');
+    const actionModalCancel = document.getElementById('action-modal-cancel');
+    const actionModalConfirm = document.getElementById('action-modal-confirm');
 
     let pendingEnrollmentItems = [];
     let activePendingEnrollment = null;
@@ -104,6 +111,8 @@
     let pendingEnrollmentSocketRetryTimer = null;
     let pendingEnrollmentRefreshTimer = null;
     const recentFileStates = new Map();
+    const LOCKED_FILE_INFO = 'Locked because this file key was trusted on another device and your recovery happened later on this browser.';
+    let actionModalResolver = null;
 
     function getCookieValue(name) {
         const value = `; ${document.cookie}`;
@@ -234,6 +243,7 @@
                 }
 
                 showRecoveryBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
+                setRecoveryActionVisible(true);
                 return;
             }
         } catch (error) {
@@ -349,6 +359,7 @@
                 throw new Error('Failed to load recent uploads');
             }
             const payload = await response.json();
+            await prefetchRecentLockStates(payload?.items || []);
             renderRecentUploads(payload);
         } catch (error) {
             console.error(error);
@@ -595,7 +606,14 @@
     async function handleRecoverLostDevice() {
         if (pendingEnrollmentBusy) return;
 
-        const confirmed = window.confirm('This will rotate your trusted-device state and make this browser the new trusted device. Old encrypted files will not be readable from this browser unless they are re-shared or re-uploaded. Continue?');
+        const confirmed = await openActionModal({
+            title: 'Recover this browser?',
+            description: 'This rotates trusted-device state and makes this browser your new trusted device. Previously protected files may remain unreadable until they are re-shared or re-uploaded.',
+            confirmText: 'Recover device',
+            cancelText: 'Cancel',
+            kicker: 'Important',
+            tone: 'warning'
+        });
         if (!confirmed) {
             return;
         }
@@ -616,7 +634,7 @@
             activePendingEnrollment = null;
             pendingEnrollmentMode = 'idle';
             hidePendingEnrollmentModal();
-            showErrorBanner('This browser is now the new trusted device. Previously protected files may need to be re-shared or re-uploaded.');
+            showInfoBanner('This browser is now the new trusted device. Previously protected files may need to be re-shared or re-uploaded.');
             await loadRecentUploads();
         } catch (error) {
             console.error('Lost-device recovery failed:', error);
@@ -776,7 +794,7 @@
                 <div class="recent-main">
                     <div class="recent-name-wrap">
                         <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
-                        ${recentFileStates.get(item.file_id)?.locked ? `<div class="recent-lock-pill">Locked on this browser</div>` : ''}
+                        ${recentFileStates.get(item.file_id)?.locked ? `<div class="recent-lock-pill" title="${escapeHtml(LOCKED_FILE_INFO)}" aria-label="${escapeHtml(LOCKED_FILE_INFO)}">Locked on this browser</div>` : ''}
                     </div>
                     <div class="recent-actions">
                         <button class="recent-action" data-action="download" aria-label="Download file" title="Download file" ${recentFileStates.get(item.file_id)?.locked ? 'disabled' : ''}>
@@ -791,7 +809,6 @@
                     <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
                     <span>Uploaded ${formatUploadDate(item.created_at)}</span>
                     <span>Expires ${formatExpiryDate(item.expires_at)}</span>
-                    ${recentFileStates.get(item.file_id)?.locked ? `<span class="recent-lock-note">Needs a trusted device to unlock</span>` : ''}
                 </div>
             </article>
         `).join('');
@@ -800,9 +817,30 @@
             btn.addEventListener('click', handleRecentAction);
         });
         updateRecentPagination();
+        setRecoveryActionVisible(items.some((item) => recentFileStates.get(item.file_id)?.locked));
         if (window.lucide?.createIcons) {
             window.lucide.createIcons();
         }
+    }
+
+    async function prefetchRecentLockStates(items) {
+        if (!Array.isArray(items) || !items.length) {
+            return;
+        }
+
+        await Promise.allSettled(items.map(async (item) => {
+            const fileId = item?.file_id;
+            if (!fileId) return;
+            if (recentFileStates.get(fileId)?.locked) return;
+
+            try {
+                await getOwnedFilePassphrase(fileId);
+            } catch (error) {
+                if (isLockedFileError(error)) {
+                    markRecentFileLocked(fileId, LOCKED_FILE_INFO);
+                }
+            }
+        }));
     }
 
     function updateRecentPagination() {
@@ -904,28 +942,33 @@
 
     async function downloadOwnedFile(fileId, fileName) {
         const passphrase = await getOwnedFilePassphrase(fileId);
-        const response = await fetch(`/api/file/${fileId}/download`);
-        if (!response.ok) {
-            throw new Error('Failed to download encrypted payload');
-        }
-        const encryptedBlob = await response.blob();
-        let decrypted;
+        showDownloadActivityOverlay(true);
         try {
-            decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase);
-        } catch (error) {
-            const lockedError = new Error('This file is locked on this browser. Recover from another trusted device to open it.');
-            lockedError.code = 'FILE_LOCKED';
-            throw lockedError;
+            const response = await fetch(`/api/file/${fileId}/download`);
+            if (!response.ok) {
+                throw new Error('Failed to download encrypted payload');
+            }
+            const encryptedBlob = await response.blob();
+            let decrypted;
+            try {
+                decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase);
+            } catch (error) {
+                const lockedError = new Error('This file is locked on this browser. Recover this browser as trusted to open it.');
+                lockedError.code = 'FILE_LOCKED';
+                throw lockedError;
+            }
+            const blob = new Blob([decrypted], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName || `${fileId}.bin`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } finally {
+            showDownloadActivityOverlay(false);
         }
-        const blob = new Blob([decrypted], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = fileName || `${fileId}.bin`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
     }
 
     async function getOwnedFilePassphrase(fileId) {
@@ -983,7 +1026,7 @@
 
     function markRecentFileLocked(fileId, reason) {
         if (!fileId) return;
-        recentFileStates.set(fileId, { locked: true, reason: reason || 'This file is locked on this browser.' });
+        recentFileStates.set(fileId, { locked: true, reason: reason || LOCKED_FILE_INFO });
         updateRecentFileLockedState(fileId);
     }
 
@@ -1003,16 +1046,12 @@
             const pill = document.createElement('div');
             pill.className = 'recent-lock-pill';
             pill.textContent = 'Locked on this browser';
+            pill.title = LOCKED_FILE_INFO;
+            pill.setAttribute('aria-label', LOCKED_FILE_INFO);
             nameWrap.appendChild(pill);
         }
 
-        const meta = item.querySelector('.recent-meta');
-        if (meta && !meta.querySelector('.recent-lock-note')) {
-            const note = document.createElement('span');
-            note.className = 'recent-lock-note';
-            note.textContent = 'Needs a trusted device to unlock';
-            meta.appendChild(note);
-        }
+        setRecoveryActionVisible(true);
     }
 
     function formatUploadDate(dateStr) {
@@ -1117,7 +1156,7 @@
             errorBannerClose.addEventListener('click', hideErrorBanner);
         }
 
-        errorBannerRecover?.addEventListener('click', handleRecoverLostDevice);
+        recentRecoverDevice?.addEventListener('click', handleRecoverLostDevice);
 
         deviceApprovalApprove?.addEventListener('click', handleApprovePendingEnrollment);
         deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
@@ -1641,12 +1680,13 @@
         }
     }
 
-    function showErrorBanner(message) {
+    function showBanner(message, tone = 'error') {
         if (!errorBanner) return;
         if (errorBannerText) {
             errorBannerText.textContent = message;
         }
-        errorBannerRecover?.classList.add('hidden');
+        errorBanner.classList.remove('banner-error', 'banner-info');
+        errorBanner.classList.add(tone === 'info' ? 'banner-info' : 'banner-error');
 
         if (errorBannerHideTimer) {
             clearTimeout(errorBannerHideTimer);
@@ -1667,30 +1707,17 @@
         }, 4500);
     }
 
+    function showErrorBanner(message) {
+        showBanner(message, 'error');
+    }
+
+    function showInfoBanner(message) {
+        showBanner(message, 'info');
+    }
+
     function showRecoveryBanner(message) {
-        if (!errorBanner) return;
-        if (errorBannerText) {
-            errorBannerText.textContent = message;
-        }
-        errorBannerRecover?.classList.remove('hidden');
-
-        if (errorBannerHideTimer) {
-            clearTimeout(errorBannerHideTimer);
-            errorBannerHideTimer = null;
-        }
-        if (errorBannerCloseTimer) {
-            clearTimeout(errorBannerCloseTimer);
-            errorBannerCloseTimer = null;
-        }
-
-        errorBanner.classList.remove('hidden');
-        requestAnimationFrame(() => {
-            errorBanner.classList.add('visible');
-        });
-
-        errorBannerHideTimer = setTimeout(() => {
-            hideErrorBanner();
-        }, 4500);
+        setRecoveryActionVisible(true);
+        showInfoBanner(message);
     }
 
     function hideErrorBanner() {
@@ -1710,7 +1737,6 @@
         }
 
         errorBanner.classList.remove('visible');
-        errorBannerRecover?.classList.add('hidden');
         errorBannerCloseTimer = setTimeout(() => {
             if (!errorBanner.classList.contains('visible')) {
                 errorBanner.classList.add('hidden');
@@ -1925,7 +1951,13 @@
             if (remainingMs <= 0) {
                 clearPendingCountdown();
                 pendingCountdown.textContent = '00:00';
-                alert('Upload session expired. Please try again.');
+                openActionModal({
+                    title: 'Upload session expired',
+                    description: 'Your upload session timed out. Please select the file again to continue.',
+                    confirmText: 'Okay',
+                    hideCancel: true,
+                    kicker: 'Session'
+                });
                 resetUpload();
                 return;
             }
@@ -1945,6 +1977,78 @@
             clearInterval(pendingCountdownTimer);
             pendingCountdownTimer = null;
         }
+    }
+
+    function setRecoveryActionVisible(visible) {
+        if (!recentRecoverDevice) return;
+        recentRecoverDevice.classList.toggle('hidden', !visible);
+    }
+
+    function showDownloadActivityOverlay(show) {
+        if (!downloadActivityOverlay) return;
+        downloadActivityOverlay.classList.toggle('hidden', !show);
+        downloadActivityOverlay.setAttribute('aria-hidden', show ? 'false' : 'true');
+    }
+
+    function openActionModal(options) {
+        if (!actionModal || !actionModalTitle || !actionModalDescription || !actionModalConfirm || !actionModalCancel) {
+            return Promise.resolve(false);
+        }
+
+        if (actionModalResolver) {
+            actionModalResolver(false);
+            actionModalResolver = null;
+        }
+
+        const {
+            title = 'Confirm action',
+            description = '',
+            confirmText = 'Continue',
+            cancelText = 'Cancel',
+            hideCancel = false,
+            kicker = 'Heads up',
+            tone = 'default'
+        } = options || {};
+
+        actionModal.classList.remove('action-tone-warning');
+        if (tone === 'warning') {
+            actionModal.classList.add('action-tone-warning');
+        }
+
+        actionModalTitle.textContent = title;
+        actionModalDescription.textContent = description;
+        actionModalKicker.textContent = kicker;
+        actionModalConfirm.textContent = confirmText;
+        actionModalCancel.textContent = cancelText;
+        actionModalCancel.classList.toggle('hidden', !!hideCancel);
+
+        actionModal.classList.remove('hidden');
+        actionModal.setAttribute('aria-hidden', 'false');
+
+        return new Promise((resolve) => {
+            const close = (value) => {
+                actionModal.classList.add('hidden');
+                actionModal.setAttribute('aria-hidden', 'true');
+                actionModalConfirm.removeEventListener('click', onConfirm);
+                actionModalCancel.removeEventListener('click', onCancel);
+                actionModal.removeEventListener('click', onBackdrop);
+                actionModalResolver = null;
+                resolve(value);
+            };
+
+            const onConfirm = () => close(true);
+            const onCancel = () => close(false);
+            const onBackdrop = (event) => {
+                if (event.target === actionModal && !hideCancel) {
+                    close(false);
+                }
+            };
+
+            actionModalResolver = close;
+            actionModalConfirm.addEventListener('click', onConfirm);
+            actionModalCancel.addEventListener('click', onCancel);
+            actionModal.addEventListener('click', onBackdrop);
+        });
     }
 
      
