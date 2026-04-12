@@ -53,6 +53,7 @@
     const statusText = document.getElementById('status-text');
     const errorBanner = document.getElementById('error-banner');
     const errorBannerText = document.getElementById('error-banner-text');
+    const errorBannerRecover = document.getElementById('error-banner-recover');
     const errorBannerClose = document.getElementById('error-banner-close');
 
     const stageEntry = document.getElementById('stage-entry');
@@ -232,7 +233,7 @@
                     return;
                 }
 
-                showErrorBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
+                showRecoveryBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
                 return;
             }
         } catch (error) {
@@ -1116,6 +1117,8 @@
             errorBannerClose.addEventListener('click', hideErrorBanner);
         }
 
+        errorBannerRecover?.addEventListener('click', handleRecoverLostDevice);
+
         deviceApprovalApprove?.addEventListener('click', handleApprovePendingEnrollment);
         deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
         deviceApprovalRecover?.addEventListener('click', handleRecoverLostDevice);
@@ -1643,6 +1646,33 @@
         if (errorBannerText) {
             errorBannerText.textContent = message;
         }
+        errorBannerRecover?.classList.add('hidden');
+
+        if (errorBannerHideTimer) {
+            clearTimeout(errorBannerHideTimer);
+            errorBannerHideTimer = null;
+        }
+        if (errorBannerCloseTimer) {
+            clearTimeout(errorBannerCloseTimer);
+            errorBannerCloseTimer = null;
+        }
+
+        errorBanner.classList.remove('hidden');
+        requestAnimationFrame(() => {
+            errorBanner.classList.add('visible');
+        });
+
+        errorBannerHideTimer = setTimeout(() => {
+            hideErrorBanner();
+        }, 4500);
+    }
+
+    function showRecoveryBanner(message) {
+        if (!errorBanner) return;
+        if (errorBannerText) {
+            errorBannerText.textContent = message;
+        }
+        errorBannerRecover?.classList.remove('hidden');
 
         if (errorBannerHideTimer) {
             clearTimeout(errorBannerHideTimer);
@@ -1680,6 +1710,7 @@
         }
 
         errorBanner.classList.remove('visible');
+        errorBannerRecover?.classList.add('hidden');
         errorBannerCloseTimer = setTimeout(() => {
             if (!errorBanner.classList.contains('visible')) {
                 errorBanner.classList.add('hidden');

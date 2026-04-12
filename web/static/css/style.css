@@ -8,6 +8,10 @@
     transform: translateX(-50%) translateY(-100%);
     background: rgba(30, 32, 34, 0.92);
     color: var(--color-text);
+    
+    .error-banner-actions {
+        margin-left: 0;
+    }
     min-width: 180px;
     max-width: 90vw;
     padding: 0.5rem 1.25rem 0.5rem 1rem;
@@ -52,6 +56,30 @@
 }
 .share-banner-close:hover {
     opacity: 1;
+}
+
+.error-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.error-banner-recover {
+    background: transparent;
+    border: 1px solid rgba(209, 255, 82, 0.32);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.72rem;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+}
+
+.error-banner-recover:hover {
+    background: rgba(209, 255, 82, 0.08);
 }
 
 .device-approval-modal {
