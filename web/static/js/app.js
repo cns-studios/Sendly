@@ -110,8 +110,9 @@
     let pendingEnrollmentSocket = null;
     let pendingEnrollmentSocketRetryTimer = null;
     let pendingEnrollmentRefreshTimer = null;
+    let isDeviceUntrusted = false;
     const recentFileStates = new Map();
-    const LOCKED_FILE_INFO = 'Locked because this file key was trusted on another device and your recovery happened later on this browser.';
+    const LOCKED_FILE_INFO = 'This file was encrypted on a different trusted device. Because recovery happened after this files was uploaded, this client cannot unlock that older file key. Please re-upload this file again. To avoid this in the future, approve new devices from already trusted devices (this is a trusted device) so you can keep access to all your files across devices.';
     let actionModalResolver = null;
 
     function getCookieValue(name) {
@@ -219,6 +220,8 @@
         try {
             const payload = await registerCurrentDevice(true);
             if (payload?.needs_enrollment) {
+                isDeviceUntrusted = true;
+                setRecoveryActionVisible(true);
                 const enrollment = await requestDeviceEnrollment(authDeviceIdentity.deviceId);
                 if (enrollment?.enrollment_id) {
                     showWaitingEnrollment({
@@ -243,9 +246,11 @@
                 }
 
                 showRecoveryBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
-                setRecoveryActionVisible(true);
                 return;
             }
+
+            isDeviceUntrusted = false;
+            setRecoveryActionVisible(false);
         } catch (error) {
             console.error('Failed to initialize authenticated device state:', error);
             showErrorBanner('Authenticated key setup failed. Recent uploads may be unavailable on this device.');
@@ -293,6 +298,8 @@
         }
 
         const payload = await response.json().catch(() => ({}));
+        isDeviceUntrusted = !!payload.needs_enrollment;
+        setRecoveryActionVisible(isDeviceUntrusted);
 
         if (!payload.needs_enrollment) {
             if (!authUserKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
@@ -633,6 +640,8 @@
             pendingEnrollmentItems = [];
             activePendingEnrollment = null;
             pendingEnrollmentMode = 'idle';
+            isDeviceUntrusted = false;
+            setRecoveryActionVisible(false);
             hidePendingEnrollmentModal();
             showInfoBanner('This browser is now the new trusted device. Previously protected files may need to be re-shared or re-uploaded.');
             await loadRecentUploads();
@@ -656,11 +665,15 @@
         try {
             const payload = await registerCurrentDevice(false);
             if (payload.needs_enrollment) {
+                isDeviceUntrusted = true;
+                setRecoveryActionVisible(true);
                 hidePendingEnrollmentModal();
                 showErrorBanner('This approval request was declined or expired. Request a new approval from a trusted device.');
                 return;
             }
 
+            isDeviceUntrusted = false;
+            setRecoveryActionVisible(false);
             hidePendingEnrollmentModal();
             await loadRecentUploads();
         } catch (error) {
@@ -817,7 +830,6 @@
             btn.addEventListener('click', handleRecentAction);
         });
         updateRecentPagination();
-        setRecoveryActionVisible(items.some((item) => recentFileStates.get(item.file_id)?.locked));
         if (window.lucide?.createIcons) {
             window.lucide.createIcons();
         }
@@ -1051,7 +1063,6 @@
             nameWrap.appendChild(pill);
         }
 
-        setRecoveryActionVisible(true);
     }
 
     function formatUploadDate(dateStr) {
@@ -1716,6 +1727,7 @@
     }
 
     function showRecoveryBanner(message) {
+        isDeviceUntrusted = true;
         setRecoveryActionVisible(true);
         showInfoBanner(message);
     }
@@ -1981,7 +1993,7 @@
 
     function setRecoveryActionVisible(visible) {
         if (!recentRecoverDevice) return;
-        recentRecoverDevice.classList.toggle('hidden', !visible);
+        recentRecoverDevice.classList.toggle('hidden', !(visible && isDeviceUntrusted));
     }
 
     function showDownloadActivityOverlay(show) {

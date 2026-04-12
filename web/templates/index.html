@@ -84,9 +84,12 @@
                     <p class="subtitle">End-to-End Encrypted File Sharing</p>
                 </div>
                 {{if .authenticated}}
-                <a href="/auth/logout" class="btn btn-secondary btn-cns-login" style="white-space: nowrap; margin-left: auto;" >
-                    Logged in as {{.username}}
-                </a>
+                <div style="display:flex; align-items:center; gap:0.65rem; margin-left:auto;">
+                    <button id="recent-recover-device" class="btn btn-secondary recent-recover-btn hidden" type="button">Recover this browser</button>
+                    <a href="/auth/logout" class="btn btn-secondary btn-cns-login" style="white-space: nowrap;" >
+                        Logged in as {{.username}}
+                    </a>
+                </div>
                 {{else}}
                 <a href="{{.authLoginURL}}" class="btn btn-secondary btn-cns-login" style="white-space: nowrap; margin-left: auto;">
                     Login with CNS
@@ -276,7 +279,6 @@
                         <h3>Recently Uploaded</h3>
                         <div class="recent-header-actions">
                             <span id="recent-count" class="recent-count">0 files</span>
-                            <button id="recent-recover-device" class="btn btn-secondary recent-recover-btn hidden" type="button">Recover trusted device</button>
                             <button id="recent-search-toggle" class="recent-search-toggle" title="Search uploads" aria-label="Search uploads" aria-expanded="false">
                                 <i data-lucide="search" style="width: 0.9rem; height: 0.9rem;"></i>
                             </button>
