@@ -106,7 +106,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	redirectURI := h.cfg.BaseURL + "/auth/callback"
-	result, exchangeErr := h.exchangeToken(code, verifier, redirectURI)
+	result, exchangeErr := h.exchangeToken(code, verifier, h.cfg.CNSAuthClientID, redirectURI, state)
 	if exchangeErr != nil {
 		c.String(http.StatusBadGateway, "Token exchange failed: %v", exchangeErr)
 		return
@@ -140,7 +140,7 @@ func generateChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
-func (h *AuthHandler) exchangeToken(code, verifier, redirectURI string) (*tokenExchangeResult, error) {
+func (h *AuthHandler) exchangeToken(code, verifier, clientID, redirectURI, state string) (*tokenExchangeResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -149,8 +149,9 @@ func (h *AuthHandler) exchangeToken(code, verifier, redirectURI string) (*tokenE
 	jsonPayload := map[string]string{
 		"code":          code,
 		"code_verifier": verifier,
-		"client_id":     h.cfg.CNSAuthClientID,
+		"client_id":     clientID,
 		"redirect_uri":  redirectURI,
+		"state":         state,
 	}
 	body, _ := json.Marshal(jsonPayload)
 
@@ -163,8 +164,9 @@ func (h *AuthHandler) exchangeToken(code, verifier, redirectURI string) (*tokenE
 	formPayload.Set("grant_type", "authorization_code")
 	formPayload.Set("code", code)
 	formPayload.Set("code_verifier", verifier)
-	formPayload.Set("client_id", h.cfg.CNSAuthClientID)
+	formPayload.Set("client_id", clientID)
 	formPayload.Set("redirect_uri", redirectURI)
+	formPayload.Set("state", state)
 
 	fallbackResult, fallbackStatus, fallbackRawBody, fallbackErr := doTokenRequest(ctx, tokenURL, "application/x-www-form-urlencoded", strings.NewReader(formPayload.Encode()))
 	if fallbackErr == nil && fallbackStatus == http.StatusOK {
