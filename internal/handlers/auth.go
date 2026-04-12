@@ -1,22 +1,29 @@
 package handlers
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"shareit/internal/config"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
 	cfg *config.Config
+}
+
+type tokenExchangeResult struct {
+	AccessToken string `json:"access_token"`
 }
 
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
@@ -29,12 +36,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	state, stateErr := c.Cookie("pkce_state")
-	verifier, verifierErr := c.Cookie("pkce_verifier")
-	if stateErr != nil || verifierErr != nil || state == "" || verifier == "" {
-		state = generateRandomHex(16)
-		verifier = generateRandomHex(32)
-	}
+	state := generateRandomHex(16)
+	verifier := generateRandomHex(32)
 	challenge := generateChallenge(verifier)
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
@@ -102,34 +105,10 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	tokenURL := h.cfg.CNSAuthURL + "/v2/token"
 	redirectURI := h.cfg.BaseURL + "/auth/callback"
-
-	payload := map[string]string{
-		"code":          code,
-		"code_verifier": verifier,
-		"client_id":     h.cfg.CNSAuthClientID,
-		"redirect_uri":  redirectURI,
-	}
-
-	body, _ := json.Marshal(payload)
-	resp, err := http.Post(tokenURL, "application/json", strings.NewReader(string(body)))
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Failed to connect to auth server: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		c.String(http.StatusInternalServerError, "Token exchange failed: %s", resp.Status)
-		return
-	}
-
-	var result struct {
-		AccessToken string `json:"access_token"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		c.String(http.StatusInternalServerError, "Failed to parse token response")
+	result, exchangeErr := h.exchangeToken(code, verifier, redirectURI)
+	if exchangeErr != nil {
+		c.String(http.StatusBadGateway, "Token exchange failed: %v", exchangeErr)
 		return
 	}
 
@@ -159,4 +138,81 @@ func generateRandomHex(n int) string {
 func generateChallenge(verifier string) string {
 	hash := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
+func (h *AuthHandler) exchangeToken(code, verifier, redirectURI string) (*tokenExchangeResult, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	tokenURL := h.cfg.CNSAuthURL + "/v2/token"
+
+	jsonPayload := map[string]string{
+		"code":          code,
+		"code_verifier": verifier,
+		"client_id":     h.cfg.CNSAuthClientID,
+		"redirect_uri":  redirectURI,
+	}
+	body, _ := json.Marshal(jsonPayload)
+
+	result, statusCode, rawBody, reqErr := doTokenRequest(ctx, tokenURL, "application/json", strings.NewReader(string(body)))
+	if reqErr == nil && statusCode == http.StatusOK {
+		return result, nil
+	}
+
+	formPayload := url.Values{}
+	formPayload.Set("grant_type", "authorization_code")
+	formPayload.Set("code", code)
+	formPayload.Set("code_verifier", verifier)
+	formPayload.Set("client_id", h.cfg.CNSAuthClientID)
+	formPayload.Set("redirect_uri", redirectURI)
+
+	fallbackResult, fallbackStatus, fallbackRawBody, fallbackErr := doTokenRequest(ctx, tokenURL, "application/x-www-form-urlencoded", strings.NewReader(formPayload.Encode()))
+	if fallbackErr == nil && fallbackStatus == http.StatusOK {
+		return fallbackResult, nil
+	}
+
+	if fallbackErr != nil {
+		return nil, fmt.Errorf("primary request failed (status=%d body=%q): %v; fallback request failed: %v", statusCode, limitText(rawBody, 500), reqErr, fallbackErr)
+	}
+
+	return nil, fmt.Errorf("primary request failed (status=%d body=%q): %v; fallback status=%d body=%q", statusCode, limitText(rawBody, 500), reqErr, fallbackStatus, limitText(fallbackRawBody, 500))
+}
+
+func doTokenRequest(ctx context.Context, tokenURL, contentType string, body io.Reader) (*tokenExchangeResult, int, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, body)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	rawBody := strings.TrimSpace(string(raw))
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, resp.StatusCode, rawBody, fmt.Errorf("upstream status %s", resp.Status)
+	}
+
+	var result tokenExchangeResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, resp.StatusCode, rawBody, fmt.Errorf("invalid token response: %w", err)
+	}
+	if result.AccessToken == "" {
+		return nil, resp.StatusCode, rawBody, fmt.Errorf("token response missing access_token")
+	}
+
+	return &result, resp.StatusCode, rawBody, nil
+}
+
+func limitText(value string, max int) string {
+	if len(value) <= max {
+		return value
+	}
+	return value[:max]
 }
