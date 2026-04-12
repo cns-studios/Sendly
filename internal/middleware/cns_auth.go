@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"shareit/internal/config"
@@ -16,6 +17,11 @@ const CNSUserKey = "cns_user"
 type CNSUser struct {
 	ID       int    `json:"id"`
 	Username string `json:"username"`
+}
+
+func clearAuthTokenCookie(c *gin.Context, cfg *config.Config) {
+	isSecure := strings.HasPrefix(cfg.BaseURL, "https")
+	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
 }
 
 func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
@@ -45,6 +51,9 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil || resp.StatusCode != http.StatusOK {
+			if resp != nil && (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) {
+				clearAuthTokenCookie(c, cfg)
+			}
 			c.Next()
 			return
 		}
@@ -52,6 +61,7 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		var user CNSUser
 		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil || user.ID == 0 {
+			clearAuthTokenCookie(c, cfg)
 			c.Next()
 			return
 		}
