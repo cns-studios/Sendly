@@ -147,11 +147,17 @@
 
         currentPassword = password;
 
-         
-        passwordSection.classList.add('hidden');
+        // Keep the parent visible; only swap inner blocks so the spinner can actually render.
+        loadingSection.classList.add('hidden');
+        passwordSection.classList.remove('hidden');
+        autoDecryptSection.classList.add('hidden');
+        manualDecryptSection.classList.add('hidden');
         progressSection.classList.remove('hidden');
         successSection.classList.add('hidden');
         errorSection.classList.add('hidden');
+
+        // Give the browser one paint frame before starting download/decrypt work.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
 
         try {
              
@@ -175,6 +181,7 @@
             updateProgress(100, 'Complete!');
 
              
+            passwordSection.classList.add('hidden');
             progressSection.classList.add('hidden');
             successSection.classList.remove('hidden');
 
