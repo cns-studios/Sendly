@@ -155,6 +155,8 @@ func main() {
 			devices := me.Group("/devices")
 			{
 				devices.POST("/register", recentUploadsHandler.RegisterDevice)
+				devices.POST("/recover", rateLimiter.Handler(), recentUploadsHandler.RecoverDevice)
+				devices.GET("/ws", recentUploadsHandler.DeviceEvents)
 				devices.POST("/enrollments", rateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", rateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)

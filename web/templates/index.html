@@ -37,21 +37,40 @@
         </div>
     </div>
 
-    <div id="device-approval-banner" class="device-approval-banner" aria-live="polite" aria-hidden="true">
-        <div class="device-approval-header">
-            <div>
-                <p class="device-approval-kicker">Approval required</p>
-                <h2 id="device-approval-title">New device wants access</h2>
+    <div id="device-approval-modal" class="device-approval-modal hidden" aria-hidden="true">
+        <div class="device-approval-panel" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+            <div class="device-approval-header">
+                <div>
+                    <p class="device-approval-kicker">Approval required</p>
+                    <h2 id="device-approval-title">New device wants access</h2>
+                </div>
+                <span id="device-approval-count" class="device-approval-count"></span>
             </div>
-            <span id="device-approval-count" class="device-approval-count"></span>
-        </div>
-        <p id="device-approval-message" class="device-approval-message">
-            A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.
-        </p>
-        <div id="device-approval-meta" class="device-approval-meta"></div>
-        <div class="device-approval-actions">
-            <button id="device-approval-decline" class="btn btn-secondary btn-large">Decline</button>
-            <button id="device-approval-approve" class="btn btn-accent btn-large">Approve</button>
+            <p id="device-approval-message" class="device-approval-message">
+                A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.
+            </p>
+            <div id="device-approval-meta" class="device-approval-meta"></div>
+            <div id="device-approval-waiting" class="device-approval-waiting hidden">
+                <div class="device-approval-waiting-icon">
+                    <div class="spinner"></div>
+                </div>
+                <div>
+                    <p class="device-approval-waiting-title">Waiting for approval</p>
+                    <p class="device-approval-waiting-copy">
+                        Keep this tab open. A trusted device must approve this browser before it can decrypt uploads or open protected files.
+                    </p>
+                    <p class="device-approval-waiting-note">
+                        If you lost the only trusted device, you will need to recover access from another CNS session before this browser can be approved.
+                    </p>
+                </div>
+            </div>
+            <div class="device-approval-actions">
+                <button id="device-approval-decline" class="btn btn-secondary btn-large">Decline</button>
+                <button id="device-approval-approve" class="btn btn-accent btn-large">Approve</button>
+            </div>
+            <button id="device-approval-recover" class="device-approval-recover hidden" type="button">
+                Lost the old device? Start fresh on this browser.
+            </button>
         </div>
     </div>
 

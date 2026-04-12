@@ -21,10 +21,11 @@ import (
 type RecentUploadsHandler struct {
 	cfg *config.Config
 	db  *storage.Postgres
+	hub *deviceEnrollmentHub
 }
 
 func NewRecentUploadsHandler(cfg *config.Config, db *storage.Postgres) *RecentUploadsHandler {
-	return &RecentUploadsHandler{cfg: cfg, db: db}
+	return &RecentUploadsHandler{cfg: cfg, db: db, hub: newDeviceEnrollmentHub()}
 }
 
 func (h *RecentUploadsHandler) RecentUploads(c *gin.Context) {
@@ -144,6 +145,14 @@ func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 }
 
 func (h *RecentUploadsHandler) RegisterDevice(c *gin.Context) {
+	h.handleDeviceRegistration(c, false)
+}
+
+func (h *RecentUploadsHandler) RecoverDevice(c *gin.Context) {
+	h.handleDeviceRegistration(c, true)
+}
+
+func (h *RecentUploadsHandler) handleDeviceRegistration(c *gin.Context, forceRecovery bool) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
@@ -169,6 +178,44 @@ func (h *RecentUploadsHandler) RegisterDevice(c *gin.Context) {
 		KeyAlgorithm: req.KeyAlgorithm,
 		KeyVersion:   keyVersion,
 	}
+
+	if forceRecovery {
+		if req.WrappedUserKeyB64 == "" {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Wrapped user key is required for device recovery", Code: "WRAPPED_UK_REQUIRED"})
+			return
+		}
+
+		wrappedUserKey, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped user key", Code: "INVALID_WRAPPED_UK", Details: err.Error()})
+			return
+		}
+
+		envelope := &models.UserKeyEnvelope{
+			CNSUserID:      int64(user.ID),
+			DeviceID:       req.DeviceID,
+			WrappedUserKey: wrappedUserKey,
+			UKWrapAlg:      req.UKWrapAlg,
+			UKWrapMeta:     req.UKWrapMeta,
+			KeyVersion:     keyVersion,
+		}
+		if err := h.db.ResetTrustedDeviceState(c.Request.Context(), device, envelope); err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to reset trusted devices", Code: "DEVICE_RECOVERY_FAILED"})
+			return
+		}
+		c.JSON(http.StatusOK, models.DeviceRegisterResponse{
+			DeviceID:        req.DeviceID,
+			NeedsEnrollment: false,
+			UserKeyEnvelope: &models.UserKeyEnvelopeResponse{
+				WrappedUKB64: base64.StdEncoding.EncodeToString(envelope.WrappedUserKey),
+				UKWrapAlg:    envelope.UKWrapAlg,
+				UKWrapMeta:   envelope.UKWrapMeta,
+				KeyVersion:   envelope.KeyVersion,
+			},
+		})
+		return
+	}
+
 	if err := h.db.CreateOrUpdateUserDevice(c.Request.Context(), device); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to register device", Code: "DEVICE_REGISTER_FAILED"})
 		return
@@ -219,6 +266,7 @@ func (h *RecentUploadsHandler) RegisterDevice(c *gin.Context) {
 		UKWrapMeta:     req.UKWrapMeta,
 		KeyVersion:     keyVersion,
 	}
+
 	if err := h.db.SaveUserKeyEnvelope(c.Request.Context(), envelope); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to store user key envelope", Code: "SAVE_UK_ENVELOPE_FAILED"})
 		return
@@ -270,6 +318,7 @@ func (h *RecentUploadsHandler) CreateEnrollment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to create enrollment", Code: "ENROLLMENT_CREATE_FAILED"})
 		return
 	}
+	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", enrollment.ID)
 
 	c.JSON(http.StatusOK, models.CreateEnrollmentResponse{
 		EnrollmentID:     enrollment.ID,
@@ -390,6 +439,7 @@ func (h *RecentUploadsHandler) ApproveEnrollment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to approve enrollment", Code: "ENROLLMENT_APPROVE_FAILED"})
 		return
 	}
+	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_approved", enrollmentID)
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
@@ -436,6 +486,7 @@ func (h *RecentUploadsHandler) RejectEnrollment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to reject enrollment", Code: "ENROLLMENT_REJECT_FAILED"})
 		return
 	}
+	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_rejected", enrollmentID)
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

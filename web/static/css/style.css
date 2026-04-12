@@ -54,28 +54,26 @@
     opacity: 1;
 }
 
-.device-approval-banner {
+.device-approval-modal {
     position: fixed;
-    top: 0.75rem;
-    left: 50%;
-    transform: translateX(-50%) translateY(-140%);
-    width: min(44rem, calc(100vw - 1.5rem));
-    background: rgba(18, 18, 18, 0.97);
-    border: 1px solid #303030;
-    border-top: 3px solid var(--accent);
-    border-radius: 0 0 18px 18px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px);
     z-index: 3200;
-    padding: 1rem 1.1rem 1.05rem;
-    opacity: 0;
-    pointer-events: none;
-    transition: transform 0.38s cubic-bezier(0.23, 1, 0.32, 1), opacity 0.26s ease;
 }
 
-.device-approval-banner.visible {
-    transform: translateX(-50%) translateY(0);
-    opacity: 1;
-    pointer-events: auto;
+.device-approval-panel {
+    width: min(44rem, 100%);
+    background: rgba(18, 18, 18, 0.98);
+    border: 1px solid #303030;
+    border-top: 3px solid var(--accent);
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+    padding: 1.1rem 1.1rem 1rem;
 }
 
 .device-approval-header {
@@ -94,7 +92,7 @@
     margin-bottom: 0.35rem;
 }
 
-.device-approval-banner h2 {
+.device-approval-panel h2 {
     font-size: 1.2rem;
     line-height: 1.2;
     margin: 0;
@@ -118,6 +116,44 @@
     line-height: 1.5;
 }
 
+.device-approval-waiting {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    padding: 1rem;
+    background: #0d0d0d;
+    border: 1px solid #272727;
+    border-radius: 12px;
+}
+
+.device-approval-waiting-icon {
+    flex: 0 0 auto;
+    width: 2.8rem;
+    height: 2.8rem;
+    display: grid;
+    place-items: center;
+}
+
+.device-approval-waiting-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+
+.device-approval-waiting-copy,
+.device-approval-waiting-note {
+    color: #c9c9c9;
+    line-height: 1.5;
+    font-size: 0.92rem;
+}
+
+.device-approval-waiting-note {
+    margin-top: 0.35rem;
+    color: #9b9b9b;
+    font-size: 0.84rem;
+}
+
 .device-approval-meta {
     margin-top: 0.8rem;
     color: #8f8f8f;
@@ -136,19 +172,40 @@
     flex-wrap: wrap;
 }
 
-.device-approval-banner.is-busy {
+.device-approval-recover {
+    margin-top: 0.85rem;
+    display: inline-flex;
+    align-self: flex-start;
+    background: transparent;
+    border: 0;
+    color: #9f9f9f;
+    font-size: 0.86rem;
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+    cursor: pointer;
+    padding: 0;
+}
+
+.device-approval-recover:hover {
+    color: var(--accent);
+}
+
+.device-approval-modal.is-busy {
     opacity: 0.86;
 }
 
 @media (max-width: 640px) {
-    .device-approval-banner {
-        top: 0.5rem;
-        width: calc(100vw - 1rem);
-        padding: 0.9rem;
-    }
-
     .device-approval-header {
         flex-direction: column;
+    }
+
+    .device-approval-panel {
+        padding: 0.9rem;
+        border-radius: 14px;
+    }
+
+    .device-approval-waiting {
+        padding: 0.85rem;
     }
 
     .device-approval-actions {
@@ -157,6 +214,10 @@
 
     .device-approval-actions .btn {
         width: 100%;
+    }
+
+    .device-approval-recover {
+        align-self: stretch;
     }
 }
 
@@ -1519,11 +1580,23 @@ main:has(.legal-document) {
     border-radius: var(--radius-md);
 }
 
+.recent-item.is-locked {
+    border-color: #5c4a1f;
+    background: #161209;
+}
+
 .recent-main {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+}
+
+.recent-name-wrap {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
 }
 
 .recent-name {
@@ -1535,6 +1608,21 @@ main:has(.legal-document) {
     white-space: nowrap;
 }
 
+.recent-lock-pill {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid #5c4a1f;
+    background: rgba(209, 255, 82, 0.06);
+    color: #d6c98a;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.63rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
 .recent-meta {
     margin-top: 0.45rem;
     color: #777;
@@ -1544,9 +1632,21 @@ main:has(.legal-document) {
     flex-wrap: wrap;
 }
 
+.recent-lock-note {
+    color: #d6c98a;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
 .recent-actions {
     display: flex;
     gap: 0.5rem;
+}
+
+.recent-item.is-locked .recent-action {
+    border-color: #43381b;
+    color: #7b7045;
 }
 
 .recent-action {

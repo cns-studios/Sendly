@@ -540,7 +540,7 @@ the device is immediately trusted.
 ```json
 {
   "device_id": "11111111-2222-3333-4444-555555555555",
-  "device_label": "Aaron Laptop",
+  "device_label": "CNS Laptop",
   "public_key_jwk": {
     "kty": "RSA",
     "n": "...",
@@ -615,6 +615,69 @@ Lists non-expired pending enrollments for the authenticated user.
 }
 ```
 
+#### `GET /api/me/devices/ws` - Device Enrollment WebSocket
+Streams real-time enrollment events for the authenticated user so trusted sessions can react immediately when a new browser requests access.
+
+**Authentication**:
+- CNS auth cookie required
+
+**Incoming Messages**:
+```json
+{
+  "type": "device_enrollment_created",
+  "enrollment": {
+    "id": "aaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "request_device_id": "11111111-2222-3333-4444-555555555555",
+    "status": "pending",
+    "verification_code": "123456"
+  },
+  "request_device": {
+    "id": "11111111-2222-3333-4444-555555555555",
+    "device_label": "CNS Laptop"
+  },
+  "pending_count": 1
+}
+```
+
+The same stream is also used for `device_enrollment_approved` and `device_enrollment_rejected` updates.
+
+#### `POST /api/me/devices/recover` - Recover Lost Trusted Device
+Rotates trusted-device state and makes the current browser the new trusted device. Use this when the old trusted device is lost and you want to keep using this browser.
+
+**Headers**:
+- `Content-Type: application/json`
+- `X-CSRF-Token: <token>` (required)
+
+**Request Body**:
+```json
+{
+  "device_id": "11111111-2222-3333-4444-555555555555",
+  "device_label": "CNS Laptop",
+  "public_key_jwk": {
+    "kty": "RSA",
+    "n": "...",
+    "e": "AQAB"
+  },
+  "key_algorithm": "RSA-OAEP-2048",
+  "key_version": 1,
+  "wrapped_user_key_b64": "...",
+  "uk_wrap_alg": "RSA-OAEP-2048-v1",
+  "uk_wrap_meta": {
+    "type": "recovery-reset"
+  }
+}
+```
+
+**Response** (200 OK):
+```json
+{
+  "device_id": "11111111-2222-3333-4444-555555555555",
+  "needs_enrollment": false
+}
+```
+
+This is a key rotation, not a silent restore. Files encrypted with the previous user key will no longer be readable from the recovered browser unless they are re-shared or re-uploaded.
+
 ---
 
 #### `POST /api/me/devices/enrollments/:id/approve` - Approve Enrollment
@@ -646,6 +709,9 @@ Approves a pending enrollment from a trusted device and stores wrapped user key 
   "success": true
 }
 ```
+
+#### Device Recovery Note
+ShareIt keeps the user key in browser storage on trusted devices. If the only trusted device is lost, a new browser cannot decrypt previously protected data unless the user key is recovered from another trusted session first. The approval flow now makes device B wait for approval cleanly and notifies device A instantly, but it does not invent a new recovery secret.
 
 ---
 

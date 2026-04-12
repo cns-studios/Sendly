@@ -321,6 +321,74 @@ func (p *Postgres) CreateOrUpdateUserDevice(ctx context.Context, device *models.
 	return err
 }
 
+func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.UserDevice, envelope *models.UserKeyEnvelope) error {
+	tx, err := p.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE user_devices SET revoked_at = NOW() WHERE cns_user_id = $1 AND revoked_at IS NULL`, device.CNSUserID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_key_envelopes WHERE cns_user_id = $1`, device.CNSUserID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_devices (
+			id,
+			cns_user_id,
+			device_label,
+			public_key_jwk,
+			key_algorithm,
+			key_version,
+			created_at,
+			last_seen_at,
+			revoked_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL)
+		ON CONFLICT (id) DO UPDATE
+		SET cns_user_id = EXCLUDED.cns_user_id,
+			device_label = EXCLUDED.device_label,
+			public_key_jwk = EXCLUDED.public_key_jwk,
+			key_algorithm = EXCLUDED.key_algorithm,
+			key_version = EXCLUDED.key_version,
+			last_seen_at = NOW(),
+			revoked_at = NULL
+	`, device.ID, device.CNSUserID, device.DeviceLabel, device.PublicKeyJWK, device.KeyAlgorithm, device.KeyVersion); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_key_envelopes (
+			id,
+			cns_user_id,
+			device_id,
+			wrapped_user_key,
+			uk_wrap_alg,
+			uk_wrap_meta,
+			key_version,
+			created_at
+		)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
+		ON CONFLICT (cns_user_id, device_id) DO UPDATE
+		SET wrapped_user_key = EXCLUDED.wrapped_user_key,
+			uk_wrap_alg = EXCLUDED.uk_wrap_alg,
+			uk_wrap_meta = EXCLUDED.uk_wrap_meta,
+			key_version = EXCLUDED.key_version,
+			created_at = NOW()
+	`, envelope.CNSUserID, envelope.DeviceID, envelope.WrappedUserKey, envelope.UKWrapAlg, envelope.UKWrapMeta, envelope.KeyVersion); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (p *Postgres) GetActiveDevicesByUser(ctx context.Context, userID int64) ([]models.UserDevice, error) {
 	query := `
 		SELECT id, cns_user_id, device_label, public_key_jwk, key_algorithm, key_version, created_at, last_seen_at, revoked_at
