@@ -29,8 +29,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	state := generateRandomHex(16)
-	verifier := generateRandomHex(32)
+	state, stateErr := c.Cookie("pkce_state")
+	verifier, verifierErr := c.Cookie("pkce_verifier")
+	if stateErr != nil || verifierErr != nil || state == "" || verifier == "" {
+		state = generateRandomHex(16)
+		verifier = generateRandomHex(32)
+	}
 	challenge := generateChallenge(verifier)
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
@@ -57,28 +61,46 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Callback(c *gin.Context) {
 	code := c.Query("code")
 	state := c.Query("state")
+	authErr := c.Query("error")
+
+	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
+
+	if authErr != "" {
+		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.String(http.StatusBadRequest, "Authentication failed: %s", authErr)
+		return
+	}
+
+	if code == "" || state == "" {
+		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.String(http.StatusBadRequest, "Authentication callback missing required parameters")
+		return
+	}
 
 	savedState, err := c.Cookie("pkce_state")
 	if err != nil {
+		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 		c.String(http.StatusBadRequest, "Invalid state: missing pkce_state cookie. (Error: %v)", err)
 		return
 	}
 	if savedState != state {
 		fmt.Printf("State Mismatch: saved_cookie=%s, got_url=%s\n", savedState, state)
+		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 		c.String(http.StatusBadRequest, "Invalid state: mismatch. Cookie had '%s' but URL had '%s'.", savedState, state)
 		return
 	}
 
 	verifier, err := c.Cookie("pkce_verifier")
 	if err != nil {
+		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 		c.String(http.StatusBadRequest, "Missing verifier cookie. Your session may have expired.")
 		return
 	}
-
-	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
-
-	c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-	c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 
 	tokenURL := h.cfg.CNSAuthURL + "/v2/token"
 	redirectURI := h.cfg.BaseURL + "/auth/callback"
@@ -110,6 +132,9 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Failed to parse token response")
 		return
 	}
+
+	c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
+	c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("auth_token", result.AccessToken, 3600*24*7, "/", "", isSecure, true)
