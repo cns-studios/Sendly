@@ -30,8 +30,9 @@ func DesktopAuthMiddleware(cfg *config.Config, db *storage.Postgres) gin.Handler
 				return
 			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, models.ErrorResponse{
-				Error: "Invalid bearer token",
-				Code:  "INVALID_BEARER_TOKEN",
+				Error:   "Invalid bearer token",
+				Code:    "INVALID_BEARER_TOKEN",
+				Details: err.Error(),
 			})
 			return
 		}
