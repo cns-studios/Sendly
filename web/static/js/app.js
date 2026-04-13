@@ -110,6 +110,7 @@
     let pendingEnrollmentSocket = null;
     let pendingEnrollmentSocketRetryTimer = null;
     let pendingEnrollmentRefreshTimer = null;
+    let pendingEnrollmentSocketEverOpened = false;
     let isDeviceUntrusted = false;
     const recentFileStates = new Map();
     const LOCKED_FILE_INFO = 'This file was encrypted on a different trusted device. Because recovery happened after this files was uploaded, this client cannot unlock that older file key. Please re-upload this file again. To avoid this in the future, approve new devices from already trusted devices (this is a trusted device) so you can keep access to all your files across devices.';
@@ -722,8 +723,19 @@
             return;
         }
 
+        pendingEnrollmentSocket.onopen = () => {
+            pendingEnrollmentSocketEverOpened = true;
+        };
         pendingEnrollmentSocket.onmessage = handlePendingEnrollmentSocketMessage;
-        pendingEnrollmentSocket.onclose = schedulePendingEnrollmentSocketReconnect;
+        pendingEnrollmentSocket.onclose = () => {
+            pendingEnrollmentSocket = null;
+            // If the handshake never succeeds (for example 401 before upgrade),
+            // rely on polling instead of hammering reconnect attempts.
+            if (!pendingEnrollmentSocketEverOpened) {
+                return;
+            }
+            schedulePendingEnrollmentSocketReconnect();
+        };
         pendingEnrollmentSocket.onerror = () => {
             try {
                 pendingEnrollmentSocket?.close();
@@ -783,10 +795,8 @@
         }
 
         pendingEnrollmentRefreshTimer = setInterval(() => {
-            if (pendingEnrollmentMode === 'idle') {
-                return;
-            }
-
+            // Poll regardless of modal state so new enrollment requests are discovered
+            // even when websocket auth is unavailable.
             loadPendingEnrollments().catch(() => {});
         }, 6000);
     }
