@@ -266,9 +266,13 @@
         let ukWrapAlg = '';
         let ukWrapMeta = {};
 
-        if (!authUserKeyRaw && allowEnrollmentRequest) {
-            bootstrapUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(bootstrapUserKeyRaw, authDeviceIdentity.publicKeyJWK);
+        if (allowEnrollmentRequest) {
+            if (!authUserKeyRaw) {
+                bootstrapUserKeyRaw = SecureCrypto.generateUserKeyRaw();
+                authUserKeyRaw = bootstrapUserKeyRaw;
+            }
+
+            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, authDeviceIdentity.publicKeyJWK);
             wrappedUserKeyB64 = SecureCrypto.toBase64(wrappedUserKey);
             ukWrapAlg = 'RSA-OAEP-2048-v1';
             ukWrapMeta = { type: 'self-wrap', device_id: authDeviceIdentity.deviceId };
