@@ -278,26 +278,33 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 			OwnerCNSUserName: &uname,
 		}
 
-		if req.WrappedDEKB64 == "" {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "WRAPPED_DEK_REQUIRED"})
+		if req.DeviceID == "" {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "device_id is required for authenticated desktop uploads", Code: "DEVICE_ID_REQUIRED"})
 			return
 		}
 
-		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
-		if decodeErr != nil {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
+		if _, trustedErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); trustedErr != nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "DEVICE_NOT_TRUSTED"})
 			return
 		}
-		opts.WrappedDEK = wrappedDEK
-		opts.DEKWrapAlg = req.DEKWrapAlg
-		opts.DEKWrapVersion = req.DEKWrapVersion
-		if req.DEKWrapNonceB64 != "" {
-			nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
-			if nonceErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
+
+		if req.WrappedDEKB64 != "" {
+			wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
+			if decodeErr != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
 				return
 			}
-			opts.DEKWrapNonce = nonce
+			opts.WrappedDEK = wrappedDEK
+			opts.DEKWrapAlg = req.DEKWrapAlg
+			opts.DEKWrapVersion = req.DEKWrapVersion
+			if req.DEKWrapNonceB64 != "" {
+				nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
+				if nonceErr != nil {
+					c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
+					return
+				}
+				opts.DEKWrapNonce = nonce
+			}
 		}
 	}
 

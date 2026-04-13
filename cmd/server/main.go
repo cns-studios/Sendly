@@ -135,7 +135,7 @@ func main() {
 			upload.POST("/chunk", uploadHandler.Chunk)
 			upload.POST("/complete", uploadHandler.Complete)
 			upload.GET("/status/:session_id", uploadHandler.AssemblyStatus)
-			upload.POST("/finalize", uploadHandler.Finalize)
+			upload.POST("/finalize", rateLimiter.Handler(), uploadHandler.Finalize)
 			upload.DELETE("/cancel", uploadHandler.Cancel)
 		}
 
@@ -155,12 +155,12 @@ func main() {
 			devices := me.Group("/devices")
 			{
 				devices.POST("/register", recentUploadsHandler.RegisterDevice)
-				devices.POST("/recover", rateLimiter.Handler(), recentUploadsHandler.RecoverDevice)
+				devices.POST("/recover", recentUploadsHandler.RecoverDevice)
 				devices.GET("/ws", recentUploadsHandler.DeviceEvents)
-				devices.POST("/enrollments", rateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
+				devices.POST("/enrollments", recentUploadsHandler.CreateEnrollment)
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
-				devices.POST("/enrollments/:id/approve", rateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
-				devices.POST("/enrollments/:id/reject", rateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+				devices.POST("/enrollments/:id/approve", recentUploadsHandler.ApproveEnrollment)
+				devices.POST("/enrollments/:id/reject", recentUploadsHandler.RejectEnrollment)
 			}
 		}
 	}
@@ -217,7 +217,7 @@ func main() {
 				upload.POST("/init", desktopHandler.UploadInit)
 				upload.POST("/chunk", desktopHandler.UploadChunk)
 				upload.POST("/complete", desktopHandler.UploadComplete)
-				upload.POST("/finalize", desktopHandler.UploadFinalize)
+				upload.POST("/finalize", rateLimiter.Handler(), desktopHandler.UploadFinalize)
 				upload.GET("/status/:session_id", desktopHandler.UploadStatus)
 				upload.DELETE("/cancel", uploadHandler.Cancel)
 			}
@@ -243,12 +243,12 @@ func main() {
 				devices := me.Group("/devices")
 				{
 					devices.POST("/register", recentUploadsHandler.RegisterDevice)
-					devices.POST("/recover", rateLimiter.Handler(), recentUploadsHandler.RecoverDevice)
+					devices.POST("/recover", recentUploadsHandler.RecoverDevice)
 					devices.GET("/ws", recentUploadsHandler.DeviceEvents)
-					devices.POST("/enrollments", rateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
+					devices.POST("/enrollments", recentUploadsHandler.CreateEnrollment)
 					devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
-					devices.POST("/enrollments/:id/approve", rateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
-					devices.POST("/enrollments/:id/reject", rateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+					devices.POST("/enrollments/:id/approve", recentUploadsHandler.ApproveEnrollment)
+					devices.POST("/enrollments/:id/reject", recentUploadsHandler.RejectEnrollment)
 				}
 			}
 		}
