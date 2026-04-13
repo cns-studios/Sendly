@@ -284,6 +284,11 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 			return
 		}
 
+		if req.WrappedDEKB64 == "" {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "WRAPPED_DEK_REQUIRED"})
+			return
+		}
+
 		if _, trustedErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); trustedErr != nil {
 			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "DEVICE_NOT_TRUSTED"})
 			return

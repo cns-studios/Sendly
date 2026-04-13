@@ -433,6 +433,10 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 		FROM files
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
+		  AND EXISTS (
+			  SELECT 1 FROM file_key_envelopes fke
+			  WHERE fke.file_id = files.id
+		  )
 		  AND ($2 = '%' OR original_name ILIKE $2)
 	`
 
@@ -451,6 +455,10 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 		FROM files
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
+		  AND EXISTS (
+			  SELECT 1 FROM file_key_envelopes fke
+			  WHERE fke.file_id = files.id
+		  )
 		  AND ($2 = '%' OR original_name ILIKE $2)
 		ORDER BY created_at DESC
 		LIMIT $3 OFFSET $4
