@@ -31,31 +31,48 @@ func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token strin
 	requestCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, cfg.CNSAuthURL+"/api/account/me", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	validateAtPath := func(path string, serviceKey string) (*CNSUser, error) {
+		req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, cfg.CNSAuthURL+path, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		if serviceKey != "" {
+			req.Header.Set("x-service-key", serviceKey)
+		}
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token validation failed with status %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("token validation failed with status %d", resp.StatusCode)
+		}
+
+		var user CNSUser
+		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+			return nil, err
+		}
+		if user.ID == 0 {
+			return nil, fmt.Errorf("token resolved to empty user")
+		}
+
+		return &user, nil
 	}
 
-	var user CNSUser
-	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-		return nil, err
-	}
-	if user.ID == 0 {
-		return nil, fmt.Errorf("token resolved to empty user")
+	if cfg.CNSAuthServiceKey != "" {
+		if user, err := validateAtPath("/api/me", cfg.CNSAuthServiceKey); err == nil {
+			return user, nil
+		}
 	}
 
-	return &user, nil
+	if user, err := validateAtPath("/api/account/me", ""); err == nil {
+		return user, nil
+	}
+
+	return nil, fmt.Errorf("token validation failed")
 }
 
 func clearAuthTokenCookie(c *gin.Context, cfg *config.Config) {

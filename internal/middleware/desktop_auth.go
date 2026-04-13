@@ -29,6 +29,11 @@ func DesktopAuthMiddleware(cfg *config.Config, db *storage.Postgres) gin.Handler
 				c.Next()
 				return
 			}
+			c.AbortWithStatusJSON(http.StatusUnauthorized, models.ErrorResponse{
+				Error: "Invalid bearer token",
+				Code:  "INVALID_BEARER_TOKEN",
+			})
+			return
 		}
 
 		keyValue := c.GetHeader("X-API-KEY")
