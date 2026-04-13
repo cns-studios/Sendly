@@ -187,9 +187,11 @@
         }
 
         if (AUTHENTICATED) {
-            await ensureDeviceReady();
-            await loadRecentUploads();
-            await loadPendingEnrollments();
+            const deviceReady = await ensureDeviceReady();
+            if (deviceReady) {
+                await loadRecentUploads();
+                await loadPendingEnrollments();
+            }
         }
     }
 
@@ -726,7 +728,7 @@
             try {
                 pendingEnrollmentSocket?.close();
             } catch (_) {
-                // ignore
+                
             }
         };
     }
@@ -976,7 +978,7 @@
 
     async function downloadOwnedFile(fileId, fileName) {
         const passphrase = await getOwnedFilePassphrase(fileId);
-        showDownloadActivityOverlay(true);
+        showDownloadActivityOverlay('loading');
         try {
             const response = await fetch(`/api/file/${fileId}/download`);
             if (!response.ok) {
@@ -1000,6 +1002,8 @@
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
+            showDownloadActivityOverlay('complete');
+            await new Promise((resolve) => setTimeout(resolve, 1100));
         } finally {
             showDownloadActivityOverlay(false);
         }
@@ -2020,8 +2024,31 @@
 
     function showDownloadActivityOverlay(show) {
         if (!downloadActivityOverlay) return;
-        downloadActivityOverlay.classList.toggle('hidden', !show);
-        downloadActivityOverlay.setAttribute('aria-hidden', show ? 'false' : 'true');
+        const panel = downloadActivityOverlay.querySelector('.download-activity-panel');
+        const label = downloadActivityOverlay.querySelector('.download-activity-label');
+        const text = downloadActivityOverlay.querySelector('.download-activity-text');
+
+        if (!show) {
+            downloadActivityOverlay.classList.add('hidden');
+            downloadActivityOverlay.classList.remove('is-complete');
+            downloadActivityOverlay.setAttribute('aria-hidden', 'true');
+            return;
+        }
+
+        const isComplete = show === 'complete';
+        downloadActivityOverlay.classList.toggle('is-complete', isComplete);
+        downloadActivityOverlay.classList.remove('hidden');
+        downloadActivityOverlay.setAttribute('aria-hidden', 'false');
+
+        if (panel) {
+            panel.classList.toggle('is-complete', isComplete);
+        }
+        if (label) {
+            label.textContent = isComplete ? 'Download complete' : 'Downloading and decrypting your file...';
+        }
+        if (text) {
+            text.textContent = isComplete ? 'Done' : 'Working';
+        }
     }
 
     function openActionModal(options) {

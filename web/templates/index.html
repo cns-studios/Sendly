@@ -332,8 +332,16 @@
 
     <div id="download-activity-overlay" class="download-activity-overlay hidden" aria-hidden="true">
         <div class="download-activity-panel" role="status" aria-live="polite">
-            <div class="spinner"></div>
-            <p>Downloading and decrypting your file...</p>
+            <div class="download-activity-progress">
+                <div class="download-activity-bar">
+                    <span class="download-activity-bar-fill"></span>
+                    <span class="download-activity-check"><i data-lucide="check" style="width: 1rem; height: 1rem;"></i></span>
+                </div>
+            </div>
+            <div class="download-activity-copy">
+                <p class="download-activity-label">Downloading and decrypting your file...</p>
+                <p class="download-activity-text">Working</p>
+            </div>
         </div>
     </div>
 

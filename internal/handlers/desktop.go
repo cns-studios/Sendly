@@ -38,14 +38,15 @@ func (h *desktopHub) add(apiKeyID string, conn *websocket.Conn) {
 	h.conns[apiKeyID] = append(h.conns[apiKeyID], conn)
 }
 
-func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileMetadata) {
+func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileMetadata, sourceDeviceID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	conns := h.conns[apiKeyID]
 	msg := map[string]interface{}{
-		"type": "new_file",
-		"file": meta,
+		"type":              "new_file",
+		"file":              meta,
+		"source_device_id": sourceDeviceID,
 	}
 
 	alive := conns[:0]
@@ -360,7 +361,7 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 
 	if meta != nil {
 		if channelID != "" {
-			h.hub.notify(channelID, meta.FileName, meta)
+				h.hub.notify(channelID, meta.FileName, meta, req.DeviceID)
 		}
 		c.JSON(http.StatusOK, models.DesktopFinalizeResponse{
 			FileID:      baseResp.FileID,
