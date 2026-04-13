@@ -393,6 +393,19 @@
             const payload = await response.json();
             pendingEnrollmentItems = Array.isArray(payload.items) ? payload.items : [];
 
+            const currentDeviceId = authDeviceIdentity?.deviceId || '';
+            const currentDeviceEnrollment = currentDeviceId
+                ? pendingEnrollmentItems.find((item) => {
+                    const requestDeviceId = item?.request_device?.id || item?.enrollment?.request_device_id || '';
+                    return requestDeviceId === currentDeviceId;
+                })
+                : null;
+
+            if ((pendingEnrollmentMode === 'waiting' || isDeviceUntrusted) && currentDeviceEnrollment?.enrollment?.id) {
+                showWaitingEnrollment(currentDeviceEnrollment, pendingEnrollmentItems.length);
+                return;
+            }
+
             if (pendingEnrollmentMode === 'waiting' && activePendingEnrollment?.enrollment?.id) {
                 const stillPending = pendingEnrollmentItems.some((item) => item?.enrollment?.id === activePendingEnrollment.enrollment.id);
                 if (stillPending) {
@@ -401,6 +414,11 @@
                 }
 
                 await finalizeWaitingEnrollment();
+                return;
+            }
+
+            if (isDeviceUntrusted) {
+                hidePendingEnrollmentModal();
                 return;
             }
 
