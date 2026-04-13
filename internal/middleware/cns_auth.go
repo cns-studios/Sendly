@@ -21,7 +21,7 @@ type CNSUser struct {
 }
 
 func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token string) (*CNSUser, error) {
-	if cfg.CNSAuthURL == "" || cfg.CNSAuthServiceKey == "" {
+	if cfg.CNSAuthURL == "" {
 		return nil, fmt.Errorf("cns auth is not configured")
 	}
 	if token == "" {
@@ -31,13 +31,11 @@ func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token strin
 	requestCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, cfg.CNSAuthURL+"/api/me", nil)
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, cfg.CNSAuthURL+"/api/account/me", nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("x-service-key", cfg.CNSAuthServiceKey)
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Cookie", "auth_token="+token)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
