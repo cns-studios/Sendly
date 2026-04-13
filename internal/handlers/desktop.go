@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -109,6 +110,43 @@ func (h *DesktopHandler) VerifyKey(c *gin.Context) {
 	})
 }
 
+func (h *DesktopHandler) OAuthConfig(c *gin.Context) {
+	if h.cfg.CNSAuthURL == "" || h.cfg.CNSAuthClientID == "" {
+		c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
+			Error: "OAuth is not configured",
+			Code:  "OAUTH_NOT_CONFIGURED",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"auth_url":  h.cfg.CNSAuthURL,
+		"client_id": h.cfg.CNSAuthClientID,
+	})
+}
+
+func (h *DesktopHandler) OAuthVerify(c *gin.Context) {
+	authHeader := c.GetHeader("Authorization")
+	const bearerPrefix = "Bearer "
+	if len(authHeader) <= len(bearerPrefix) || authHeader[:len(bearerPrefix)] != bearerPrefix {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Missing bearer token", Code: "MISSING_BEARER_TOKEN"})
+		return
+	}
+
+	token := authHeader[len(bearerPrefix):]
+	user, err := middleware.ValidateCNSAccessToken(c.Request.Context(), h.cfg, token)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Invalid bearer token", Code: "INVALID_BEARER_TOKEN"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "valid",
+		"owner":    user.Username,
+		"cns_user": user,
+	})
+}
+
 
 func (h *DesktopHandler) UploadInit(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
@@ -140,13 +178,17 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 	}
 
 	
-	c.JSON(http.StatusOK, gin.H{
+	respBody := gin.H{
 		"session_id":   resp.SessionID,
 		"file_id":      resp.FileID,
 		"chunk_size":   resp.ChunkSize,
 		"total_chunks": resp.TotalChunks,
-		"api_key_id":   key.ID,
-	})
+	}
+	if key != nil {
+		respBody["api_key_id"] = key.ID
+	}
+
+	c.JSON(http.StatusOK, respBody)
 }
 
 
@@ -212,6 +254,7 @@ func (h *DesktopHandler) UploadComplete(c *gin.Context) {
 
 func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
+	user := middleware.GetCNSUser(c)
 
 	var req models.DesktopFinalizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -219,7 +262,45 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 		return
 	}
 
-	baseResp, err := h.uploadService.FinalizeUpload(c.Request.Context(), req.SessionID, req.Duration)
+	tier := middleware.GetTier(h.cfg, user)
+	if !tier.IsDurationAllowed(req.Duration) {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration not available for your account tier", Code: "DURATION_NOT_ALLOWED"})
+		return
+	}
+
+	var opts *services.FinalizeUploadOptions
+	if user != nil {
+		uid := int64(user.ID)
+		uname := user.Username
+		opts = &services.FinalizeUploadOptions{
+			OwnerCNSUserID:   &uid,
+			OwnerCNSUserName: &uname,
+		}
+
+		if req.WrappedDEKB64 == "" {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "WRAPPED_DEK_REQUIRED"})
+			return
+		}
+
+		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
+		if decodeErr != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
+			return
+		}
+		opts.WrappedDEK = wrappedDEK
+		opts.DEKWrapAlg = req.DEKWrapAlg
+		opts.DEKWrapVersion = req.DEKWrapVersion
+		if req.DEKWrapNonceB64 != "" {
+			nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
+			if nonceErr != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
+				return
+			}
+			opts.DEKWrapNonce = nonce
+		}
+	}
+
+	baseResp, err := h.uploadService.FinalizeUploadWithOptions(c.Request.Context(), req.SessionID, req.Duration, opts)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
@@ -230,13 +311,37 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	}
 
 	
-	if err := h.db.AssociateFileWithKey(c.Request.Context(), baseResp.FileID, key.ID); err != nil {
+	if key != nil {
+		if err := h.db.AssociateFileWithKey(c.Request.Context(), baseResp.FileID, key.ID); err != nil {
 		
-		fmt.Printf("Warning: failed to associate file %s with key %s: %v\n", baseResp.FileID, key.ID, err)
+			fmt.Printf("Warning: failed to associate file %s with key %s: %v\n", baseResp.FileID, key.ID, err)
+		}
 	}
 
-	
-	files, _ := h.db.ListFilesByAPIKey(context.Background(), key.ID, 50, 0)
+	channelID := ""
+	if key != nil {
+		channelID = "key:" + key.ID
+	} else if user != nil {
+		channelID = fmt.Sprintf("user:%d", user.ID)
+	}
+
+	var files []models.DesktopFileMetadata
+	if key != nil {
+		files, _ = h.db.ListFilesByAPIKey(context.Background(), key.ID, 50, 0)
+	} else if user != nil {
+		items, _, _ := h.db.GetOwnedRecentFiles(context.Background(), int64(user.ID), "", 1, 50)
+		files = make([]models.DesktopFileMetadata, 0, len(items))
+		for _, item := range items {
+			files = append(files, models.DesktopFileMetadata{
+				ID:         item.FileID,
+				FileName:   item.Filename,
+				FileSize:   item.SizeBytes,
+				ExpiresAt:  item.ExpiresAt,
+				UploadedAt: item.CreatedAt,
+			})
+		}
+	}
+
 	var meta *models.DesktopFileMetadata
 	for i := range files {
 		if files[i].ID == baseResp.FileID {
@@ -246,7 +351,9 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	}
 
 	if meta != nil {
-		h.hub.notify(key.ID, meta.FileName, meta)
+		if channelID != "" {
+			h.hub.notify(channelID, meta.FileName, meta)
+		}
 		c.JSON(http.StatusOK, models.DesktopFinalizeResponse{
 			FileID:      baseResp.FileID,
 			NumericCode: baseResp.NumericCode,
@@ -279,6 +386,31 @@ func (h *DesktopHandler) UploadStatus(c *gin.Context) {
 
 func (h *DesktopHandler) ListFiles(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
+	user := middleware.GetCNSUser(c)
+
+	if key == nil && user != nil {
+		items, _, err := h.db.GetOwnedRecentFiles(c.Request.Context(), int64(user.ID), "", 1, 50)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to list files", Code: "LIST_FAILED"})
+			return
+		}
+		files := make([]models.DesktopFileMetadata, 0, len(items))
+		for _, item := range items {
+			files = append(files, models.DesktopFileMetadata{
+				ID:         item.FileID,
+				FileName:   item.Filename,
+				FileSize:   item.SizeBytes,
+				ExpiresAt:  item.ExpiresAt,
+				UploadedAt: item.CreatedAt,
+			})
+		}
+		c.JSON(http.StatusOK, files)
+		return
+	}
+	if key == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
 
 	files, err := h.db.ListFilesByAPIKey(c.Request.Context(), key.ID, 50, 0)
 	if err != nil {
@@ -294,7 +426,22 @@ func (h *DesktopHandler) ListFiles(c *gin.Context) {
 
 func (h *DesktopHandler) GetFile(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
+	user := middleware.GetCNSUser(c)
 	fileID := c.Param("id")
+
+	if key == nil && user != nil {
+		file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
+			return
+		}
+		c.JSON(http.StatusOK, file.ToMetadata())
+		return
+	}
+	if key == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
 
 	owned, err := h.db.FileOwnedByKey(c.Request.Context(), fileID, key.ID)
 	if err != nil || !owned {
@@ -317,7 +464,40 @@ func (h *DesktopHandler) GetFile(c *gin.Context) {
 
 func (h *DesktopHandler) DownloadFile(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
+	user := middleware.GetCNSUser(c)
 	fileID := c.Param("id")
+
+	if key == nil && user != nil {
+		file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
+			return
+		}
+
+		reader, err := h.fs.GetFileReader(fileID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "File not on storage", Code: "FILE_NOT_ON_DISK"})
+			return
+		}
+		defer reader.Close()
+
+		fileSize, _ := h.fs.GetFileSize(fileID)
+
+		c.Header("Content-Description", "File Transfer")
+		c.Header("Content-Type", "application/octet-stream")
+		c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.enc\"", fileID))
+		c.Header("Content-Transfer-Encoding", "binary")
+		c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
+		c.Header("X-Original-Filename", file.OriginalName)
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Status(http.StatusOK)
+		io.Copy(c.Writer, reader)
+		return
+	}
+	if key == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
 
 	owned, err := h.db.FileOwnedByKey(c.Request.Context(), fileID, key.ID)
 	if err != nil || !owned {
@@ -358,6 +538,54 @@ func (h *DesktopHandler) DownloadFile(c *gin.Context) {
 
 
 func (h *DesktopHandler) WebSocket(c *gin.Context) {
+	tokenQuery := c.Query("token")
+	if tokenQuery != "" {
+		user, err := middleware.ValidateCNSAccessToken(c.Request.Context(), h.cfg, tokenQuery)
+		if err == nil {
+			conn, upgradeErr := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+			if upgradeErr != nil {
+				return
+			}
+
+			h.hub.add(fmt.Sprintf("user:%d", user.ID), conn)
+			go func() {
+				defer conn.Close()
+				for {
+					if _, _, readErr := conn.ReadMessage(); readErr != nil {
+						break
+					}
+				}
+			}()
+			return
+		}
+	}
+
+	authHeader := c.GetHeader("Authorization")
+	if authHeader != "" {
+		const bearerPrefix = "Bearer "
+		if len(authHeader) > len(bearerPrefix) && authHeader[:len(bearerPrefix)] == bearerPrefix {
+			token := authHeader[len(bearerPrefix):]
+			user, err := middleware.ValidateCNSAccessToken(c.Request.Context(), h.cfg, token)
+			if err == nil {
+				conn, upgradeErr := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+				if upgradeErr != nil {
+					return
+				}
+
+				h.hub.add(fmt.Sprintf("user:%d", user.ID), conn)
+				go func() {
+					defer conn.Close()
+					for {
+						if _, _, readErr := conn.ReadMessage(); readErr != nil {
+							break
+						}
+					}
+				}()
+				return
+			}
+		}
+	}
+
 	keyValue := c.Query("key")
 	key, err := h.db.GetDesktopAPIKey(c.Request.Context(), keyValue)
 	if err != nil {
@@ -370,7 +598,7 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 		return
 	}
 
-	h.hub.add(key.ID, conn)
+	h.hub.add("key:"+key.ID, conn)
 
 	
 	go func() {

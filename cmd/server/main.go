@@ -168,7 +168,7 @@ func main() {
 	desktopCORS := func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -177,23 +177,40 @@ func main() {
 	}
 
 	router.OPTIONS("/desktop/auth/verify", desktopCORS)
+	router.OPTIONS("/desktop/auth/oauth/config", desktopCORS)
+	router.OPTIONS("/desktop/auth/oauth/verify", desktopCORS)
 	router.OPTIONS("/desktop/upload/init", desktopCORS)
 	router.OPTIONS("/desktop/upload/chunk", desktopCORS)
 	router.OPTIONS("/desktop/upload/complete", desktopCORS)
 	router.OPTIONS("/desktop/upload/finalize", desktopCORS)
+	router.OPTIONS("/desktop/upload/cancel", desktopCORS)
 	router.OPTIONS("/desktop/upload/status/:session_id", desktopCORS)
 	router.OPTIONS("/desktop/files", desktopCORS)
 	router.OPTIONS("/desktop/files/:id", desktopCORS)
 	router.OPTIONS("/desktop/files/:id/download", desktopCORS)
+	router.OPTIONS("/desktop/file/code/:code", desktopCORS)
+	router.OPTIONS("/desktop/file/:id/report", desktopCORS)
+	router.OPTIONS("/desktop/me/recent-uploads", desktopCORS)
+	router.OPTIONS("/desktop/me/files/:id/access", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/register", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/recover", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/ws", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/enrollments", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/enrollments/pending", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/enrollments/:id/approve", desktopCORS)
+	router.OPTIONS("/desktop/me/devices/enrollments/:id/reject", desktopCORS)
 
 	desktop := router.Group("/desktop")
 	desktop.Use(desktopCORS)
 	{
 		desktop.GET("/auth/verify", desktopHandler.VerifyKey)
+		desktop.GET("/auth/oauth/config", desktopHandler.OAuthConfig)
+		desktop.GET("/auth/oauth/verify", desktopHandler.OAuthVerify)
 		desktop.GET("/ws", desktopHandler.WebSocket)
+		desktop.GET("/limits", pageHandler.Limits)
 
 		desktopAuth := desktop.Group("")
-		desktopAuth.Use(middleware.DesktopAuthMiddleware(db))
+		desktopAuth.Use(middleware.DesktopAuthMiddleware(cfg, db))
 		{
 			upload := desktopAuth.Group("/upload")
 			{
@@ -202,6 +219,7 @@ func main() {
 				upload.POST("/complete", desktopHandler.UploadComplete)
 				upload.POST("/finalize", desktopHandler.UploadFinalize)
 				upload.GET("/status/:session_id", desktopHandler.UploadStatus)
+				upload.DELETE("/cancel", uploadHandler.Cancel)
 			}
 
 			files := desktopAuth.Group("/files")
@@ -209,6 +227,29 @@ func main() {
 				files.GET("", desktopHandler.ListFiles)
 				files.GET("/:id", desktopHandler.GetFile)
 				files.GET("/:id/download", desktopHandler.DownloadFile)
+			}
+
+			file := desktopAuth.Group("/file")
+			{
+				file.GET("/code/:code", downloadHandler.GetByCode)
+				file.POST("/:id/report", reportHandler.Report)
+			}
+
+			me := desktopAuth.Group("/me")
+			{
+				me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
+				me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
+
+				devices := me.Group("/devices")
+				{
+					devices.POST("/register", recentUploadsHandler.RegisterDevice)
+					devices.POST("/recover", rateLimiter.Handler(), recentUploadsHandler.RecoverDevice)
+					devices.GET("/ws", recentUploadsHandler.DeviceEvents)
+					devices.POST("/enrollments", rateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
+					devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
+					devices.POST("/enrollments/:id/approve", rateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
+					devices.POST("/enrollments/:id/reject", rateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+				}
 			}
 		}
 	}
