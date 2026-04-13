@@ -36,6 +36,7 @@ type Config struct {
 
 	CNSAuthURL        string
 	CNSAuthClientID   string
+	CNSAuthDesktopClientID string
 	CNSAuthServiceKey string
 	AuthMaxFileSize   int64
 	MigrationsDir     string
@@ -64,6 +65,7 @@ func Load() (*Config, error) {
 		DiscordWebhookURL:     getEnv("DISCORD_WEBHOOK_URL", ""),
 		CNSAuthURL:            getEnv("CNS_AUTH_URL", ""),
 		CNSAuthClientID:       getEnv("CNS_AUTH_CLIENT_ID", ""),
+		CNSAuthDesktopClientID: getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),
 		CNSAuthServiceKey:     getEnv("CNS_AUTH_SERVICE_KEY", ""),
 		AuthMaxFileSize:       getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
 		MigrationsDir:         getEnv("MIGRATIONS_DIR", "db/migrations"),
@@ -118,6 +120,13 @@ func (c *Config) Hostname() string {
 func (c *Config) IsProd() bool {
 	env := strings.ToLower(getEnv("GIN_MODE", "debug"))
 	return env == "release"
+}
+
+func (c *Config) DesktopOAuthClientID() string {
+	if c.CNSAuthDesktopClientID != "" {
+		return c.CNSAuthDesktopClientID
+	}
+	return c.CNSAuthClientID
 }
 
 func getEnv(key, defaultValue string) string {

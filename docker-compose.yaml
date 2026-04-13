@@ -24,6 +24,7 @@ services:
       - GIN_MODE=${GIN_MODE:-release}
       - CNS_AUTH_URL=${CNS_AUTH_URL:-https://auth.cns-studios.com}
       - CNS_AUTH_CLIENT_ID=${CNS_AUTH_CLIENT_ID:-}
+      - CNS_AUTH_DESKTOP_CLIENT_ID=${CNS_AUTH_DESKTOP_CLIENT_ID:-dropzone}
       - CNS_AUTH_SERVICE_KEY=${CNS_AUTH_SERVICE_KEY:-}
     volumes:
       - chunk_data:/chunks

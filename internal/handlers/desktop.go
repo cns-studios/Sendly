@@ -111,7 +111,8 @@ func (h *DesktopHandler) VerifyKey(c *gin.Context) {
 }
 
 func (h *DesktopHandler) OAuthConfig(c *gin.Context) {
-	if h.cfg.CNSAuthURL == "" || h.cfg.CNSAuthClientID == "" {
+	clientID := h.cfg.DesktopOAuthClientID()
+	if h.cfg.CNSAuthURL == "" || clientID == "" {
 		c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
 			Error: "OAuth is not configured",
 			Code:  "OAUTH_NOT_CONFIGURED",
@@ -121,7 +122,7 @@ func (h *DesktopHandler) OAuthConfig(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"auth_url":  h.cfg.CNSAuthURL,
-		"client_id": h.cfg.CNSAuthClientID,
+		"client_id": clientID,
 	})
 }
 
