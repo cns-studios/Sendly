@@ -245,18 +245,20 @@
                             key_version: authDeviceIdentity.keyVersion
                         }
                     }, 1);
-                    return;
+                    return false;
                 }
 
                 showRecoveryBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
-                return;
+                return false;
             }
 
             isDeviceUntrusted = false;
             setRecoveryActionVisible(false);
+            return true;
         } catch (error) {
             console.error('Failed to initialize authenticated device state:', error);
             showErrorBanner('Authenticated key setup failed. Recent uploads may be unavailable on this device.');
+            return false;
         }
     }
 
