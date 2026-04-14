@@ -782,6 +782,11 @@
             return;
         }
 
+        if (eventType === 'device_enrollment_approved' && !isCurrentDevice) {
+            const approvedName = payload?.request_device?.device_label || payload?.enrollment?.request_device_id || 'requested device';
+            showInfoBanner(`Another trusted device approved ${approvedName}.`);
+        }
+
         if (eventType === 'device_enrollment_rejected' && isCurrentDevice) {
             hidePendingEnrollmentModal();
             showErrorBanner('This device approval request was declined. Request approval again from another trusted device.');
@@ -2039,6 +2044,7 @@
         const panel = downloadActivityOverlay.querySelector('.download-activity-panel');
         const label = downloadActivityOverlay.querySelector('.download-activity-label');
         const text = downloadActivityOverlay.querySelector('.download-activity-text');
+        const icon = downloadActivityOverlay.querySelector('.download-activity-icon i[data-lucide]');
 
         if (!show) {
             downloadActivityOverlay.classList.add('hidden');
@@ -2059,7 +2065,13 @@
             label.textContent = isComplete ? 'Download complete' : 'Downloading and decrypting your file...';
         }
         if (text) {
-            text.textContent = isComplete ? 'Done' : 'Working';
+            text.textContent = isComplete ? 'Saved to your device' : 'Preparing secure transfer';
+        }
+        if (icon) {
+            icon.setAttribute('data-lucide', isComplete ? 'check' : 'download');
+        }
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
         }
     }
 

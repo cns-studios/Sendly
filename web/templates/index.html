@@ -332,15 +332,23 @@
 
     <div id="download-activity-overlay" class="download-activity-overlay hidden" aria-hidden="true">
         <div class="download-activity-panel" role="status" aria-live="polite">
-            <div class="download-activity-progress">
-                <div class="download-activity-bar">
-                    <span class="download-activity-bar-fill"></span>
-                    <span class="download-activity-check"><i data-lucide="check" style="width: 1rem; height: 1rem;"></i></span>
+            <div class="download-activity-head">
+                <div class="download-activity-icon" aria-hidden="true">
+                    <i data-lucide="download" style="width: 1rem; height: 1rem;"></i>
+                </div>
+                <div class="download-activity-copy">
+                    <p class="download-activity-label">Downloading and decrypting your file...</p>
+                    <p class="download-activity-text">Preparing secure transfer</p>
+                </div>
+                <div class="download-activity-state" aria-hidden="true">
+                    <i class="download-activity-state-check" data-lucide="check" style="width: 0.9rem; height: 0.9rem;"></i>
                 </div>
             </div>
-            <div class="download-activity-copy">
-                <p class="download-activity-label">Downloading and decrypting your file...</p>
-                <p class="download-activity-text">Working</p>
+
+            <div class="download-activity-progress">
+                <div class="download-activity-bar" aria-hidden="true">
+                    <span class="download-activity-bar-fill"></span>
+                </div>
             </div>
         </div>
     </div>

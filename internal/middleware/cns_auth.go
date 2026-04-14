@@ -37,6 +37,7 @@ func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token strin
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("User-Agent", "ShareIt-Auth-Bridge/1.0")
 		if serviceKey != "" {
 			req.Header.Set("x-service-key", serviceKey)
 		}
