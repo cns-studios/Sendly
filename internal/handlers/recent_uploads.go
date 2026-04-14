@@ -318,7 +318,7 @@ func (h *RecentUploadsHandler) CreateEnrollment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to create enrollment", Code: "ENROLLMENT_CREATE_FAILED"})
 		return
 	}
-	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", enrollment.ID)
+	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", enrollment.ID, "")
 
 	c.JSON(http.StatusOK, models.CreateEnrollmentResponse{
 		EnrollmentID:     enrollment.ID,
@@ -439,7 +439,7 @@ func (h *RecentUploadsHandler) ApproveEnrollment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to approve enrollment", Code: "ENROLLMENT_APPROVE_FAILED"})
 		return
 	}
-	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_approved", enrollmentID)
+	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_approved", enrollmentID, req.ApproverDeviceID)
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
@@ -486,7 +486,7 @@ func (h *RecentUploadsHandler) RejectEnrollment(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to reject enrollment", Code: "ENROLLMENT_REJECT_FAILED"})
 		return
 	}
-	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_rejected", enrollmentID)
+	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_rejected", enrollmentID, "")
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

@@ -774,15 +774,17 @@
         }
 
         const requestDeviceId = payload?.request_device?.id || payload?.enrollment?.request_device_id;
+        const approverDeviceId = payload?.approver_device_id || '';
         const currentDeviceId = authDeviceIdentity?.deviceId;
         const isCurrentDevice = currentDeviceId && requestDeviceId && requestDeviceId === currentDeviceId;
+        const isApproverDevice = currentDeviceId && approverDeviceId && currentDeviceId === approverDeviceId;
 
         if (eventType === 'device_enrollment_approved' && isCurrentDevice) {
             finalizeWaitingEnrollment();
             return;
         }
 
-        if (eventType === 'device_enrollment_approved' && !isCurrentDevice) {
+        if (eventType === 'device_enrollment_approved' && !isCurrentDevice && !isApproverDevice) {
             const approvedName = payload?.request_device?.device_label || payload?.enrollment?.request_device_id || 'requested device';
             showInfoBanner(`Another trusted device approved ${approvedName}.`);
         }

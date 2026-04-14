@@ -47,7 +47,7 @@ func (h *deviceEnrollmentHub) broadcast(userID int64, payload any) {
 	h.conns[userID] = alive
 }
 
-func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, userID int64, eventType, enrollmentID string) {
+func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, userID int64, eventType, enrollmentID, approverDeviceID string) {
 	enrollment, err := h.db.GetEnrollmentByID(ctx, userID, enrollmentID)
 	if err != nil {
 		return
@@ -74,6 +74,7 @@ func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, user
 		"type":           eventType,
 		"enrollment":     enrollment,
 		"request_device": requestDevice,
+		"approver_device_id": approverDeviceID,
 		"pending_count":  pendingCount,
 	})
 }
