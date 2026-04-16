@@ -338,7 +338,6 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 			return
 		}
 	}
-	}
 
 	if req.TunnelID == "" && req.Duration == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration is required for non-tunnel uploads", Code: "DURATION_REQUIRED"})

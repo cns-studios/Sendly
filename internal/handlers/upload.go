@@ -173,7 +173,6 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 				opts.DEKWrapNonce = nonce
 			}
 		}
-	}
 
 		tunnel, err := h.db.GetTunnelByID(c.Request.Context(), req.TunnelID)
 		if err != nil {

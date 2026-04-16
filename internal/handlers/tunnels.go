@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"shareit/internal/config"
@@ -53,7 +55,7 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 	tunnel := &models.Tunnel{
 		Code:               code,
 		InitiatorCNSUserID: int64(user.ID),
-		InitiatorDeviceID:   nullableString(req.DeviceID),
+		InitiatorDeviceID:  nullableDeviceID(req.DeviceID),
 		DurationMinutes:    int(dur.Minutes()),
 		ExpiresAt:          time.Now().Add(dur),
 	}
@@ -297,4 +299,12 @@ func (h *TunnelHandler) buildQRPayload(tunnel *models.Tunnel) string {
 		return ""
 	}
 	return string(payload)
+}
+
+func nullableDeviceID(value string) sql.NullString {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: trimmed, Valid: true}
 }
