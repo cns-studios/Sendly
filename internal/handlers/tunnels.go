@@ -288,12 +288,9 @@ func (h *TunnelHandler) generateUniqueTunnelCode(ctx context.Context) (string, e
 
 func (h *TunnelHandler) buildQRPayload(tunnel *models.Tunnel) string {
 	payload, err := json.Marshal(gin.H{
-		"protocol":       "shareit-tunnel-v1",
-		"server_url":     h.cfg.BaseURL,
-		"tunnel_id":      tunnel.ID,
-		"code":           tunnel.Code,
-		"expires_at":     tunnel.ExpiresAt,
-		"duration_minutes": tunnel.DurationMinutes,
+		"p": "shareit-tunnel-v1",
+		"s": h.cfg.BaseURL,
+		"c": tunnel.Code,
 	})
 	if err != nil {
 		return ""
