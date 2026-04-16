@@ -1794,6 +1794,38 @@ main:has(.legal-document) {
     color: #878787;
     font-family: 'JetBrains Mono', monospace;
     line-height: 1.5;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.tunnel-meta-label,
+.tunnel-meta-divider {
+    color: #a0a0a0;
+}
+
+.tunnel-code-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: rgba(209, 255, 82, 0.08);
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+}
+
+.tunnel-files-section .recent-actions {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.tunnel-files-section .recent-action {
+    width: 1.9rem;
+    height: 1.9rem;
 }
 
 .tunnel-qr-wrap {

@@ -946,7 +946,14 @@
         const expiresLabel = tunnel?.expires_at ? formatExpiryDate(tunnel.expires_at) : 'soon';
         if (tunnelActiveMeta) {
             tunnelActiveMeta.classList.remove('hidden');
-            tunnelActiveMeta.textContent = `Tunnel code ${tunnel.code} · Status ${tunnel.status} · Expires ${expiresLabel}`;
+            tunnelActiveMeta.innerHTML = `
+                <span class="tunnel-meta-label">Tunnel code</span>
+                <span class="tunnel-code-pill">${escapeHtml(tunnel.code)}</span>
+                <span class="tunnel-meta-divider">·</span>
+                <span>Status ${escapeHtml(tunnel.status)}</span>
+                <span class="tunnel-meta-divider">·</span>
+                <span>Expires ${escapeHtml(expiresLabel)}</span>
+            `;
         }
 
         const waitingConfirm = !!(tunnel && (!tunnel.initiator_confirmed || !tunnel.peer_confirmed));
@@ -980,10 +987,15 @@
         tunnelEmpty.classList.add('hidden');
         tunnelList.classList.remove('hidden');
         tunnelList.innerHTML = files.map((item) => `
-            <article class="recent-item">
+            <article class="recent-item" data-file-id="${escapeHtml(item.file_id || '')}" data-file-name="${escapeHtml(item.filename || '')}">
                 <div class="recent-main">
                     <div class="recent-name-wrap">
                         <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
+                    </div>
+                    <div class="recent-actions">
+                        <button class="recent-action" data-action="download" aria-label="Download tunnel file" title="Download tunnel file">
+                            <i data-lucide="download" style="width: 0.85rem; height: 0.85rem;"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="recent-meta">
@@ -992,6 +1004,33 @@
                 </div>
             </article>
         `).join('');
+
+        tunnelList.querySelectorAll('.recent-action').forEach((btn) => {
+            btn.addEventListener('click', handleTunnelFileAction);
+        });
+
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
+        }
+    }
+
+    async function handleTunnelFileAction(event) {
+        const button = event.currentTarget;
+        const item = button.closest('.recent-item');
+        if (!item) return;
+
+        const fileId = item.dataset.fileId;
+        const fileName = item.dataset.fileName;
+
+        try {
+            button.disabled = true;
+            await downloadOwnedFile(fileId, fileName);
+        } catch (error) {
+            console.error('Tunnel download failed:', error);
+            showErrorBanner(error.message || 'Tunnel file download failed.');
+        } finally {
+            button.disabled = false;
+        }
     }
 
     async function refreshTunnelState() {
