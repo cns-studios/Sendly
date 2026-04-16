@@ -263,15 +263,15 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request", Code: "INVALID_REQUEST"})
 		return
 	}
-
 	tier := middleware.GetTier(h.cfg, user)
-	if !tier.IsDurationAllowed(req.Duration) {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration not available for your account tier", Code: "DURATION_NOT_ALLOWED"})
-		return
-	}
 
 	var opts *services.FinalizeUploadOptions
-	if user != nil {
+	if req.TunnelID != "" {
+		if user == nil {
+			c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required for tunnel uploads", Code: "AUTH_REQUIRED"})
+			return
+		}
+
 		uid := int64(user.ID)
 		uname := user.Username
 		opts = &services.FinalizeUploadOptions{
@@ -312,6 +312,37 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 				opts.DEKWrapNonce = nonce
 			}
 		}
+
+		tunnel, err := h.db.GetTunnelByID(c.Request.Context(), req.TunnelID)
+		if err != nil {
+			status := http.StatusBadRequest
+			if err == models.ErrFileExpired {
+				status = http.StatusGone
+			}
+			c.JSON(status, models.ErrorResponse{Error: "Tunnel is no longer available", Code: "TUNNEL_NOT_AVAILABLE"})
+			return
+		}
+		if tunnel.Status != models.TunnelStatusActive {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
+			return
+		}
+		if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+		opts.TunnelID = req.TunnelID
+		opts.TunnelExpiresAt = tunnel.ExpiresAt
+	} else {
+		if !tier.IsDurationAllowed(req.Duration) {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration not available for your account tier", Code: "DURATION_NOT_ALLOWED"})
+			return
+		}
+	}
+	}
+
+	if req.TunnelID == "" && req.Duration == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration is required for non-tunnel uploads", Code: "DURATION_REQUIRED"})
+		return
 	}
 
 	baseResp, err := h.uploadService.FinalizeUploadWithOptions(c.Request.Context(), req.SessionID, req.Duration, opts)

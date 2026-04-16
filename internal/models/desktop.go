@@ -36,7 +36,8 @@ type DesktopVerifyResponse struct {
 
 type DesktopFinalizeRequest struct {
 	SessionID       string `json:"session_id" binding:"required"`
-	Duration        string `json:"duration" binding:"required"`
+	Duration        string `json:"duration"`
+	TunnelID        string `json:"tunnel_id"`
 	DeviceID        string `json:"device_id"`
 	WrappedDEKB64   string `json:"wrapped_dek_b64"`
 	DEKWrapAlg      string `json:"dek_wrap_alg"`

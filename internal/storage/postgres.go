@@ -32,10 +32,11 @@ func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File
 			uploader_ip,
 			owner_cns_user_id,
 			owner_cns_username,
+			tunnel_id,
 			expires_at,
 			created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 	if _, err = tx.ExecContext(ctx, insertFile,
 		file.ID,
@@ -45,6 +46,7 @@ func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File
 		file.UploaderIP,
 		file.OwnerCNSUserID,
 		file.OwnerCNSUserName,
+		file.TunnelID,
 		file.ExpiresAt,
 		file.CreatedAt,
 	); err != nil {
@@ -106,10 +108,11 @@ func (p *Postgres) CreateFile(ctx context.Context, file *models.File) error {
 			uploader_ip,
 			owner_cns_user_id,
 			owner_cns_username,
+			tunnel_id,
 			expires_at,
 			created_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 	_, err := p.db.ExecContext(ctx, query,
 		file.ID,
@@ -119,6 +122,7 @@ func (p *Postgres) CreateFile(ctx context.Context, file *models.File) error {
 		file.UploaderIP,
 		file.OwnerCNSUserID,
 		file.OwnerCNSUserName,
+		file.TunnelID,
 		file.ExpiresAt,
 		file.CreatedAt,
 	)
@@ -433,6 +437,7 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 		FROM files
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
+		  AND tunnel_id IS NULL
 		  AND EXISTS (
 			  SELECT 1 FROM file_key_envelopes fke
 			  WHERE fke.file_id = files.id
@@ -455,6 +460,7 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 		FROM files
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
+		  AND tunnel_id IS NULL
 		  AND EXISTS (
 			  SELECT 1 FROM file_key_envelopes fke
 			  WHERE fke.file_id = files.id

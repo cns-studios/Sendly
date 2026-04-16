@@ -16,6 +16,7 @@ type File struct {
 	UploaderIP       string         `db:"uploader_ip" json:"-"`
 	OwnerCNSUserID   sql.NullInt64  `db:"owner_cns_user_id" json:"-"`
 	OwnerCNSUserName sql.NullString `db:"owner_cns_username" json:"-"`
+	TunnelID         sql.NullString `db:"tunnel_id" json:"-"`
 	ExpiresAt        time.Time      `db:"expires_at" json:"expires_at"`
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 	ReportCount      int            `db:"report_count" json:"-"`
@@ -154,7 +155,8 @@ type UploadCompleteResponse struct {
 
 type UploadFinalizeRequest struct {
 	SessionID       string `json:"session_id" binding:"required"`
-	Duration        string `json:"duration" binding:"required"`
+	Duration        string `json:"duration"`
+	TunnelID        string `json:"tunnel_id"`
 	WrappedDEKB64   string `json:"wrapped_dek_b64"`
 	DEKWrapAlg      string `json:"dek_wrap_alg"`
 	DEKWrapNonceB64 string `json:"dek_wrap_nonce_b64"`

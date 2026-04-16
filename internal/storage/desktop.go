@@ -102,6 +102,7 @@ func (p *Postgres) ListFilesByAPIKey(ctx context.Context, apiKeyID string, limit
 		WHERE df.api_key_id = $1
 		  AND f.is_deleted = FALSE
 		  AND f.expires_at > NOW()
+		  AND f.tunnel_id IS NULL
 		ORDER BY f.created_at DESC
 		LIMIT $2 OFFSET $3
 	`
@@ -117,6 +118,7 @@ func (p *Postgres) GetDesktopFileStats(ctx context.Context, apiKeyID string) (co
 		WHERE df.api_key_id = $1
 		  AND f.is_deleted = FALSE
 		  AND f.expires_at > NOW()
+		  AND f.tunnel_id IS NULL
 	`
 	row := p.db.QueryRowContext(ctx, query, apiKeyID)
 	err = row.Scan(&count, &totalSize)

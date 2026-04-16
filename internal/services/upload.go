@@ -26,6 +26,8 @@ type Upload struct {
 type FinalizeUploadOptions struct {
 	OwnerCNSUserID   *int64
 	OwnerCNSUserName *string
+	TunnelID         string
+	TunnelExpiresAt  time.Time
 	WrappedDEK       []byte
 	DEKWrapAlg       string
 	DEKWrapNonce     []byte
@@ -266,9 +268,21 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 	}
 
 	var dur time.Duration
-	dur, err = models.ParseFinalizeDuration(duration)
-	if err != nil {
-		return nil, err
+	var expiresAt time.Time
+	if opts != nil && opts.TunnelID != "" {
+		if opts.TunnelExpiresAt.IsZero() {
+			return nil, fmt.Errorf("error resolving tunnel expiry")
+		}
+		expiresAt = opts.TunnelExpiresAt
+		if time.Until(expiresAt) <= 0 {
+			return nil, models.ErrFileExpired
+		}
+	} else {
+		dur, err = models.ParseFinalizeDuration(duration)
+		if err != nil {
+			return nil, err
+		}
+		expiresAt = time.Now().Add(dur)
 	}
 
 	actualSize, err := u.fs.GetFileSize(session.FileID)
@@ -287,7 +301,7 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		OriginalName: session.OriginalName,
 		SizeBytes:    actualSize,
 		UploaderIP:   session.UploaderIP,
-		ExpiresAt:    time.Now().Add(dur),
+		ExpiresAt:    expiresAt,
 		CreatedAt:    time.Now(),
 	}
 
@@ -297,6 +311,9 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 		if opts.OwnerCNSUserName != nil {
 			file.OwnerCNSUserName = sql.NullString{String: *opts.OwnerCNSUserName, Valid: true}
+		}
+		if opts.TunnelID != "" {
+			file.TunnelID = sql.NullString{String: opts.TunnelID, Valid: true}
 		}
 	}
 

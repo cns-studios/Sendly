@@ -96,6 +96,7 @@ func main() {
 	reportHandler := handlers.NewReportHandler(cfg, db, discord)
 	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService)
 	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db)
+	tunnelHandler := handlers.NewTunnelHandler(cfg, db, fs)
 
 	staticFS := http.StripPrefix("/static", http.FileServer(http.Dir("./web/static")))
 	serveStatic := func(c *gin.Context) {
@@ -151,6 +152,12 @@ func main() {
 		{
 			me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
+			me.POST("/tunnels/start", tunnelHandler.Start)
+			me.POST("/tunnels/join", tunnelHandler.Join)
+			me.GET("/tunnels/:id", tunnelHandler.Get)
+			me.GET("/tunnels/:id/files", tunnelHandler.Files)
+			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
+			me.DELETE("/tunnels/:id", tunnelHandler.End)
 
 			devices := me.Group("/devices")
 			{
@@ -191,6 +198,11 @@ func main() {
 	router.OPTIONS("/desktop/file/code/:code", desktopCORS)
 	router.OPTIONS("/desktop/file/:id/report", desktopCORS)
 	router.OPTIONS("/desktop/me/recent-uploads", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/start", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/join", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/files", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/confirm", desktopCORS)
 	router.OPTIONS("/desktop/me/files/:id/access", desktopCORS)
 	router.OPTIONS("/desktop/me/devices/register", desktopCORS)
 	router.OPTIONS("/desktop/me/devices/recover", desktopCORS)
@@ -239,6 +251,12 @@ func main() {
 			{
 				me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 				me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
+				me.POST("/tunnels/start", tunnelHandler.Start)
+				me.POST("/tunnels/join", tunnelHandler.Join)
+				me.GET("/tunnels/:id", tunnelHandler.Get)
+				me.GET("/tunnels/:id/files", tunnelHandler.Files)
+				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
+				me.DELETE("/tunnels/:id", tunnelHandler.End)
 
 				devices := me.Group("/devices")
 				{
