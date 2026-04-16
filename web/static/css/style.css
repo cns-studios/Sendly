@@ -1752,6 +1752,72 @@ main:has(.legal-document) {
     font-size: 0.7rem;
 }
 
+.tunnel-controls-grid {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.tunnel-control-row {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.tunnel-control-label {
+    font-size: 0.68rem;
+    color: #868686;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.tunnel-select {
+    max-width: 230px;
+}
+
+.tunnel-button-row {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.tunnel-join-row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+.tunnel-join-row .recent-search-input {
+    flex: 1;
+}
+
+.tunnel-meta {
+    font-size: 0.74rem;
+    color: #878787;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.5;
+}
+
+.tunnel-qr-wrap {
+    border: 1px solid #2c2c2c;
+    border-radius: var(--radius-md);
+    background: #101010;
+    padding: 0.75rem;
+    display: grid;
+    justify-items: center;
+}
+
+.tunnel-qr-code {
+    width: 176px;
+    min-height: 176px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tunnel-qr-code img,
+.tunnel-qr-code canvas {
+    border-radius: 6px;
+}
+
  
 @media (max-width: 768px) {
     header {
@@ -1810,6 +1876,15 @@ main:has(.legal-document) {
     .recent-action {
         width: 2rem;
         height: 2rem;
+    }
+
+    .tunnel-join-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .tunnel-join-row .btn {
+        width: 100%;
     }
 }
 

@@ -40,6 +40,8 @@
     let recentSearchQuery = '';
     let recentSearchDebounceTimer = null;
     let recentSearchOpen = false;
+    let activeTunnel = null;
+    let tunnelPollTimer = null;
 
      
     const dropZone = document.getElementById('drop-zone');
@@ -83,6 +85,22 @@
     const recentPrev = document.getElementById('recent-prev');
     const recentNext = document.getElementById('recent-next');
     const recentPageLabel = document.getElementById('recent-page-label');
+    const tunnelFilesSection = document.getElementById('tunnel-files-section');
+    const tunnelList = document.getElementById('tunnel-list');
+    const tunnelEmpty = document.getElementById('tunnel-empty');
+    const tunnelCount = document.getElementById('tunnel-count');
+    const tunnelStatus = document.getElementById('tunnel-status');
+    const tunnelControlsSection = document.getElementById('tunnel-controls-section');
+    const tunnelDurationSelect = document.getElementById('tunnel-duration-select');
+    const tunnelStartBtn = document.getElementById('tunnel-start-btn');
+    const tunnelJoinCode = document.getElementById('tunnel-join-code');
+    const tunnelJoinBtn = document.getElementById('tunnel-join-btn');
+    const tunnelConfirmWrap = document.getElementById('tunnel-confirm-wrap');
+    const tunnelConfirmBtn = document.getElementById('tunnel-confirm-btn');
+    const tunnelActiveMeta = document.getElementById('tunnel-active-meta');
+    const tunnelQRWrap = document.getElementById('tunnel-qr-wrap');
+    const tunnelQRCode = document.getElementById('tunnel-qr-code');
+    const tunnelEndBtn = document.getElementById('tunnel-end-btn');
     const deviceApprovalModal = document.getElementById('device-approval-modal');
     const deviceApprovalTitle = document.getElementById('device-approval-title');
     const deviceApprovalMessage = document.getElementById('device-approval-message');
@@ -878,6 +896,272 @@
         }
     }
 
+    function setTunnelState(state) {
+        if (!tunnelStatus) return;
+        tunnelStatus.classList.remove('hidden');
+        tunnelStatus.textContent = state || '';
+        if (!state) {
+            tunnelStatus.classList.add('hidden');
+        }
+    }
+
+    function clearTunnelState() {
+        activeTunnel = null;
+        if (tunnelPollTimer) {
+            clearInterval(tunnelPollTimer);
+            tunnelPollTimer = null;
+        }
+
+        tunnelEndBtn?.classList.add('hidden');
+        tunnelFilesSection?.classList.add('hidden');
+        tunnelConfirmWrap?.classList.add('hidden');
+        tunnelQRWrap?.classList.add('hidden');
+        if (tunnelList) {
+            tunnelList.innerHTML = '';
+            tunnelList.classList.add('hidden');
+        }
+        tunnelEmpty?.classList.add('hidden');
+        if (tunnelCount) tunnelCount.textContent = '0 files';
+        if (tunnelActiveMeta) {
+            tunnelActiveMeta.classList.add('hidden');
+            tunnelActiveMeta.textContent = '';
+        }
+        if (tunnelQRCode) {
+            tunnelQRCode.innerHTML = '';
+        }
+        setTunnelState('');
+    }
+
+    function applyTunnelUI(tunnel, qrPayload = '') {
+        activeTunnel = tunnel;
+        const parent = recentSection?.parentElement;
+        if (parent && tunnelEndBtn && tunnelFilesSection && recentSection) {
+            parent.insertBefore(tunnelEndBtn, recentSection);
+            parent.insertBefore(tunnelFilesSection, recentSection);
+        }
+        tunnelEndBtn?.classList.remove('hidden');
+        tunnelFilesSection?.classList.remove('hidden');
+        tunnelControlsSection?.classList.remove('hidden');
+
+        const expiresLabel = tunnel?.expires_at ? formatExpiryDate(tunnel.expires_at) : 'soon';
+        if (tunnelActiveMeta) {
+            tunnelActiveMeta.classList.remove('hidden');
+            tunnelActiveMeta.textContent = `Tunnel code ${tunnel.code} · Status ${tunnel.status} · Expires ${expiresLabel}`;
+        }
+
+        const waitingConfirm = !!(tunnel && (!tunnel.initiator_confirmed || !tunnel.peer_confirmed));
+        tunnelConfirmWrap?.classList.toggle('hidden', !waitingConfirm);
+
+        if (qrPayload && window.QRCode && tunnelQRCode) {
+            tunnelQRCode.innerHTML = '';
+            new QRCode(tunnelQRCode, {
+                text: qrPayload,
+                width: 176,
+                height: 176,
+                colorDark: '#f3f3f3',
+                colorLight: '#111111',
+            });
+            tunnelQRWrap?.classList.remove('hidden');
+        }
+    }
+
+    function renderTunnelFiles(items) {
+        if (!tunnelList || !tunnelEmpty || !tunnelCount) return;
+
+        const files = Array.isArray(items) ? items : [];
+        tunnelCount.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+
+        if (!files.length) {
+            tunnelList.classList.add('hidden');
+            tunnelEmpty.classList.remove('hidden');
+            return;
+        }
+
+        tunnelEmpty.classList.add('hidden');
+        tunnelList.classList.remove('hidden');
+        tunnelList.innerHTML = files.map((item) => `
+            <article class="recent-item">
+                <div class="recent-main">
+                    <div class="recent-name-wrap">
+                        <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
+                    </div>
+                </div>
+                <div class="recent-meta">
+                    <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
+                    <span>Uploaded ${formatUploadDate(item.created_at)}</span>
+                </div>
+            </article>
+        `).join('');
+    }
+
+    async function refreshTunnelState() {
+        if (!activeTunnel?.id) return;
+
+        try {
+            const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}`, {
+                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+            });
+            if (!response.ok) {
+                if (response.status === 410 || response.status === 404) {
+                    clearTunnelState();
+                    showInfoBanner('Tunnel session has ended.');
+                    return;
+                }
+                throw new Error('Failed to refresh tunnel state');
+            }
+
+            const payload = await response.json().catch(() => ({}));
+            if (payload?.tunnel) {
+                applyTunnelUI(payload.tunnel);
+            }
+            renderTunnelFiles(payload?.files || []);
+        } catch (error) {
+            console.error('Tunnel refresh failed:', error);
+        }
+    }
+
+    function startTunnelPolling() {
+        if (tunnelPollTimer) {
+            clearInterval(tunnelPollTimer);
+        }
+        tunnelPollTimer = setInterval(() => {
+            refreshTunnelState();
+        }, 4000);
+    }
+
+    async function handleStartTunnel() {
+        if (!AUTHENTICATED) {
+            showErrorBanner('Sign in to start a tunnel session.');
+            return;
+        }
+
+        const duration = tunnelDurationSelect?.value || '1h';
+        const response = await fetch('/api/me/tunnels/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            },
+            body: JSON.stringify({
+                duration,
+                device_id: authDeviceIdentity?.deviceId || ''
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Failed to start tunnel');
+        }
+
+        const payload = await response.json();
+        applyTunnelUI(payload.tunnel, payload.qr_payload || '');
+        setTunnelState('Tunnel created. Share the code or QR payload with the peer.');
+        startTunnelPolling();
+
+        await fetch(`/api/me/tunnels/${encodeURIComponent(payload.tunnel.id)}/confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            },
+            body: JSON.stringify({ device_id: authDeviceIdentity?.deviceId || '' })
+        }).catch(() => {});
+
+        refreshTunnelState();
+    }
+
+    async function handleJoinTunnel() {
+        if (!AUTHENTICATED) {
+            showErrorBanner('Sign in to join a tunnel session.');
+            return;
+        }
+
+        const code = (tunnelJoinCode?.value || '').trim();
+        if (!code) {
+            showErrorBanner('Enter a tunnel code first.');
+            return;
+        }
+
+        const response = await fetch('/api/me/tunnels/join', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            },
+            body: JSON.stringify({
+                code,
+                device_id: authDeviceIdentity?.deviceId || ''
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Failed to join tunnel');
+        }
+
+        const payload = await response.json();
+        applyTunnelUI(payload.tunnel, payload.qr_payload || '');
+        setTunnelState('Joined tunnel. Confirm connection to activate syncing.');
+        startTunnelPolling();
+        await handleConfirmTunnel();
+        refreshTunnelState();
+    }
+
+    async function handleConfirmTunnel() {
+        if (!activeTunnel?.id) return;
+
+        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/confirm`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            },
+            body: JSON.stringify({ device_id: authDeviceIdentity?.deviceId || '' })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Failed to confirm tunnel');
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (payload?.tunnel) {
+            applyTunnelUI(payload.tunnel);
+        }
+        setTunnelState('Connection confirmed. Files dropped now sync to Tunnel.');
+    }
+
+    async function handleEndTunnel() {
+        if (!activeTunnel?.id) return;
+
+        const confirmed = await openActionModal({
+            title: 'End tunnel session?',
+            description: 'Ending this tunnel deletes all shared tunnel files on both clients immediately.',
+            confirmText: 'End session',
+            cancelText: 'Cancel',
+            kicker: 'Warning',
+            tone: 'warning'
+        });
+        if (!confirmed) return;
+
+        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            },
+            body: JSON.stringify({ device_id: authDeviceIdentity?.deviceId || '' })
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Failed to end tunnel');
+        }
+
+        clearTunnelState();
+        showInfoBanner('Tunnel ended. Shared tunnel files were deleted.');
+    }
+
     async function prefetchRecentLockStates(items) {
         if (!Array.isArray(items) || !items.length) {
             return;
@@ -1217,6 +1501,39 @@
         deviceApprovalApprove?.addEventListener('click', handleApprovePendingEnrollment);
         deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
         deviceApprovalRecover?.addEventListener('click', handleRecoverLostDevice);
+
+        if (AUTHENTICATED) {
+            tunnelControlsSection?.classList.remove('hidden');
+        }
+        tunnelStartBtn?.addEventListener('click', async () => {
+            try {
+                await handleStartTunnel();
+            } catch (error) {
+                showErrorBanner(error.message || 'Failed to start tunnel');
+            }
+        });
+        tunnelJoinBtn?.addEventListener('click', async () => {
+            try {
+                await handleJoinTunnel();
+            } catch (error) {
+                showErrorBanner(error.message || 'Failed to join tunnel');
+            }
+        });
+        tunnelConfirmBtn?.addEventListener('click', async () => {
+            try {
+                await handleConfirmTunnel();
+                await refreshTunnelState();
+            } catch (error) {
+                showErrorBanner(error.message || 'Failed to confirm tunnel');
+            }
+        });
+        tunnelEndBtn?.addEventListener('click', async () => {
+            try {
+                await handleEndTunnel();
+            } catch (error) {
+                showErrorBanner(error.message || 'Failed to end tunnel');
+            }
+        });
     }
 
     function handleDragOver(e) {
@@ -1366,6 +1683,10 @@
             uploadComplete = true;
             isUploading = false;
             updateFinalizeButtonState();
+            if (activeTunnel?.id && !isFinalizing) {
+                handleFinalize();
+                return;
+            }
             if (!isFinalizing) {
                 statusText.textContent = 'Ready';
                 statusText.style.color = 'var(--accent)';
@@ -1660,17 +1981,23 @@
         statusText.textContent = 'Finalizing...';
 
         try {
+            const finalizePayload = {
+                session_id: uploadSessionId,
+                ...(finalizeEnvelopePayload || {})
+            };
+            if (activeTunnel?.id) {
+                finalizePayload.tunnel_id = activeTunnel.id;
+            } else {
+                finalizePayload.duration = selectedDuration();
+            }
+
             const response = await fetch('/api/upload/finalize', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': getCookieValue('csrf_token')
                 },
-                body: JSON.stringify({
-                    session_id: uploadSessionId,
-                    duration: selectedDuration(),
-                    ...(finalizeEnvelopePayload || {})
-                })
+                body: JSON.stringify(finalizePayload)
             });
 
             if (!response.ok) {
@@ -1680,6 +2007,9 @@
 
             const payload = await response.json();
             showSuccess(payload);
+            if (activeTunnel?.id) {
+                refreshTunnelState();
+            }
         } catch (error) {
             console.error('Finalize failed:', error);
             isFinalizing = false;

@@ -307,6 +307,59 @@
                         </button>
                     </div>
                 </section>
+
+                <button id="tunnel-end-btn" class="btn btn-secondary btn-large hidden" style="margin-top: 1rem; width: 100%;">
+                    End Tunnel Session
+                </button>
+
+                <section id="tunnel-files-section" class="recent-uploads hidden" style="margin-top: 1rem;">
+                    <div class="recent-header">
+                        <h3>Tunnel</h3>
+                        <div class="recent-header-actions">
+                            <span id="tunnel-count" class="recent-count">0 files</span>
+                        </div>
+                    </div>
+                    <div id="tunnel-status" class="recent-state hidden"></div>
+                    <div id="tunnel-empty" class="recent-state hidden">No files in this tunnel yet.</div>
+                    <div id="tunnel-list" class="recent-list hidden"></div>
+                </section>
+
+                <section id="tunnel-controls-section" class="recent-uploads hidden" style="margin-top: 1rem;">
+                    <div class="recent-header">
+                        <h3>Tunnel Session</h3>
+                    </div>
+                    <div class="tunnel-controls-grid">
+                        <div class="tunnel-control-row">
+                            <label class="tunnel-control-label" for="tunnel-duration-select">Duration</label>
+                            <select id="tunnel-duration-select" class="recent-search-input tunnel-select">
+                                <option value="10m">10 minutes</option>
+                                <option value="30m">30 minutes</option>
+                                <option value="1h" selected>1 hour</option>
+                                <option value="2h">2 hours</option>
+                                <option value="4h">4 hours</option>
+                                <option value="8h">8 hours</option>
+                                <option value="12h">12 hours</option>
+                            </select>
+                        </div>
+                        <div class="tunnel-control-row tunnel-button-row">
+                            <button id="tunnel-start-btn" class="btn btn-secondary">Start Tunnel</button>
+                        </div>
+                        <div class="tunnel-control-row">
+                            <label class="tunnel-control-label" for="tunnel-join-code">Join By Code</label>
+                            <div class="tunnel-join-row">
+                                <input id="tunnel-join-code" type="text" class="recent-search-input" placeholder="Enter 6-digit code" maxlength="6" autocomplete="off" spellcheck="false">
+                                <button id="tunnel-join-btn" class="btn btn-secondary">Join</button>
+                            </div>
+                        </div>
+                        <div id="tunnel-active-meta" class="tunnel-meta hidden"></div>
+                        <div id="tunnel-qr-wrap" class="tunnel-qr-wrap hidden">
+                            <div id="tunnel-qr-code" class="tunnel-qr-code"></div>
+                        </div>
+                        <div class="tunnel-control-row tunnel-button-row hidden" id="tunnel-confirm-wrap">
+                            <button id="tunnel-confirm-btn" class="btn btn-secondary">Confirm Connection</button>
+                        </div>
+                    </div>
+                </section>
             </div>
         </main>
 
@@ -369,6 +422,7 @@
         window.CONFIG = {{.configJSON}};
     </script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             if (window.lucide && lucide.createIcons) {
