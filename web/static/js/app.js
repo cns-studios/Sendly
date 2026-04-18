@@ -821,8 +821,6 @@
         }
 
         pendingEnrollmentRefreshTimer = setInterval(() => {
-            // Poll regardless of modal state so new enrollment requests are discovered
-            // even when websocket auth is unavailable.
             loadPendingEnrollments().catch(() => {});
         }, 6000);
     }
@@ -1100,7 +1098,7 @@
 
         const payload = await response.json();
         applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        showTunnelInfo('Tunnel created. Share the code or QR payload with the peer.');
+        showTunnelInfo('Tunnel created. Share the code or QR code to someone.');
         startTunnelPolling();
 
         await fetch(`/api/me/tunnels/${encodeURIComponent(payload.tunnel.id)}/confirm`, {
@@ -1308,7 +1306,7 @@
                 const passphrase = await getOwnedFilePassphrase(fileId);
                 const copied = await copyToClipboard(`${shareUrl}#${passphrase}`, false, true);
                 if (!copied) {
-                    showToast('Copy failed. Please use Ctrl+C.');
+                    showToast('Copy failed. Please use Ctrl+C to copy the link.');
                 }
             }
         } catch (error) {
@@ -1333,14 +1331,14 @@
         try {
             const response = await fetch(`/api/file/${fileId}/download`);
             if (!response.ok) {
-                throw new Error('Failed to download encrypted payload');
+                throw new Error('Failed to download encrypted file');
             }
             const encryptedBlob = await response.blob();
             let decrypted;
             try {
                 decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase);
             } catch (error) {
-                const lockedError = new Error('This file is locked on this browser. Recover this browser as trusted to open it.');
+                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
                 lockedError.code = 'FILE_LOCKED';
                 throw lockedError;
             }
@@ -1374,7 +1372,7 @@
         });
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Unable to access wrapped key for this file');
+            throw new Error(errorPayload.error || 'Unable to access decryption key for this file. Please try logging out and back in. If this error persists, contact support.');
         }
 
         const payload = await response.json();
@@ -1384,7 +1382,7 @@
             try {
                 userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
             } catch (error) {
-                const lockedError = new Error('This file is locked on this browser. Recover from another trusted device to unlock it.');
+                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
                 lockedError.code = 'FILE_LOCKED';
                 throw lockedError;
             }
@@ -1399,7 +1397,7 @@
         try {
             dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
         } catch (error) {
-            const lockedError = new Error('This file is locked on this browser. Recover from another trusted device to unlock it.');
+            const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
             lockedError.code = 'FILE_LOCKED';
             throw lockedError;
         }
@@ -1410,7 +1408,7 @@
 
     function isLockedFileError(error) {
         if (!error) return false;
-        return error.code === 'FILE_LOCKED' || /locked on this browser|recover from another trusted device/i.test(error.message || '');
+        return error.code === 'FILE_LOCKED' || /locked|recovered your account/i.test(error.message || '');
     }
 
     function markRecentFileLocked(fileId, reason) {
@@ -1504,7 +1502,7 @@
                 const input = this.parentElement.querySelector('input');
                 const copied = await copyToClipboard(input.value);
                 if (!copied) {
-                    showToast('Copy failed. Please use Ctrl+C.');
+                    showToast('Copy failed. Please use Ctrl+C to copy the link.');
                     return;
                 }
                 const original = this.innerHTML;
@@ -1712,7 +1710,7 @@
                     authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
                 }
                 if (!authUserKeyRaw) {
-                    throw new Error('Approve this device from a trusted browser before uploading as an authenticated user');
+                    throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
                 }
                 if (authUserKeyRaw) {
                     const wrapped = await SecureCrypto.wrapSecretWithUserKey(new TextEncoder().encode(generatedPassword), authUserKeyRaw);
@@ -1966,7 +1964,7 @@
     }
 
     async function completeUpload() {
-        updateProgress(95, 'Making sure everything is okay', 'Finalizing...');
+        updateProgress(95, 'Making sure everything arrived', 'Finalizing...');
 
         const response = await fetch('/api/upload/complete', {
             method: 'POST',
