@@ -191,11 +191,17 @@ func (p *Postgres) ConfirmTunnel(ctx context.Context, tunnelID string, userID in
 		return nil, models.ErrFileExpired
 	}
 
-	setInitiator := (tunnel.InitiatorCNSUserID == userID || (userID == 0 && tunnel.InitiatorDeviceID.String == deviceID)) && !tunnel.InitiatorConfirmed
-	setPeer := (tunnel.PeerCNSUserID.Valid && tunnel.PeerCNSUserID.Int64 == userID || (userID == 0 && tunnel.PeerDeviceID.Valid && tunnel.PeerDeviceID.String == deviceID)) && !tunnel.PeerConfirmed
-	if !setInitiator && !setPeer {
+	isInitiatorActor := tunnel.InitiatorCNSUserID == userID || (userID == 0 && tunnel.InitiatorDeviceID.Valid && tunnel.InitiatorDeviceID.String == deviceID)
+	isPeerActor := (tunnel.PeerCNSUserID.Valid && tunnel.PeerCNSUserID.Int64 == userID) || (userID == 0 && tunnel.PeerDeviceID.Valid && tunnel.PeerDeviceID.String == deviceID)
+	setInitiator := isInitiatorActor && !tunnel.InitiatorConfirmed
+	setPeer := isPeerActor && !tunnel.PeerConfirmed
+	if !isInitiatorActor && !isPeerActor {
 		_ = tx.Rollback()
 		return nil, models.ErrFileNotFound
+	}
+
+	if !setInitiator && !setPeer {
+		return &tunnel, tx.Commit()
 	}
 
 	updates := []string{}

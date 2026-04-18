@@ -89,7 +89,6 @@
     const tunnelList = document.getElementById('tunnel-list');
     const tunnelEmpty = document.getElementById('tunnel-empty');
     const tunnelCount = document.getElementById('tunnel-count');
-    const tunnelStatus = document.getElementById('tunnel-status');
     const tunnelControlsSection = document.getElementById('tunnel-controls-section');
     const tunnelDurationSelect = document.getElementById('tunnel-duration-select');
     const tunnelStartBtn = document.getElementById('tunnel-start-btn');
@@ -896,13 +895,15 @@
         }
     }
 
-    function setTunnelState(state) {
-        if (!tunnelStatus) return;
-        tunnelStatus.classList.remove('hidden');
-        tunnelStatus.textContent = state || '';
-        if (!state) {
-            tunnelStatus.classList.add('hidden');
-        }
+    function showTunnelInfo(state) {
+        if (!state) return;
+        showInfoBanner(state);
+    }
+
+    function setTunnelEntryControlsHidden(hidden) {
+        tunnelDurationSelect?.closest('.tunnel-control-row')?.classList.toggle('hidden', hidden);
+        tunnelStartBtn?.closest('.tunnel-control-row')?.classList.toggle('hidden', hidden);
+        tunnelJoinCode?.closest('.tunnel-control-row')?.classList.toggle('hidden', hidden);
     }
 
     function clearTunnelState() {
@@ -929,7 +930,7 @@
         if (tunnelQRCode) {
             tunnelQRCode.innerHTML = '';
         }
-        setTunnelState('');
+        setTunnelEntryControlsHidden(false);
     }
 
     function applyTunnelUI(tunnel, qrPayload = '') {
@@ -942,6 +943,7 @@
         tunnelEndBtn?.classList.remove('hidden');
         tunnelFilesSection?.classList.remove('hidden');
         tunnelControlsSection?.classList.remove('hidden');
+        setTunnelEntryControlsHidden(true);
 
         const expiresLabel = tunnel?.expires_at ? formatExpiryDate(tunnel.expires_at) : 'soon';
         if (tunnelActiveMeta) {
@@ -1041,7 +1043,7 @@
                 headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
             });
             if (!response.ok) {
-                if (response.status === 410 || response.status === 404) {
+                if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState();
                     showInfoBanner('Tunnel session has ended.');
                     return;
@@ -1098,7 +1100,7 @@
 
         const payload = await response.json();
         applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        setTunnelState('Tunnel created. Share the code or QR payload with the peer.');
+        showTunnelInfo('Tunnel created. Share the code or QR payload with the peer.');
         startTunnelPolling();
 
         await fetch(`/api/me/tunnels/${encodeURIComponent(payload.tunnel.id)}/confirm`, {
@@ -1148,10 +1150,9 @@
 
         const payload = await response.json();
         applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        setTunnelState('Joined tunnel. Confirm connection to activate syncing.');
+        showTunnelInfo('Joined tunnel. Confirm connection to activate syncing.');
         startTunnelPolling();
-        await handleConfirmTunnel();
-        refreshTunnelState();
+        await refreshTunnelState();
     }
 
     async function handleConfirmTunnel() {
@@ -1175,7 +1176,7 @@
         if (payload?.tunnel) {
             applyTunnelUI(payload.tunnel);
         }
-        setTunnelState('Connection confirmed. Files dropped now sync to Tunnel.');
+        showTunnelInfo('Connection confirmed. Files dropped now sync to Tunnel.');
     }
 
     async function handleEndTunnel() {
