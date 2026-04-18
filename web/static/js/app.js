@@ -1069,9 +1069,13 @@
     }
 
     async function handleStartTunnel() {
-        if (!AUTHENTICATED) {
-            showErrorBanner('Sign in to start a tunnel session.');
-            return;
+        if (!authDeviceIdentity) {
+            try {
+                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+            } catch (error) {
+                showErrorBanner('Could not initialize device identity: ' + error.message);
+                return;
+            }
         }
 
         const duration = tunnelDurationSelect?.value || '1h';
@@ -1110,9 +1114,13 @@
     }
 
     async function handleJoinTunnel() {
-        if (!AUTHENTICATED) {
-            showErrorBanner('Sign in to join a tunnel session.');
-            return;
+        if (!authDeviceIdentity) {
+            try {
+                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+            } catch (error) {
+                showErrorBanner('Could not initialize device identity: ' + error.message);
+                return;
+            }
         }
 
         const code = (tunnelJoinCode?.value || '').trim();
@@ -1541,9 +1549,7 @@
         deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
         deviceApprovalRecover?.addEventListener('click', handleRecoverLostDevice);
 
-        if (AUTHENTICATED) {
-            tunnelControlsSection?.classList.remove('hidden');
-        }
+        tunnelControlsSection?.classList.remove('hidden');
         tunnelStartBtn?.addEventListener('click', async () => {
             try {
                 await handleStartTunnel();

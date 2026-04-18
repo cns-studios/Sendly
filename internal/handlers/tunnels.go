@@ -28,12 +28,6 @@ func NewTunnelHandler(cfg *config.Config, db *storage.Postgres, fs *storage.File
 }
 
 func (h *TunnelHandler) Start(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
 	var req models.TunnelStartRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
@@ -52,9 +46,15 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 		return
 	}
 
+	var initiatorUserID int64
+	user := middleware.GetCNSUser(c)
+	if user != nil {
+		initiatorUserID = int64(user.ID)
+	}
+
 	tunnel := &models.Tunnel{
 		Code:               code,
-		InitiatorCNSUserID: int64(user.ID),
+		InitiatorCNSUserID: initiatorUserID,
 		InitiatorDeviceID:  nullableDeviceID(req.DeviceID),
 		DurationMinutes:    int(dur.Minutes()),
 		ExpiresAt:          time.Now().Add(dur),
@@ -71,12 +71,6 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 }
 
 func (h *TunnelHandler) Join(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
 	var req models.TunnelJoinRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
@@ -98,14 +92,20 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		return
 	}
 
-	joined, joinErr := h.db.JoinTunnel(c.Request.Context(), tunnel.ID, int64(user.ID), req.DeviceID)
+	var peerUserID int64
+	user := middleware.GetCNSUser(c)
+	if user != nil {
+		peerUserID = int64(user.ID)
+	}
+
+	joined, joinErr := h.db.JoinTunnel(c.Request.Context(), tunnel.ID, peerUserID, req.DeviceID)
 	if joinErr != nil {
 		if joinErr == models.ErrFileExpired {
 			c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel expired", Code: "TUNNEL_EXPIRED"})
 			return
 		}
 		if joinErr == models.ErrFileNotFound {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel not available for this account", Code: "TUNNEL_FORBIDDEN"})
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to join tunnel", Code: "TUNNEL_JOIN_FAILED"})
@@ -119,12 +119,6 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 }
 
 func (h *TunnelHandler) Confirm(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
@@ -146,10 +140,16 @@ func (h *TunnelHandler) Confirm(c *gin.Context) {
 		return
 	}
 
-	tunnel, err := h.db.ConfirmTunnel(c.Request.Context(), tunnelID, int64(user.ID), req.DeviceID)
+	var userID int64
+	user := middleware.GetCNSUser(c)
+	if user != nil {
+		userID = int64(user.ID)
+	}
+
+	tunnel, err := h.db.ConfirmTunnel(c.Request.Context(), tunnelID, userID, req.DeviceID)
 	if err != nil {
 		if err == models.ErrFileNotFound {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
 			return
 		}
 		if err == models.ErrFileExpired {
@@ -164,23 +164,9 @@ func (h *TunnelHandler) Confirm(c *gin.Context) {
 }
 
 func (h *TunnelHandler) End(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
-		return
-	}
-
-	if ok, err := h.db.TunnelBelongsToUser(c.Request.Context(), tunnelID, int64(user.ID)); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to verify tunnel access", Code: "TUNNEL_LOOKUP_FAILED"})
-		return
-	} else if !ok {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
 		return
 	}
 
@@ -200,23 +186,9 @@ func (h *TunnelHandler) End(c *gin.Context) {
 }
 
 func (h *TunnelHandler) Get(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
-		return
-	}
-
-	if ok, err := h.db.TunnelBelongsToUser(c.Request.Context(), tunnelID, int64(user.ID)); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to verify tunnel access", Code: "TUNNEL_LOOKUP_FAILED"})
-		return
-	} else if !ok {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
 		return
 	}
 
@@ -243,23 +215,9 @@ func (h *TunnelHandler) Get(c *gin.Context) {
 }
 
 func (h *TunnelHandler) Files(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
-		return
-	}
-
-	if ok, err := h.db.TunnelBelongsToUser(c.Request.Context(), tunnelID, int64(user.ID)); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to verify tunnel access", Code: "TUNNEL_LOOKUP_FAILED"})
-		return
-	} else if !ok {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
 		return
 	}
 

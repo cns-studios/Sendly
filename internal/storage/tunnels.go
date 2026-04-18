@@ -144,7 +144,7 @@ func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, userID int64
 		return nil, models.ErrFileExpired
 	}
 
-	if tunnel.PeerCNSUserID.Valid && tunnel.PeerCNSUserID.Int64 != userID {
+	if tunnel.PeerCNSUserID.Valid {
 		_ = tx.Rollback()
 		return nil, models.ErrFileNotFound
 	}
@@ -191,8 +191,8 @@ func (p *Postgres) ConfirmTunnel(ctx context.Context, tunnelID string, userID in
 		return nil, models.ErrFileExpired
 	}
 
-	setInitiator := tunnel.InitiatorCNSUserID == userID && !tunnel.InitiatorConfirmed
-	setPeer := tunnel.PeerCNSUserID.Valid && tunnel.PeerCNSUserID.Int64 == userID && !tunnel.PeerConfirmed
+	setInitiator := (tunnel.InitiatorCNSUserID == userID || (userID == 0 && tunnel.InitiatorDeviceID.String == deviceID)) && !tunnel.InitiatorConfirmed
+	setPeer := (tunnel.PeerCNSUserID.Valid && tunnel.PeerCNSUserID.Int64 == userID || (userID == 0 && tunnel.PeerDeviceID.Valid && tunnel.PeerDeviceID.String == deviceID)) && !tunnel.PeerConfirmed
 	if !setInitiator && !setPeer {
 		_ = tx.Rollback()
 		return nil, models.ErrFileNotFound
