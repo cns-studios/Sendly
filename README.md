@@ -63,6 +63,14 @@ POSTGRES_DB=shareit
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
+# Rate limiting
+RATE_LIMIT_MAX_PER_MINUTE=2
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_STRICT_MAX_PER_MINUTE=1
+RATE_LIMIT_STRICT_WINDOW_SECONDS=60
+RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE=10
+RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS=60
+
 # Storage
 DATA_DIR=./data
 CHUNK_DIR=             # Optional: separate chunk storage directory
@@ -100,8 +108,13 @@ make migrate
 ## Base URLs
 
 - **Web API**: `http://localhost:8085/api`
+- **Android API**: `http://localhost:8085/android`
 - **Desktop API**: `http://localhost:8085/desktop`
 - **Web Pages**: `http://localhost:8085`
+
+### Android API
+
+The Android surface uses bearer-token authentication and does not require CSRF cookies. It is mounted directly under `/android` and reuses the same storage and upload/download pipeline as the web and desktop APIs.
 
 ## Authentication
 

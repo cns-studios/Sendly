@@ -16,21 +16,17 @@ type Redis struct {
 	client *redis.Client
 }
 
- 
 const (
-	prefixUploadSession = "upload:session:"
-	prefixUploadChunks  = "upload:chunks:"
-	prefixPendingFile   = "pending:file:"
+	prefixUploadSession  = "upload:session:"
+	prefixUploadChunks   = "upload:chunks:"
+	prefixPendingFile    = "pending:file:"
 	prefixAssemblyStatus = "assembly:status:"
-	prefixRateLimit     = "ratelimit:"
+	prefixRateLimit      = "ratelimit:"
 )
 
- 
 const (
-	sessionTTL     = 1 * time.Hour
-	pendingTTL     = 10 * time.Minute
-	rateLimitTTL   = 1 * time.Minute
-	rateLimitMax   = 2
+	sessionTTL = 1 * time.Hour
+	pendingTTL = 10 * time.Minute
 )
 
 func NewRedis(cfg *config.Config) (*Redis, error) {
@@ -40,7 +36,6 @@ func NewRedis(cfg *config.Config) (*Redis, error) {
 		DialTimeout: 5 * time.Second,
 	})
 
-	 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -59,9 +54,6 @@ func (r *Redis) Client() *redis.Client {
 	return r.client
 }
 
- 
-
- 
 func (r *Redis) CreateUploadSession(ctx context.Context, session *models.UploadSession) error {
 	data, err := json.Marshal(session)
 	if err != nil {
@@ -72,7 +64,6 @@ func (r *Redis) CreateUploadSession(ctx context.Context, session *models.UploadS
 	return r.client.Set(ctx, key, data, sessionTTL).Err()
 }
 
- 
 func (r *Redis) GetUploadSession(ctx context.Context, sessionID string) (*models.UploadSession, error) {
 	key := prefixUploadSession + sessionID
 	data, err := r.client.Get(ctx, key).Bytes()
@@ -91,27 +82,21 @@ func (r *Redis) GetUploadSession(ctx context.Context, sessionID string) (*models
 	return &session, nil
 }
 
- 
 func (r *Redis) DeleteUploadSession(ctx context.Context, sessionID string) error {
 	key := prefixUploadSession + sessionID
 	return r.client.Del(ctx, key).Err()
 }
 
- 
 func (r *Redis) ExtendUploadSession(ctx context.Context, sessionID string) error {
 	key := prefixUploadSession + sessionID
 	return r.client.Expire(ctx, key, sessionTTL).Err()
 }
 
- 
 func (r *Redis) SetUploadSessionTTL(ctx context.Context, sessionID string, ttl time.Duration) error {
 	key := prefixUploadSession + sessionID
 	return r.client.Expire(ctx, key, ttl).Err()
 }
 
- 
-
- 
 func (r *Redis) MarkChunkUploaded(ctx context.Context, sessionID string, chunkIndex int) error {
 	key := prefixUploadChunks + sessionID
 	pipe := r.client.Pipeline()
@@ -121,13 +106,11 @@ func (r *Redis) MarkChunkUploaded(ctx context.Context, sessionID string, chunkIn
 	return err
 }
 
- 
 func (r *Redis) IsChunkUploaded(ctx context.Context, sessionID string, chunkIndex int) (bool, error) {
 	key := prefixUploadChunks + sessionID
 	return r.client.SIsMember(ctx, key, chunkIndex).Result()
 }
 
- 
 func (r *Redis) GetUploadedChunks(ctx context.Context, sessionID string) ([]int, error) {
 	key := prefixUploadChunks + sessionID
 	members, err := r.client.SMembers(ctx, key).Result()
@@ -144,40 +127,32 @@ func (r *Redis) GetUploadedChunks(ctx context.Context, sessionID string) ([]int,
 	return chunks, nil
 }
 
- 
 func (r *Redis) GetUploadedChunkCount(ctx context.Context, sessionID string) (int64, error) {
 	key := prefixUploadChunks + sessionID
 	return r.client.SCard(ctx, key).Result()
 }
 
- 
 func (r *Redis) DeleteChunkTracking(ctx context.Context, sessionID string) error {
 	key := prefixUploadChunks + sessionID
 	return r.client.Del(ctx, key).Err()
 }
 
- 
 func (r *Redis) SetChunkTrackingTTL(ctx context.Context, sessionID string) error {
 	key := prefixUploadChunks + sessionID
 	return r.client.Expire(ctx, key, sessionTTL).Err()
 }
 
- 
-
- 
 func (r *Redis) MarkFilePending(ctx context.Context, fileID, sessionID string) error {
 	key := prefixPendingFile + fileID
 	return r.client.Set(ctx, key, sessionID, pendingTTL).Err()
 }
 
- 
 func (r *Redis) IsFilePending(ctx context.Context, fileID string) (bool, error) {
 	key := prefixPendingFile + fileID
 	exists, err := r.client.Exists(ctx, key).Result()
 	return exists > 0, err
 }
 
- 
 func (r *Redis) GetPendingSessionID(ctx context.Context, fileID string) (string, error) {
 	key := prefixPendingFile + fileID
 	sessionID, err := r.client.Get(ctx, key).Result()
@@ -190,18 +165,15 @@ func (r *Redis) GetPendingSessionID(ctx context.Context, fileID string) (string,
 	return sessionID, nil
 }
 
- 
 func (r *Redis) PendingTTL() time.Duration {
 	return pendingTTL
 }
 
- 
 func (r *Redis) RemovePendingFile(ctx context.Context, fileID string) error {
 	key := prefixPendingFile + fileID
 	return r.client.Del(ctx, key).Err()
 }
 
- 
 func (r *Redis) GetAllPendingFiles(ctx context.Context) ([]string, error) {
 	var fileIDs []string
 	var cursor uint64
@@ -222,24 +194,20 @@ func (r *Redis) GetAllPendingFiles(ctx context.Context) ([]string, error) {
 	return fileIDs, nil
 }
 
- 
+func (r *Redis) CheckRateLimit(ctx context.Context, keySuffix string, maxRequests int64, ttl time.Duration) (bool, error) {
+	key := prefixRateLimit + keySuffix
 
- 
-func (r *Redis) CheckRateLimit(ctx context.Context, ip string) (bool, error) {
-	key := prefixRateLimit + ip
-	
 	pipe := r.client.Pipeline()
 	incr := pipe.Incr(ctx, key)
-	pipe.Expire(ctx, key, rateLimitTTL)
+	pipe.Expire(ctx, key, ttl)
 	_, err := pipe.Exec(ctx)
 	if err != nil {
 		return false, err
 	}
 
-	return incr.Val() <= rateLimitMax, nil
+	return incr.Val() <= maxRequests, nil
 }
 
- 
 func (r *Redis) GetRateLimitCount(ctx context.Context, ip string) (int64, error) {
 	key := prefixRateLimit + ip
 	count, err := r.client.Get(ctx, key).Int64()
@@ -248,7 +216,6 @@ func (r *Redis) GetRateLimitCount(ctx context.Context, ip string) (int64, error)
 	}
 	return count, err
 }
-
 
 func (r *Redis) SetAssemblyStatus(ctx context.Context, sessionID, status string) error {
 	key := prefixAssemblyStatus + sessionID
@@ -269,25 +236,21 @@ func (r *Redis) DeleteAssemblyStatus(ctx context.Context, sessionID string) erro
 	return r.client.Del(ctx, key).Err()
 }
 
-
 func (r *Redis) CleanupSession(ctx context.Context, sessionID string) error {
-	 
+
 	session, err := r.GetUploadSession(ctx, sessionID)
 	if err != nil && err != models.ErrSessionNotFound {
 		return err
 	}
 
-	 
 	if err := r.DeleteUploadSession(ctx, sessionID); err != nil {
 		return err
 	}
 
-	 
 	if err := r.DeleteChunkTracking(ctx, sessionID); err != nil {
 		return err
 	}
 
-	 
 	if session != nil {
 		if err := r.RemovePendingFile(ctx, session.FileID); err != nil {
 			return err
@@ -297,7 +260,6 @@ func (r *Redis) CleanupSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
- 
 func (r *Redis) GetAllActiveSessions(ctx context.Context) ([]string, error) {
 	var sessionIDs []string
 	var cursor uint64

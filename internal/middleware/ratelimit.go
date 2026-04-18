@@ -2,7 +2,9 @@ package middleware
 
 import (
 	"net/http"
+	"time"
 
+	"shareit/internal/config"
 	"shareit/internal/models"
 	"shareit/internal/storage"
 
@@ -10,30 +12,33 @@ import (
 )
 
 type RateLimiter struct {
-	redis *storage.Redis
+	redis     *storage.Redis
+	maxPerMin int64
+	window    time.Duration
+	keyPrefix string
 }
 
-func NewRateLimiter(redis *storage.Redis) *RateLimiter {
+func NewRateLimiter(redis *storage.Redis, maxPerMin int64, window time.Duration) *RateLimiter {
 	return &RateLimiter{
-		redis: redis,
+		redis:     redis,
+		maxPerMin: maxPerMin,
+		window:    window,
+		keyPrefix: "standard:",
 	}
 }
 
 func (rl *RateLimiter) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := GetClientIP(c)
-		
-		 
+
 		if ip == "unknown" {
 			c.Next()
 			return
 		}
 
-		 
-		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), ip)
+		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), rl.keyPrefix+ip, rl.maxPerMin, rl.window)
 		if err != nil {
-			 
-			 
+
 			c.Next()
 			return
 		}
@@ -51,17 +56,19 @@ func (rl *RateLimiter) Handler() gin.HandlerFunc {
 	}
 }
 
- 
-func NewStrictRateLimiter(redis *storage.Redis) *RateLimiter {
+func NewStrictRateLimiter(redis *storage.Redis, maxPerMin int64, window time.Duration) *RateLimiter {
 	return &RateLimiter{
-		redis: redis,
+		redis:     redis,
+		maxPerMin: maxPerMin,
+		window:    window,
+		keyPrefix: "strict:",
 	}
 }
 
 func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := GetClientIP(c)
-		
+
 		if ip == "unknown" {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
 				Error: "Could not determine client IP",
@@ -71,7 +78,7 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), ip)
+		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), rl.keyPrefix+ip, rl.maxPerMin, rl.window)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
 				Error: "Service temporarily unavailable",
@@ -94,47 +101,38 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 	}
 }
 
- 
- 
 type DownloadRateLimiter struct {
-	redis      *storage.Redis
-	maxPerMin  int64
-	keyPrefix  string
+	redis     *storage.Redis
+	maxPerMin int64
+	window    time.Duration
+	keyPrefix string
 }
 
-func NewDownloadRateLimiter(redis *storage.Redis, maxPerMinute int64) *DownloadRateLimiter {
+func NewDownloadRateLimiter(redis *storage.Redis, maxPerMinute int64, window time.Duration) *DownloadRateLimiter {
 	return &DownloadRateLimiter{
 		redis:     redis,
 		maxPerMin: maxPerMinute,
-		keyPrefix: "ratelimit:download:",
+		window:    window,
+		keyPrefix: "download:",
 	}
 }
 
 func (drl *DownloadRateLimiter) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := GetClientIP(c)
-		
+
 		if ip == "unknown" {
 			c.Next()
 			return
 		}
 
-		 
-		ctx := c.Request.Context()
-		key := drl.keyPrefix + ip
-		
-		count, err := drl.redis.Client().Incr(ctx, key).Result()
+		allowed, err := drl.redis.CheckRateLimit(c.Request.Context(), drl.keyPrefix+ip, drl.maxPerMin, drl.window)
 		if err != nil {
 			c.Next()
 			return
 		}
 
-		 
-		if count == 1 {
-			drl.redis.Client().Expire(ctx, key, 60)  
-		}
-
-		if count > drl.maxPerMin {
+		if !allowed {
 			c.JSON(http.StatusTooManyRequests, models.ErrorResponse{
 				Error: "Too many download requests, please slow down",
 				Code:  "DOWNLOAD_RATE_LIMITED",
@@ -145,4 +143,11 @@ func (drl *DownloadRateLimiter) Handler() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func NewRateLimiterSet(cfg *config.Config, redis *storage.Redis) (*RateLimiter, *RateLimiter, *DownloadRateLimiter) {
+	standard := NewRateLimiter(redis, cfg.RateLimitMaxPerMinute, time.Duration(cfg.RateLimitWindowSeconds)*time.Second)
+	strict := NewStrictRateLimiter(redis, cfg.StrictRateLimitMaxPerMinute, time.Duration(cfg.StrictRateLimitWindowSeconds)*time.Second)
+	download := NewDownloadRateLimiter(redis, cfg.DownloadRateLimitMaxPerMinute, time.Duration(cfg.DownloadRateLimitWindowSeconds)*time.Second)
+	return standard, strict, download
 }

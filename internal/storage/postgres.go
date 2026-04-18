@@ -405,6 +405,29 @@ func (p *Postgres) GetActiveDevicesByUser(ctx context.Context, userID int64) ([]
 	return devices, err
 }
 
+func (p *Postgres) UpdateUserDeviceLabel(ctx context.Context, userID int64, deviceID, deviceLabel string) error {
+	query := `
+		UPDATE user_devices
+		SET device_label = $1,
+			last_seen_at = NOW()
+		WHERE cns_user_id = $2
+		  AND id = $3
+		  AND revoked_at IS NULL
+	`
+	res, err := p.db.ExecContext(ctx, query, deviceLabel, userID, deviceID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return models.ErrDeviceNotFound
+	}
+	return nil
+}
+
 func (p *Postgres) SaveFileKeyEnvelope(ctx context.Context, envelope *models.FileKeyEnvelope) error {
 	query := `
 		INSERT INTO file_key_envelopes (file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)

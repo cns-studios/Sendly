@@ -215,6 +215,10 @@ type DeviceRegisterResponse struct {
 	UserKeyEnvelope *UserKeyEnvelopeResponse `json:"user_key_envelope,omitempty"`
 }
 
+type DeviceRenameRequest struct {
+	DeviceLabel string `json:"device_label" binding:"required"`
+}
+
 type CreateEnrollmentRequest struct {
 	RequestDeviceID string `json:"request_device_id" binding:"required"`
 }
@@ -334,6 +338,7 @@ var (
 	ErrFileNotFound       = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
 	ErrFileExpired        = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}
 	ErrFileDeleted        = &AppError{Code: "FILE_DELETED", Message: "file has been deleted"}
+	ErrDeviceNotFound     = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}
 	ErrSessionNotFound    = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
 	ErrSessionExpired     = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}
 	ErrUploadNotPending   = &AppError{Code: "UPLOAD_NOT_PENDING", Message: "upload is no longer pending"}

@@ -34,12 +34,19 @@ type Config struct {
 
 	DiscordWebhookURL string
 
-	CNSAuthURL        string
-	CNSAuthClientID   string
+	CNSAuthURL             string
+	CNSAuthClientID        string
 	CNSAuthDesktopClientID string
-	CNSAuthServiceKey string
-	AuthMaxFileSize   int64
-	MigrationsDir     string
+	CNSAuthServiceKey      string
+	AuthMaxFileSize        int64
+	MigrationsDir          string
+
+	RateLimitMaxPerMinute          int64
+	RateLimitWindowSeconds         int64
+	StrictRateLimitMaxPerMinute    int64
+	StrictRateLimitWindowSeconds   int64
+	DownloadRateLimitMaxPerMinute  int64
+	DownloadRateLimitWindowSeconds int64
 }
 
 func Load() (*Config, error) {
@@ -47,28 +54,34 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:                  getEnv("PORT", "8085"),
-		BaseURL:               getEnv("BASE_URL", "http://localhost:8085"),
-		TOSVersion:            getEnv("TOS_VERSION", "2026-04-05"),
-		PostgresHost:          getEnv("POSTGRES_HOST", "localhost"),
-		PostgresPort:          getEnv("POSTGRES_PORT", "5432"),
-		PostgresUser:          getEnv("POSTGRES_USER", "shareit"),
-		PostgresPassword:      getEnv("POSTGRES_PASSWORD", "shareit"),
-		PostgresDB:            getEnv("POSTGRES_DB", "shareit"),
-		RedisHost:             getEnv("REDIS_HOST", "localhost"),
-		RedisPort:             getEnv("REDIS_PORT", "6379"),
-		DataDir:               getEnv("DATA_DIR", "./data"),
-		ChunkDir:              getEnv("CHUNK_DIR", ""),
-		BehindCloudflare:      getEnvBool("BEHIND_CLOUDFLARE", false),
-		MaxFileSize:           getEnvInt64("MAX_FILE_SIZE", 786432000),
-		AutoDeleteReportCount: getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
-		DiscordWebhookURL:     getEnv("DISCORD_WEBHOOK_URL", ""),
-		CNSAuthURL:            getEnv("CNS_AUTH_URL", ""),
-		CNSAuthClientID:       getEnv("CNS_AUTH_CLIENT_ID", ""),
-		CNSAuthDesktopClientID: getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),
-		CNSAuthServiceKey:     getEnv("CNS_AUTH_SERVICE_KEY", ""),
-		AuthMaxFileSize:       getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
-		MigrationsDir:         getEnv("MIGRATIONS_DIR", "db/migrations"),
+		Port:                           getEnv("PORT", "8085"),
+		BaseURL:                        getEnv("BASE_URL", "http://localhost:8085"),
+		TOSVersion:                     getEnv("TOS_VERSION", "2026-04-05"),
+		PostgresHost:                   getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort:                   getEnv("POSTGRES_PORT", "5432"),
+		PostgresUser:                   getEnv("POSTGRES_USER", "shareit"),
+		PostgresPassword:               getEnv("POSTGRES_PASSWORD", "shareit"),
+		PostgresDB:                     getEnv("POSTGRES_DB", "shareit"),
+		RedisHost:                      getEnv("REDIS_HOST", "localhost"),
+		RedisPort:                      getEnv("REDIS_PORT", "6379"),
+		DataDir:                        getEnv("DATA_DIR", "./data"),
+		ChunkDir:                       getEnv("CHUNK_DIR", ""),
+		BehindCloudflare:               getEnvBool("BEHIND_CLOUDFLARE", false),
+		MaxFileSize:                    getEnvInt64("MAX_FILE_SIZE", 786432000),
+		AutoDeleteReportCount:          getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
+		DiscordWebhookURL:              getEnv("DISCORD_WEBHOOK_URL", ""),
+		CNSAuthURL:                     getEnv("CNS_AUTH_URL", ""),
+		CNSAuthClientID:                getEnv("CNS_AUTH_CLIENT_ID", ""),
+		CNSAuthDesktopClientID:         getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),
+		CNSAuthServiceKey:              getEnv("CNS_AUTH_SERVICE_KEY", ""),
+		AuthMaxFileSize:                getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
+		MigrationsDir:                  getEnv("MIGRATIONS_DIR", "db/migrations"),
+		RateLimitMaxPerMinute:          getEnvInt64("RATE_LIMIT_MAX_PER_MINUTE", 2),
+		RateLimitWindowSeconds:         getEnvInt64("RATE_LIMIT_WINDOW_SECONDS", 60),
+		StrictRateLimitMaxPerMinute:    getEnvInt64("RATE_LIMIT_STRICT_MAX_PER_MINUTE", 1),
+		StrictRateLimitWindowSeconds:   getEnvInt64("RATE_LIMIT_STRICT_WINDOW_SECONDS", 60),
+		DownloadRateLimitMaxPerMinute:  getEnvInt64("RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE", 10),
+		DownloadRateLimitWindowSeconds: getEnvInt64("RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", 60),
 	}
 
 	if err := cfg.validate(); err != nil {
