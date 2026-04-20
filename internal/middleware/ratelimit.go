@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -29,14 +30,13 @@ func NewRateLimiter(redis *storage.Redis, maxPerMin int64, window time.Duration)
 
 func (rl *RateLimiter) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ip := GetClientIP(c)
-
-		if ip == "unknown" {
+		key, unknown := rateLimitKey(c, rl.keyPrefix)
+		if unknown {
 			c.Next()
 			return
 		}
 
-		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), rl.keyPrefix+ip, rl.maxPerMin, rl.window)
+		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
 		if err != nil {
 
 			c.Next()
@@ -67,9 +67,8 @@ func NewStrictRateLimiter(redis *storage.Redis, maxPerMin int64, window time.Dur
 
 func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ip := GetClientIP(c)
-
-		if ip == "unknown" {
+		key, unknown := rateLimitKey(c, rl.keyPrefix)
+		if unknown {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
 				Error: "Could not determine client IP",
 				Code:  "UNKNOWN_IP",
@@ -78,7 +77,7 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), rl.keyPrefix+ip, rl.maxPerMin, rl.window)
+		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
 				Error: "Service temporarily unavailable",
@@ -119,14 +118,13 @@ func NewDownloadRateLimiter(redis *storage.Redis, maxPerMinute int64, window tim
 
 func (drl *DownloadRateLimiter) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ip := GetClientIP(c)
-
-		if ip == "unknown" {
+		key, unknown := rateLimitKey(c, drl.keyPrefix)
+		if unknown {
 			c.Next()
 			return
 		}
 
-		allowed, err := drl.redis.CheckRateLimit(c.Request.Context(), drl.keyPrefix+ip, drl.maxPerMin, drl.window)
+		allowed, err := drl.redis.CheckRateLimit(c.Request.Context(), key, drl.maxPerMin, drl.window)
 		if err != nil {
 			c.Next()
 			return
@@ -150,4 +148,23 @@ func NewRateLimiterSet(cfg *config.Config, redis *storage.Redis) (*RateLimiter, 
 	strict := NewStrictRateLimiter(redis, cfg.StrictRateLimitMaxPerMinute, time.Duration(cfg.StrictRateLimitWindowSeconds)*time.Second)
 	download := NewDownloadRateLimiter(redis, cfg.DownloadRateLimitMaxPerMinute, time.Duration(cfg.DownloadRateLimitWindowSeconds)*time.Second)
 	return standard, strict, download
+}
+
+func rateLimitKey(c *gin.Context, keyPrefix string) (string, bool) {
+	route := c.FullPath()
+	if route == "" {
+		route = c.Request.URL.Path
+	}
+
+	user := GetCNSUser(c)
+	if user != nil && user.ID > 0 {
+		return fmt.Sprintf("%suser:%d:route:%s", keyPrefix, user.ID, route), false
+	}
+
+	ip := GetClientIP(c)
+	if ip == "unknown" {
+		return "", true
+	}
+
+	return fmt.Sprintf("%sip:%s:route:%s", keyPrefix, ip, route), false
 }

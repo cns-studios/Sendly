@@ -165,8 +165,8 @@ func main() {
 
 			devices := me.Group("/devices")
 			{
-				devices.POST("/register", strictRateLimiter.Handler(), recentUploadsHandler.RegisterDevice)
-				devices.POST("/recover", strictRateLimiter.Handler(), recentUploadsHandler.RecoverDevice)
+				devices.POST("/register", recentUploadsHandler.RegisterDevice)
+				devices.POST("/recover", recentUploadsHandler.RecoverDevice)
 				devices.GET("/ws", recentUploadsHandler.DeviceEvents)
 				devices.POST("/enrollments", strictRateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
@@ -201,8 +201,8 @@ func main() {
 
 			devices := me.Group("/devices")
 			{
-				devices.POST("/register", strictRateLimiter.Handler(), androidHandler.RegisterDevice)
-				devices.POST("/recover", strictRateLimiter.Handler(), androidHandler.RecoverDevice)
+				devices.POST("/register", androidHandler.RegisterDevice)
+				devices.POST("/recover", androidHandler.RecoverDevice)
 				devices.GET("", androidHandler.ListConnectedDevices)
 				devices.POST("/:id/rename", strictRateLimiter.Handler(), androidHandler.RenameDevice)
 				devices.GET("/ws", androidHandler.DeviceNotificationsWS)
@@ -306,8 +306,8 @@ func main() {
 
 				devices := me.Group("/devices")
 				{
-					devices.POST("/register", strictRateLimiter.Handler(), recentUploadsHandler.RegisterDevice)
-					devices.POST("/recover", strictRateLimiter.Handler(), recentUploadsHandler.RecoverDevice)
+					devices.POST("/register", recentUploadsHandler.RegisterDevice)
+					devices.POST("/recover", recentUploadsHandler.RecoverDevice)
 					devices.GET("/ws", recentUploadsHandler.DeviceEvents)
 					devices.POST("/enrollments", strictRateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
 					devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
