@@ -126,24 +126,22 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 	tier := middleware.GetTier(h.cfg, user)
 	var opts *services.FinalizeUploadOptions
 	if req.TunnelID != "" {
-		if user == nil {
-			c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required for tunnel uploads", Code: "AUTH_REQUIRED"})
-			return
-		}
+		opts = &services.FinalizeUploadOptions{}
+		if user != nil {
+			uid := int64(user.ID)
+			uname := user.Username
+			opts = &services.FinalizeUploadOptions{
+				OwnerCNSUserID:   &uid,
+				OwnerCNSUserName: &uname,
+			}
 
-		uid := int64(user.ID)
-		uname := user.Username
-		opts = &services.FinalizeUploadOptions{
-			OwnerCNSUserID:   &uid,
-			OwnerCNSUserName: &uname,
-		}
-
-		if req.WrappedDEKB64 == "" {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{
-				Error: "Trusted device approval is required before authenticated uploads can be finalized",
-				Code:  "WRAPPED_DEK_REQUIRED",
-			})
-			return
+			if req.WrappedDEKB64 == "" {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{
+					Error: "Trusted device approval is required before authenticated uploads can be finalized",
+					Code:  "WRAPPED_DEK_REQUIRED",
+				})
+				return
+			}
 		}
 
 		if req.WrappedDEKB64 != "" {
@@ -187,9 +185,11 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
-			return
+		if user != nil {
+			if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
+				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
+				return
+			}
 		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt
