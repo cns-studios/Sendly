@@ -329,6 +329,23 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
 				return
 			}
+
+			if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
+				peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
+					req.SessionID,
+					peerUserID,
+					peerDeviceID,
+					req.PeerWrappedDEKB64,
+					req.PeerDEKWrapAlg,
+					req.PeerDEKWrapNonceB64,
+					req.PeerDEKWrapVersion,
+				)
+				if peerErr != nil {
+					c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Cross-account tunnel upload requires a peer key envelope", Code: "PEER_WRAPPED_DEK_REQUIRED", Details: peerErr.Error()})
+					return
+				}
+				opts.RecipientEnvelopes = append(opts.RecipientEnvelopes, peerEnvelope)
+			}
 		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt

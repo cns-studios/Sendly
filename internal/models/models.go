@@ -41,6 +41,17 @@ type FileKeyEnvelope struct {
 	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 }
 
+type FileRecipientKeyEnvelope struct {
+	FileID            string    `db:"file_id" json:"file_id"`
+	RecipientCNSUserID int64    `db:"recipient_cns_user_id" json:"recipient_cns_user_id"`
+	RecipientDeviceID string    `db:"recipient_device_id" json:"recipient_device_id"`
+	WrappedDEK        []byte    `db:"wrapped_dek" json:"-"`
+	DEKWrapAlg        string    `db:"dek_wrap_alg" json:"dek_wrap_alg"`
+	DEKWrapNonce      []byte    `db:"dek_wrap_nonce" json:"-"`
+	DEKWrapVersion    int       `db:"dek_wrap_version" json:"dek_wrap_version"`
+	CreatedAt         time.Time `db:"created_at" json:"created_at"`
+}
+
 type UserDevice struct {
 	ID           string          `db:"id" json:"id"`
 	CNSUserID    int64           `db:"cns_user_id" json:"cns_user_id"`
@@ -159,9 +170,13 @@ type UploadFinalizeRequest struct {
 	TunnelID        string `json:"tunnel_id"`
 	DeviceID        string `json:"device_id"`
 	WrappedDEKB64   string `json:"wrapped_dek_b64"`
+	PeerWrappedDEKB64   string `json:"peer_wrapped_dek_b64"`
 	DEKWrapAlg      string `json:"dek_wrap_alg"`
 	DEKWrapNonceB64 string `json:"dek_wrap_nonce_b64"`
 	DEKWrapVersion  int    `json:"dek_wrap_version"`
+	PeerDEKWrapAlg      string `json:"peer_dek_wrap_alg"`
+	PeerDEKWrapNonceB64 string `json:"peer_dek_wrap_nonce_b64"`
+	PeerDEKWrapVersion  int    `json:"peer_dek_wrap_version"`
 }
 
 type UploadFinalizeResponse struct {

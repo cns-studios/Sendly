@@ -111,18 +111,15 @@ func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 
 	file, fileEnvelope, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
 	if err != nil {
-		status := http.StatusInternalServerError
-		if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
-			status = http.StatusNotFound
+		file, fileEnvelope, err = h.db.GetTunnelRecipientFileWithEnvelope(c.Request.Context(), int64(user.ID), deviceID, fileID)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
+				status = http.StatusNotFound
+			}
+			c.JSON(status, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
+			return
 		}
-		c.JSON(status, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
-		return
-	}
-
-	userEnvelope, err := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), deviceID)
-	if err != nil {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "No key envelope for this device", Code: "DEVICE_NOT_AUTHORIZED"})
-		return
 	}
 
 	resp := models.FileAccessResponse{
@@ -133,12 +130,22 @@ func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 			DEKWrapVersion:  fileEnvelope.DEKWrapVersion,
 			DEKWrapNonceB64: base64.StdEncoding.EncodeToString(fileEnvelope.DEKWrapNonce),
 		},
-		UserKeyEnvelope: models.UserKeyEnvelopeResponse{
+	}
+
+	isDirectDeviceWrap := strings.HasPrefix(strings.ToUpper(strings.TrimSpace(fileEnvelope.DEKWrapAlg)), "RSA-OAEP")
+	if !isDirectDeviceWrap {
+		userEnvelope, userErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), deviceID)
+		if userErr != nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "No key envelope for this device", Code: "DEVICE_NOT_AUTHORIZED"})
+			return
+		}
+
+		resp.UserKeyEnvelope = models.UserKeyEnvelopeResponse{
 			WrappedUKB64: base64.StdEncoding.EncodeToString(userEnvelope.WrappedUserKey),
 			UKWrapAlg:    userEnvelope.UKWrapAlg,
 			UKWrapMeta:   userEnvelope.UKWrapMeta,
 			KeyVersion:   userEnvelope.KeyVersion,
-		},
+		}
 	}
 
 	c.JSON(http.StatusOK, resp)

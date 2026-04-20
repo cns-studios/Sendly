@@ -1372,38 +1372,85 @@
         });
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Unable to access decryption key for this file. Please try logging out and back in. If this error persists, contact support.');
+            throw new Error(errorPayload.error || 'Unable to access decryption key for this file. Please try logging out and back in.');
         }
 
         const payload = await response.json();
-        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-        if (!userKeyRaw) {
-            const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
+        const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
+        const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
+        let dekBytes;
+
+        if (dekWrapAlg.startsWith('RSA-OAEP')) {
             try {
-                userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+                dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
             } catch (error) {
                 const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
                 lockedError.code = 'FILE_LOCKED';
                 throw lockedError;
             }
-            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-        }
+        } else {
+            let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+            if (!userKeyRaw) {
+                const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
+                if (!wrappedUKB64) {
+                    throw new Error('Unable to access decryption key for this file on this device.');
+                }
 
-        const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
-        const nonce = payload.file_key_envelope.dek_wrap_nonce_b64
-            ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64)
-            : new Uint8Array();
-        let dekBytes;
-        try {
-            dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
-        } catch (error) {
-            const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-            lockedError.code = 'FILE_LOCKED';
-            throw lockedError;
+                const wrappedUK = SecureCrypto.fromBase64(wrappedUKB64);
+                try {
+                    userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+                } catch (error) {
+                    const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
+                    lockedError.code = 'FILE_LOCKED';
+                    throw lockedError;
+                }
+                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
+            }
+
+            const nonce = payload.file_key_envelope.dek_wrap_nonce_b64
+                ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64)
+                : new Uint8Array();
+            try {
+                dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
+            } catch (error) {
+                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
+                lockedError.code = 'FILE_LOCKED';
+                throw lockedError;
+            }
         }
         const passphrase = new TextDecoder().decode(dekBytes);
         SecureCrypto.cacheFileKey(fileId, passphrase);
         return passphrase;
+    }
+
+    async function buildTunnelPeerEnvelope(secretBytes) {
+        if (!AUTHENTICATED || !activeTunnel?.id || !secretBytes) {
+            return null;
+        }
+
+        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/peer-wrap-key`, {
+            headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+        });
+
+        if (!response.ok) {
+            const errorPayload = await response.json().catch(() => ({}));
+            if (errorPayload.code === 'PEER_KEY_NOT_REQUIRED') {
+                return null;
+            }
+            throw new Error(errorPayload.error || 'Failed to fetch tunnel peer key material');
+        }
+
+        const payload = await response.json();
+        if (!payload?.public_key_jwk) {
+            return null;
+        }
+
+        const wrappedForPeer = await SecureCrypto.wrapUserKeyForDevice(secretBytes, payload.public_key_jwk);
+        return {
+            peer_wrapped_dek_b64: SecureCrypto.toBase64(wrappedForPeer),
+            peer_dek_wrap_alg: 'RSA-OAEP-2048-v1',
+            peer_dek_wrap_version: 1
+        };
     }
 
     function isLockedFileError(error) {
@@ -1713,13 +1760,24 @@
                     throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
                 }
                 if (authUserKeyRaw) {
-                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(new TextEncoder().encode(generatedPassword), authUserKeyRaw);
+                    const dekBytes = new TextEncoder().encode(generatedPassword);
+                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
                     finalizeEnvelopePayload = {
                         wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
                         dek_wrap_alg: 'AES-GCM-UK-v1',
                         dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
                         dek_wrap_version: 1
                     };
+
+                    if (activeTunnel?.id) {
+                        const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
+                        if (peerEnvelope) {
+                            finalizeEnvelopePayload = {
+                                ...finalizeEnvelopePayload,
+                                ...peerEnvelope
+                            };
+                        }
+                    }
                 }
             }
             encryptedBlob = await SecureCrypto.encryptFile(selectedFile, generatedPassword, () => {});

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"database/sql"
 	"strings"
 	"time"
@@ -50,6 +51,14 @@ type TunnelJoinRequest struct {
 
 type TunnelConfirmRequest struct {
 	DeviceID string `json:"device_id"`
+}
+
+type TunnelPeerWrapKeyResponse struct {
+	PeerCNSUserID int64           `json:"peer_cns_user_id"`
+	PeerDeviceID  string          `json:"peer_device_id"`
+	PublicKeyJWK  json.RawMessage `json:"public_key_jwk"`
+	KeyAlgorithm  string          `json:"key_algorithm"`
+	KeyVersion    int             `json:"key_version"`
 }
 
 type TunnelEndRequest struct {

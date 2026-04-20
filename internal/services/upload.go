@@ -32,6 +32,7 @@ type FinalizeUploadOptions struct {
 	DEKWrapAlg       string
 	DEKWrapNonce     []byte
 	DEKWrapVersion   int
+	RecipientEnvelopes []models.FileRecipientKeyEnvelope
 }
 
 func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem) *Upload {
@@ -332,7 +333,12 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 	}
 
-	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope); err != nil {
+	var recipientEnvelopes []models.FileRecipientKeyEnvelope
+	if opts != nil {
+		recipientEnvelopes = opts.RecipientEnvelopes
+	}
+
+	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, recipientEnvelopes); err != nil {
 		return nil, fmt.Errorf("error creating file record: %w", err)
 	}
 

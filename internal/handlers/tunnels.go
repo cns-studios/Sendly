@@ -230,6 +230,67 @@ func (h *TunnelHandler) Files(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": files})
 }
 
+func (h *TunnelHandler) PeerWrapKey(c *gin.Context) {
+	tunnelID := c.Param("id")
+	if tunnelID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
+		return
+	}
+
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if err == models.ErrFileExpired {
+			status = http.StatusGone
+		}
+		c.JSON(status, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+
+	if tunnel.Status != models.TunnelStatusActive {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
+		return
+	}
+
+	peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID))
+	if peerUserID == 0 {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Peer key sharing is only needed for cross-account tunnels", Code: "PEER_KEY_NOT_REQUIRED"})
+		return
+	}
+
+	if strings.TrimSpace(peerDeviceID) == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Peer device is not ready for key sharing", Code: "PEER_DEVICE_NOT_READY"})
+		return
+	}
+
+	devices, err := h.db.GetActiveDevicesByUser(c.Request.Context(), peerUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to inspect peer device", Code: "PEER_DEVICE_LOOKUP_FAILED"})
+		return
+	}
+
+	for _, device := range devices {
+		if strings.EqualFold(device.ID, peerDeviceID) {
+			c.JSON(http.StatusOK, models.TunnelPeerWrapKeyResponse{
+				PeerCNSUserID: peerUserID,
+				PeerDeviceID:  peerDeviceID,
+				PublicKeyJWK:  device.PublicKeyJWK,
+				KeyAlgorithm:  device.KeyAlgorithm,
+				KeyVersion:    device.KeyVersion,
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Peer device is not trusted", Code: "PEER_DEVICE_NOT_TRUSTED"})
+}
+
 func (h *TunnelHandler) generateUniqueTunnelCode(ctx context.Context) (string, error) {
 	for i := 0; i < 10; i++ {
 		code := generateVerificationCode(6)

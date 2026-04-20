@@ -17,7 +17,7 @@ type Postgres struct {
 	db *sqlx.DB
 }
 
-func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope) error {
+func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope, recipientEnvelopes []models.FileRecipientKeyEnvelope) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -68,6 +68,42 @@ func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File
 		); err != nil {
 			_ = tx.Rollback()
 			return err
+		}
+	}
+
+	if len(recipientEnvelopes) > 0 {
+		insertRecipientEnvelope := `
+			INSERT INTO file_recipient_key_envelopes (
+				file_id,
+				recipient_cns_user_id,
+				recipient_device_id,
+				wrapped_dek,
+				dek_wrap_alg,
+				dek_wrap_nonce,
+				dek_wrap_version
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			ON CONFLICT (file_id, recipient_cns_user_id, recipient_device_id)
+			DO UPDATE SET
+				wrapped_dek = EXCLUDED.wrapped_dek,
+				dek_wrap_alg = EXCLUDED.dek_wrap_alg,
+				dek_wrap_nonce = EXCLUDED.dek_wrap_nonce,
+				dek_wrap_version = EXCLUDED.dek_wrap_version,
+				created_at = NOW()
+		`
+		for _, env := range recipientEnvelopes {
+			if _, err = tx.ExecContext(ctx, insertRecipientEnvelope,
+				env.FileID,
+				env.RecipientCNSUserID,
+				env.RecipientDeviceID,
+				env.WrappedDEK,
+				env.DEKWrapAlg,
+				env.DEKWrapNonce,
+				env.DEKWrapVersion,
+			); err != nil {
+				_ = tx.Rollback()
+				return err
+			}
 		}
 	}
 
@@ -525,6 +561,48 @@ func (p *Postgres) GetOwnedFileWithEnvelope(ctx context.Context, userID int64, f
 		WHERE file_id = $1
 	`
 	if err := p.db.GetContext(ctx, env, envQuery, fileID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, models.ErrFileNotFound
+		}
+		return nil, nil, err
+	}
+
+	if time.Now().After(file.ExpiresAt) {
+		return nil, nil, models.ErrFileExpired
+	}
+
+	return file, env, nil
+}
+
+func (p *Postgres) GetTunnelRecipientFileWithEnvelope(ctx context.Context, userID int64, deviceID, fileID string) (*models.File, *models.FileKeyEnvelope, error) {
+	file := &models.File{}
+	fileQuery := `
+		SELECT f.*
+		FROM files f
+		INNER JOIN tunnels t ON t.id = f.tunnel_id
+		WHERE f.id = $1
+		  AND f.is_deleted = FALSE
+		  AND (
+			t.initiator_cns_user_id = $2
+			OR t.peer_cns_user_id = $2
+		  )
+	`
+	if err := p.db.GetContext(ctx, file, fileQuery, fileID, userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, models.ErrFileNotFound
+		}
+		return nil, nil, err
+	}
+
+	env := &models.FileKeyEnvelope{}
+	envQuery := `
+		SELECT file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version, created_at
+		FROM file_recipient_key_envelopes
+		WHERE file_id = $1
+		  AND recipient_cns_user_id = $2
+		  AND recipient_device_id = $3
+	`
+	if err := p.db.GetContext(ctx, env, envQuery, fileID, userID, deviceID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil, models.ErrFileNotFound
 		}
