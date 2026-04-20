@@ -149,6 +149,8 @@ func main() {
 			file.POST("/:id/report", reportHandler.Report)
 		}
 
+		api.GET("/tunnels/:id/files/:file_id/access", tunnelHandler.GuestFileAccess)
+
 		me := api.Group("/me")
 		{
 			me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)

@@ -616,6 +616,44 @@ func (p *Postgres) GetTunnelRecipientFileWithEnvelope(ctx context.Context, userI
 	return file, env, nil
 }
 
+func (p *Postgres) GetTunnelFileWithEnvelope(ctx context.Context, tunnelID, fileID string) (*models.File, *models.FileKeyEnvelope, error) {
+	file := &models.File{}
+	fileQuery := `
+		SELECT f.*
+		FROM files f
+		WHERE f.id = $1
+		  AND f.tunnel_id = $2
+		  AND f.is_deleted = FALSE
+	`
+	if err := p.db.GetContext(ctx, file, fileQuery, fileID, tunnelID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, models.ErrFileNotFound
+		}
+		return nil, nil, err
+	}
+
+	if time.Now().After(file.ExpiresAt) {
+		return nil, nil, models.ErrFileExpired
+	}
+
+	env := &models.FileKeyEnvelope{}
+	envQuery := `
+		SELECT file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version, created_at
+		FROM file_key_envelopes
+		WHERE file_id = $1 AND owner_encrypted = FALSE
+		LIMIT 1
+	`
+	if err := p.db.GetContext(ctx, env, envQuery, fileID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, models.ErrFileNotFound
+		}
+		return nil, nil, err
+	}
+
+	return file, env, nil
+}
+
+
 func (p *Postgres) SaveUserKeyEnvelope(ctx context.Context, envelope *models.UserKeyEnvelope) error {
 	query := `
 		INSERT INTO user_key_envelopes (id, cns_user_id, device_id, wrapped_user_key, uk_wrap_alg, uk_wrap_meta, key_version)

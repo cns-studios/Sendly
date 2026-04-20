@@ -987,7 +987,7 @@
         tunnelEmpty.classList.add('hidden');
         tunnelList.classList.remove('hidden');
         tunnelList.innerHTML = files.map((item) => `
-            <article class="recent-item" data-file-id="${escapeHtml(item.file_id || '')}" data-file-name="${escapeHtml(item.filename || '')}">
+            <article class="recent-item" data-file-id="${escapeHtml(item.file_id || '')}" data-file-name="${escapeHtml(item.filename || '')}" data-tunnel-id="${escapeHtml(activeTunnel?.id || '')}">
                 <div class="recent-main">
                     <div class="recent-name-wrap">
                         <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
@@ -1021,10 +1021,11 @@
 
         const fileId = item.dataset.fileId;
         const fileName = item.dataset.fileName;
+        const tunnelId = item.dataset.tunnelId;
 
         try {
             button.disabled = true;
-            await downloadOwnedFile(fileId, fileName);
+            await downloadOwnedFile(fileId, fileName, tunnelId);
         } catch (error) {
             console.error('Tunnel download failed:', error);
             showErrorBanner(error.message || 'Tunnel file download failed.');
@@ -1325,8 +1326,8 @@
         }
     }
 
-    async function downloadOwnedFile(fileId, fileName) {
-        const passphrase = await getOwnedFilePassphrase(fileId);
+    async function downloadOwnedFile(fileId, fileName, tunnelId = '') {
+        const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
         showDownloadActivityOverlay('loading');
         try {
             const response = await fetch(`/api/file/${fileId}/download`);
@@ -1358,21 +1359,31 @@
         }
     }
 
-    async function getOwnedFilePassphrase(fileId) {
+    async function getOwnedFilePassphrase(fileId, tunnelId = '') {
         const cached = SecureCrypto.getCachedFileKey(fileId);
         if (cached) {
             return cached;
         }
 
-        if (!authDeviceIdentity) {
-            await ensureDeviceReady();
+        let accessUrl = '';
+        if (AUTHENTICATED) {
+            if (!authDeviceIdentity) {
+                await ensureDeviceReady();
+            }
+            accessUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
+        } else {
+            if (!tunnelId) {
+                throw new Error('Guest decryption requires an active tunnel.');
+            }
+            accessUrl = `/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`;
         }
-        const response = await fetch(`/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`, {
+
+        const response = await fetch(accessUrl, {
             headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
         });
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Unable to access decryption key for this file. Please try logging out and back in.');
+            throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
         }
 
         const payload = await response.json();
@@ -1380,7 +1391,12 @@
         const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
         let dekBytes;
 
-        if (dekWrapAlg.startsWith('RSA-OAEP')) {
+        if (dekWrapAlg.startsWith('RAW-DEK')) {
+            dekBytes = wrappedDEK;
+        } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
+            if (!AUTHENTICATED) {
+                throw new Error('Unsupported key envelope for guest decryption.');
+            }
             try {
                 dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
             } catch (error) {
@@ -1389,6 +1405,9 @@
                 throw lockedError;
             }
         } else {
+            if (!AUTHENTICATED) {
+                throw new Error('Unsupported key envelope for guest decryption.');
+            }
             let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
             if (!userKeyRaw) {
                 const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
@@ -1751,6 +1770,17 @@
 
         try {
             generatedPassword = await SecureCrypto.generatePassword();
+            const dekBytes = new TextEncoder().encode(generatedPassword);
+
+            if (!AUTHENTICATED && activeTunnel?.id) {
+                // Guest-to-guest tunnel uploads store a raw DEK envelope for automatic tunnel decryption.
+                finalizeEnvelopePayload = {
+                    wrapped_dek_b64: SecureCrypto.toBase64(dekBytes),
+                    dek_wrap_alg: 'RAW-DEK-v1',
+                    dek_wrap_version: 1
+                };
+            }
+
             if (AUTHENTICATED) {
                 if (!authUserKeyRaw) {
                     await ensureDeviceReady();
@@ -1760,7 +1790,6 @@
                     throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
                 }
                 if (authUserKeyRaw) {
-                    const dekBytes = new TextEncoder().encode(generatedPassword);
                     const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
                     finalizeEnvelopePayload = {
                         wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
@@ -2089,6 +2118,17 @@
             };
             if (activeTunnel?.id) {
                 finalizePayload.tunnel_id = activeTunnel.id;
+
+                if (AUTHENTICATED && generatedPassword && activeTunnel?.peer_cns_user_id && activeTunnel.peer_cns_user_id !== CNS_USER_ID) {
+                    if (!finalizePayload.peer_wrapped_dek_b64) {
+                        const dekBytes = new TextEncoder().encode(generatedPassword);
+                        const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
+                        if (!peerEnvelope) {
+                            throw new Error('Cross-account tunnel upload requires a peer key envelope. Peer may not be ready yet.');
+                        }
+                        Object.assign(finalizePayload, peerEnvelope);
+                    }
+                }
             } else {
                 finalizePayload.duration = selectedDuration();
             }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -289,6 +290,52 @@ func (h *TunnelHandler) PeerWrapKey(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Peer device is not trusted", Code: "PEER_DEVICE_NOT_TRUSTED"})
+}
+
+func (h *TunnelHandler) GuestFileAccess(c *gin.Context) {
+	tunnelID := c.Param("id")
+	fileID := c.Param("file_id")
+	if tunnelID == "" || fileID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "tunnel id and file_id are required", Code: "INVALID_REQUEST"})
+		return
+	}
+
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if err == models.ErrFileExpired {
+			status = http.StatusGone
+		}
+		c.JSON(status, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+
+	if tunnel.Status != models.TunnelStatusActive && tunnel.Status != models.TunnelStatusPending {
+		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+
+	file, fileEnvelope, err := h.db.GetTunnelFileWithEnvelope(c.Request.Context(), tunnelID, fileID)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, models.ErrorResponse{Error: "File not found in tunnel", Code: "FILE_NOT_FOUND"})
+		return
+	}
+
+	resp := models.FileAccessResponse{
+		File: *file.ToMetadata(),
+		FileKeyEnvelope: models.FileKeyEnvelopeResponse{
+			WrappedDEKB64:   base64.StdEncoding.EncodeToString(fileEnvelope.WrappedDEK),
+			DEKWrapAlg:      fileEnvelope.DEKWrapAlg,
+			DEKWrapVersion:  fileEnvelope.DEKWrapVersion,
+			DEKWrapNonceB64: base64.StdEncoding.EncodeToString(fileEnvelope.DEKWrapNonce),
+		},
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *TunnelHandler) generateUniqueTunnelCode(ctx context.Context) (string, error) {
