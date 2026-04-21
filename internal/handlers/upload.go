@@ -133,6 +133,38 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			OwnerCNSUserName: &uname,
 		}
 	}
+
+	if req.WrappedDEKB64 != "" {
+		if opts == nil {
+			opts = &services.FinalizeUploadOptions{}
+		}
+
+		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
+		if decodeErr != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Error:   "Invalid wrapped DEK",
+				Code:    "INVALID_WRAPPED_DEK",
+				Details: decodeErr.Error(),
+			})
+			return
+		}
+		opts.WrappedDEK = wrappedDEK
+		opts.DEKWrapAlg = req.DEKWrapAlg
+		opts.DEKWrapVersion = req.DEKWrapVersion
+
+		if req.DEKWrapNonceB64 != "" {
+			nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
+			if nonceErr != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{
+					Error:   "Invalid DEK wrap nonce",
+					Code:    "INVALID_DEK_WRAP_NONCE",
+					Details: nonceErr.Error(),
+				})
+				return
+			}
+			opts.DEKWrapNonce = nonce
+		}
+	}
 	if req.TunnelID != "" {
 		if opts == nil {
 			opts = &services.FinalizeUploadOptions{}
@@ -144,34 +176,6 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 					Code:  "WRAPPED_DEK_REQUIRED",
 				})
 				return
-			}
-		}
-
-		if req.WrappedDEKB64 != "" {
-			wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
-			if decodeErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{
-					Error:   "Invalid wrapped DEK",
-					Code:    "INVALID_WRAPPED_DEK",
-					Details: decodeErr.Error(),
-				})
-				return
-			}
-			opts.WrappedDEK = wrappedDEK
-			opts.DEKWrapAlg = req.DEKWrapAlg
-			opts.DEKWrapVersion = req.DEKWrapVersion
-
-			if req.DEKWrapNonceB64 != "" {
-				nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
-				if nonceErr != nil {
-					c.JSON(http.StatusBadRequest, models.ErrorResponse{
-						Error:   "Invalid DEK wrap nonce",
-						Code:    "INVALID_DEK_WRAP_NONCE",
-						Details: nonceErr.Error(),
-					})
-					return
-				}
-				opts.DEKWrapNonce = nonce
 			}
 		}
 

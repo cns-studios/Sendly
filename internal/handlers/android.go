@@ -339,6 +339,27 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 	uid := int64(user.ID)
 	uname := user.Username
 	opts := &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
+	if req.WrappedDEKB64 != "" {
+		if opts == nil {
+			opts = &services.FinalizeUploadOptions{}
+		}
+		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
+		if decodeErr != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
+			return
+		}
+		opts.WrappedDEK = wrappedDEK
+		opts.DEKWrapAlg = req.DEKWrapAlg
+		opts.DEKWrapVersion = req.DEKWrapVersion
+		if req.DEKWrapNonceB64 != "" {
+			nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
+			if nonceErr != nil {
+				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
+				return
+			}
+			opts.DEKWrapNonce = nonce
+		}
+	}
 	if req.TunnelID != "" {
 		if req.DeviceID == "" {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "device_id is required for authenticated uploads", Code: "DEVICE_ID_REQUIRED"})
@@ -348,25 +369,6 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 		if _, trustedErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); trustedErr != nil {
 			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "DEVICE_NOT_TRUSTED"})
 			return
-		}
-
-		if req.WrappedDEKB64 != "" {
-			wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
-			if decodeErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
-				return
-			}
-			opts.WrappedDEK = wrappedDEK
-			opts.DEKWrapAlg = req.DEKWrapAlg
-			opts.DEKWrapVersion = req.DEKWrapVersion
-			if req.DEKWrapNonceB64 != "" {
-				nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
-				if nonceErr != nil {
-					c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
-					return
-				}
-				opts.DEKWrapNonce = nonce
-			}
 		}
 
 		tunnel, err := h.db.GetTunnelByID(c.Request.Context(), req.TunnelID)
