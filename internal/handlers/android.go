@@ -336,12 +336,10 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 		return
 	}
 
-	var opts *services.FinalizeUploadOptions
+	uid := int64(user.ID)
+	uname := user.Username
+	opts := &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
 	if req.TunnelID != "" {
-		uid := int64(user.ID)
-		uname := user.Username
-		opts = &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
-
 		if req.DeviceID == "" {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "device_id is required for authenticated uploads", Code: "DEVICE_ID_REQUIRED"})
 			return

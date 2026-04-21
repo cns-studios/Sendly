@@ -125,16 +125,19 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	tier := middleware.GetTier(h.cfg, user)
 	var opts *services.FinalizeUploadOptions
+	if user != nil {
+		uid := int64(user.ID)
+		uname := user.Username
+		opts = &services.FinalizeUploadOptions{
+			OwnerCNSUserID:   &uid,
+			OwnerCNSUserName: &uname,
+		}
+	}
 	if req.TunnelID != "" {
-		opts = &services.FinalizeUploadOptions{}
+		if opts == nil {
+			opts = &services.FinalizeUploadOptions{}
+		}
 		if user != nil {
-			uid := int64(user.ID)
-			uname := user.Username
-			opts = &services.FinalizeUploadOptions{
-				OwnerCNSUserID:   &uid,
-				OwnerCNSUserName: &uname,
-			}
-
 			if req.WrappedDEKB64 == "" {
 				c.JSON(http.StatusBadRequest, models.ErrorResponse{
 					Error: "Trusted device approval is required before authenticated uploads can be finalized",
