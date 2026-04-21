@@ -142,6 +142,9 @@ func (h *AndroidHandler) ListFiles(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to list files", Code: "LIST_FAILED"})
 		return
 	}
+	if items == nil {
+		items = []models.OwnedFileListItem{}
+	}
 
 	for i := range items {
 		items[i].ShareURL = h.cfg.BaseURL + "/shared/" + items[i].FileID
