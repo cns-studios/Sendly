@@ -58,7 +58,7 @@ func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, user
 	if err == nil {
 		for _, device := range devices {
 			if device.ID == enrollment.RequestDeviceID {
-				requestDevice = device
+				requestDevice = normalizeDevicePublicKeyForResponse(device)
 				break
 			}
 		}

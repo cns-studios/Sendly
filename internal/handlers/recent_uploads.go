@@ -172,6 +172,13 @@ func (h *RecentUploadsHandler) handleDeviceRegistration(c *gin.Context, forceRec
 		return
 	}
 
+	normalizedPublicKeyJWK, err := normalizeDevicePublicKeyJWK(req.PublicKeyJWK)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid device public key", Code: "INVALID_PUBLIC_KEY_JWK", Details: err.Error()})
+		return
+	}
+	req.PublicKeyJWK = normalizedPublicKeyJWK
+
 	keyVersion := req.KeyVersion
 	if keyVersion <= 0 {
 		keyVersion = 1
@@ -355,7 +362,7 @@ func (h *RecentUploadsHandler) ListPendingEnrollments(c *gin.Context) {
 	}
 	deviceByID := make(map[string]models.UserDevice, len(devices))
 	for _, device := range devices {
-		deviceByID[device.ID] = device
+		deviceByID[device.ID] = normalizeDevicePublicKeyForResponse(device)
 	}
 
 	respItems := make([]models.PendingEnrollmentItem, 0, len(items))

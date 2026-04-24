@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -506,6 +507,13 @@ func (h *AndroidHandler) handleDeviceRegistration(c *gin.Context, forceRecovery 
 		return
 	}
 
+	normalizedPublicKeyJWK, err := normalizeDevicePublicKeyJWK(req.PublicKeyJWK)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid device public key", Code: "INVALID_PUBLIC_KEY_JWK", Details: err.Error()})
+		return
+	}
+	req.PublicKeyJWK = normalizedPublicKeyJWK
+
 	keyVersion := req.KeyVersion
 	if keyVersion <= 0 {
 		keyVersion = 1
@@ -685,7 +693,7 @@ func (h *AndroidHandler) ListPendingEnrollments(c *gin.Context) {
 	}
 	deviceByID := make(map[string]models.UserDevice, len(devices))
 	for _, device := range devices {
-		deviceByID[device.ID] = device
+		deviceByID[device.ID] = normalizeDevicePublicKeyForResponse(device)
 	}
 
 	respItems := make([]models.PendingEnrollmentItem, 0, len(items))
@@ -900,7 +908,7 @@ func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int
 	if err == nil {
 		for _, device := range devices {
 			if device.ID == enrollment.RequestDeviceID {
-				requestDevice = device
+				requestDevice = normalizeDevicePublicKeyForResponse(device)
 				break
 			}
 		}
@@ -969,4 +977,50 @@ func generateAndroidVerificationCode(length int) string {
 		result[i] = digits[n.Int64()]
 	}
 	return string(result)
+}
+
+func normalizeDevicePublicKeyJWK(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("public_key_jwk is required")
+	}
+
+	var parsed any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("public_key_jwk must be valid JSON: %w", err)
+	}
+
+	switch v := parsed.(type) {
+	case map[string]any:
+		normalized, err := json.Marshal(v)
+		if err != nil {
+			return nil, fmt.Errorf("failed to normalize public_key_jwk: %w", err)
+		}
+		return normalized, nil
+	case string:
+		inner := strings.TrimSpace(v)
+		if inner == "" {
+			return nil, fmt.Errorf("public_key_jwk string is empty")
+		}
+
+		var innerObj map[string]any
+		if err := json.Unmarshal([]byte(inner), &innerObj); err != nil {
+			return nil, fmt.Errorf("public_key_jwk string must encode a JSON object: %w", err)
+		}
+
+		normalized, err := json.Marshal(innerObj)
+		if err != nil {
+			return nil, fmt.Errorf("failed to normalize public_key_jwk string value: %w", err)
+		}
+		return normalized, nil
+	default:
+		return nil, fmt.Errorf("public_key_jwk must be a JSON object")
+	}
+}
+
+func normalizeDevicePublicKeyForResponse(device models.UserDevice) models.UserDevice {
+	normalized, err := normalizeDevicePublicKeyJWK(device.PublicKeyJWK)
+	if err == nil {
+		device.PublicKeyJWK = normalized
+	}
+	return device
 }
