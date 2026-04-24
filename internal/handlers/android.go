@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -342,9 +341,6 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 	uname := user.Username
 	opts := &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
 	if req.WrappedDEKB64 != "" {
-		if opts == nil {
-			opts = &services.FinalizeUploadOptions{}
-		}
 		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
 		if decodeErr != nil {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
