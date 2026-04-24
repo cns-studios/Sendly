@@ -71,11 +71,11 @@ func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, user
 	}
 
 	h.hub.broadcast(userID, gin.H{
-		"type":           eventType,
-		"enrollment":     enrollment,
-		"request_device": requestDevice,
+		"type":               eventType,
+		"enrollment":         enrollment,
+		"request_device":     requestDevice,
 		"approver_device_id": approverDeviceID,
-		"pending_count":  pendingCount,
+		"pending_count":      pendingCount,
 	})
 }
 
