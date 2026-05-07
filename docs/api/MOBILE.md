@@ -2,7 +2,7 @@
 
 This document describes the mobile app API.
 
-Current backend namespace is `/android`. If your client code calls this surface as "mobile", map `/mobile/*` documentation entries to `/android/*` routes.
+Current backend namespace is `/android`.
 
 ## Base URL
 
