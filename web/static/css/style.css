@@ -1451,11 +1451,7 @@ body.page-link .processing-container {
 }
 
 body.page-link .spinner-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 3rem;
+    display: none;
 }
 
 body.page-link .spinner-outer {

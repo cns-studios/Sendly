@@ -22,6 +22,8 @@
     let participants = [];
     let isHost = false;
     let hasStarted = false;
+    let guestNameMap = new Map();
+    let guestCounter = 0;
 
     const initialView = document.getElementById('initialView');
     const createView = document.getElementById('createView');
@@ -146,6 +148,22 @@
         });
     }
 
+    function getParticipantName(p) {
+        const userId = p.cns_user_id;
+        if (userId && userId.Valid) {
+            return 'User';
+        }
+        const deviceId = p.device_id?.String || p.device_id;
+        if (deviceId) {
+            if (!guestNameMap.has(deviceId)) {
+                guestCounter++;
+                guestNameMap.set(deviceId, `Guest${guestCounter}`);
+            }
+            return guestNameMap.get(deviceId);
+        }
+        return 'Guest';
+    }
+
     function renderParticipants(items) {
         const container = isHost ? peopleRow : queuePeopleRow;
         if (!container) return;
@@ -173,7 +191,7 @@
                             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                         </svg>
                     </div>
-                    <span class="person-name">${p.cns_user_id ? `User ${p.cns_user_id}` : 'Guest'}</span>
+                    <span class="person-name">${getParticipantName(p)}</span>
                 `;
                 container.appendChild(person);
             });
@@ -389,7 +407,7 @@
     async function refreshTunnelState() {
         if (!activeTunnel?.id) return;
         try {
-            const response = await fetch(`/api/me/tunnels/${activeTunnel.id}`, {
+            const response = await fetch(`/api/me/tunnels/${activeTunnel.id}?t=${Date.now()}`, {
                 headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
             });
             if (!response.ok) {
@@ -405,6 +423,15 @@
             if (payload?.tunnel) {
                 activeTunnel = payload.tunnel;
                 participants = payload.participants || [];
+                const tunnelStatus = activeTunnel.status || '';
+                if (!isHost && !hasStarted && tunnelStatus === 'active') {
+                    hasStarted = true;
+                    setView('session');
+                    if (!sessionPassword) {
+                        sessionPassword = await SecureCrypto.generatePassword();
+                        localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, sessionPassword);
+                    }
+                }
                 updateTunnelUI();
             }
             renderTunnelFiles(payload?.files || []);
@@ -436,6 +463,8 @@
         participants = [];
         isHost = false;
         hasStarted = false;
+        guestNameMap.clear();
+        guestCounter = 0;
         if (fileList) fileList.innerHTML = '';
         if (fileListEmpty) fileListEmpty.classList.remove('hidden');
         if (fileList) fileList.classList.add('hidden');

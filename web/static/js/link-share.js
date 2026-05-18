@@ -153,8 +153,8 @@
 
         stageEntry.classList.add('hidden');
         stageProcessing.classList.remove('hidden');
-        processMain.textContent = 'Uploading';
-        processSub.textContent = '';
+        processMain.textContent = 'Uploading...';
+        processSub.textContent = '0%';
         runProtocolInBackground();
     }
 
@@ -174,8 +174,8 @@
         updateFinalizeButtonState();
         stagePending.classList.add('hidden');
         stageProcessing.classList.remove('hidden');
-        processMain.textContent = 'Uploading';
-        processSub.textContent = '';
+        processMain.textContent = 'Uploading...';
+        processSub.textContent = '0%';
 
         if (uploadComplete) { finalizeUpload(); }
         else if (uploadError) {
@@ -199,9 +199,9 @@
     function updateUploadProgress() {
         if (totalChunks === 0) return;
         const pct = Math.floor((uploadedChunks / totalChunks) * 100);
-        progressVal.textContent = `${pct}%`;
-        processMain.textContent = 'Uploading';
-        processSub.textContent = '';
+        processMain.textContent = 'Uploading...';
+        processSub.textContent = `${pct}%`;
+        if (progressVal) progressVal.textContent = `${pct}%`;
     }
 
     async function runProtocolInBackground() {
@@ -232,6 +232,8 @@
             uploadComplete = true;
             isUploading = false;
             updateFinalizeButtonState();
+            stageProcessing.classList.add('hidden');
+            stagePending.classList.remove('hidden');
         } catch (error) {
             console.error('Upload pipeline failed:', error);
             uploadError = error.message;
@@ -249,13 +251,8 @@
         totalChunks = initResponse.total_chunks;
         uploadedChunks = 0;
         await uploadChunksInBackground(initResponse);
-        await completeUpload();
+        const completeResponse = await completeUpload();
         await waitForAssembly(uploadSessionId);
-        const completeResponse = await fetch('/api/upload/complete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-            body: JSON.stringify({ session_id: uploadSessionId, confirmed: true })
-        }).then(r => r.json());
         pendingExpiresAt = completeResponse.pending_expires_at ? new Date(completeResponse.pending_expires_at).getTime() : null;
         startPendingCountdown();
     }
