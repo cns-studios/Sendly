@@ -139,6 +139,7 @@ type UploadInitRequest struct {
 	FileSize    int64  `json:"file_size" binding:"required,gt=0"`
 	TotalChunks int    `json:"total_chunks" binding:"required,gt=0"`
 	ChunkSize   int64  `json:"chunk_size" binding:"required,gt=0"`
+	TunnelID    string `json:"tunnel_id"`
 }
 
 type UploadInitResponse struct {

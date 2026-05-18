@@ -9,7 +9,9 @@
     const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
     const TOS_COOKIE_NAME = 'shareit_tos_accepted';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
-    const ALLOWED_DURATIONS = window.CONFIG?.allowedDurations || ['24h', '7d'];    const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
+    const RETENTION = AUTHENTICATED ? '90d' : '7d';
+    const RETENTION_LABEL = AUTHENTICATED ? '90 Days' : '7 Days';
+    const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
     const RECENT_UPLOADS_PER_PAGE = 10;
     const RECENT_SEARCH_DEBOUNCE_MS = 180;
@@ -42,6 +44,9 @@
     let recentSearchOpen = false;
     let activeTunnel = null;
     let tunnelPollTimer = null;
+    let idleCopyDone = false;
+    let idleCopyBannerShown = false;
+    let lastShareUrl = '';
 
      
     const dropZone = document.getElementById('drop-zone');
@@ -218,22 +223,6 @@
             const nudge = document.getElementById('auth-nudge');
             if (nudge) nudge.classList.remove('hidden');
         }
-
-        document.querySelectorAll('input[name="expiration"]').forEach(input => {
-            const allowed = ALLOWED_DURATIONS.includes(input.value);
-            input.disabled = !allowed;
-            const label = input.closest('.duration-option');
-            if (label) {
-                if (allowed) {
-                    label.classList.remove('duration-locked');
-                    const hint = label.querySelector('.lock-hint');
-                    if (hint) hint.style.display = 'none';
-                }
-            }
-        });
-
-        const firstAllowed = document.querySelector('input[name="expiration"]:not([disabled])');
-        if (firstAllowed) firstAllowed.checked = true;
     }
 
     async function ensureDeviceReady() {
@@ -1585,10 +1574,6 @@
             });
         });
 
-        document.querySelectorAll('input[name="expiration"]').forEach(input => {
-            input.addEventListener('change', updateFinalizeButtonState);
-        });
-
         recentSearchToggle?.addEventListener('click', () => {
             setRecentSearchOpen(!recentSearchOpen);
         });
@@ -1684,7 +1669,7 @@
         if (isUploading || isFinalizing) return;
 
         if (file.size > MAX_FILE_SIZE) {
-            showErrorBanner(`File too large. Maximum size is ${SecureCrypto.formatFileSize(MAX_FILE_SIZE)}`);
+            showFileSizeWarning();
             return;
         }
         if (file.size === 0) {
@@ -1699,14 +1684,24 @@
         dropZone.classList.add('hidden');
         fileDetails.classList.remove('hidden');
         stageEntry.classList.add('hidden');
-        stageProcessing.classList.add('hidden');
-        stagePending.classList.remove('hidden');
+        stageProcessing.classList.remove('hidden');
+        stagePending.classList.add('hidden');
         stageOutput.classList.add('hidden');
-        statusText.textContent = 'Ready';
-        statusText.style.color = 'var(--accent)';
-        updateFinalizeButtonState();
+        statusText.textContent = 'Uploading';
+        processMain.textContent = 'Uploading';
+        processSub.textContent = '';
 
         runProtocolInBackground();
+    }
+
+    function showFileSizeWarning() {
+        const sub = dropZone.querySelector('p');
+        if (sub) {
+            const original = sub.textContent;
+            sub.textContent = `File too large. Maximum: ${SecureCrypto.formatFileSize(MAX_FILE_SIZE)}`;
+            sub.style.color = '#ff4444';
+            setTimeout(() => { sub.textContent = original; sub.style.color = ''; }, 3000);
+        }
     }
 
     function handleFinalize() {
@@ -1749,17 +1744,8 @@
         finalizeBtn.disabled = isFinalizing;
     }
     function updateUploadProgress() {
-        if (totalChunks === 0) return;
-        const pct = Math.floor((uploadedChunks / totalChunks) * 100);
-        progressVal.textContent = `${pct}%`;
-        processSub.textContent = pct < 30
-            ? 'Sending your file...'
-            : pct < 60
-            ? 'Upload in progress...'
-            : pct < 90
-            ? 'Almost there...'
-            : 'Finishing up...';
         processMain.textContent = 'Uploading';
+        processSub.textContent = '';
     }
 
     async function runProtocolInBackground() {
@@ -1814,13 +1800,8 @@
             uploadComplete = true;
             isUploading = false;
             updateFinalizeButtonState();
-            if (activeTunnel?.id && !isFinalizing) {
-                handleFinalize();
-                return;
-            }
             if (!isFinalizing) {
-                statusText.textContent = 'Ready';
-                statusText.style.color = 'var(--accent)';
+                handleFinalize();
             }
         } catch (error) {
             console.error('Upload pipeline failed:', error);
@@ -1830,9 +1811,9 @@
             isFinalizing = false;
             updateFinalizeButtonState();
             stageProcessing.classList.add('hidden');
-            stagePending.classList.remove('hidden');
-            statusText.textContent = 'Upload Failed';
-            statusText.style.color = 'var(--color-error)';
+            stageEntry.classList.remove('hidden');
+            statusText.textContent = 'Ready';
+            statusText.style.color = 'var(--accent)';
             showErrorBanner('Upload failed: ' + error.message);
         }
     }
@@ -2093,19 +2074,11 @@
     }
 
     function selectedDuration() {
-        const checked = document.querySelector('input[name="expiration"]:checked');
-        return checked ? checked.value : '24h';
+        return RETENTION;
     }
 
     function selectedDurationLabel() {
-        const duration = selectedDuration();
-        switch(duration) {
-            case '24h': return '24 Hours';
-            case '7d': return '7 Days';
-            case '30d': return '30 Days';
-            case '90d': return '3 Months';
-            default: return '24 Hours';
-        }
+        return RETENTION_LABEL;
     }
 
     async function finalizeUpload() {
@@ -2192,16 +2165,17 @@
         outUrl.value = fullShareUrl;
         outPin.value = response.numeric_code;
         outKey.value = generatedPassword;
-        outExpiryLabel.textContent = `Expiry: ${selectedDurationLabel()} retention.`;
+        outExpiryLabel.textContent = `Expiry: ${RETENTION_LABEL} retention.`;
         uploadSessionId = null;
-
-        attemptAutoCopy(fullShareUrl);
+        lastShareUrl = fullShareUrl;
 
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.remove('hidden');
         statusText.textContent = 'Secure';
         statusText.style.color = 'var(--accent)';
+
+        setupIdleCopy(fullShareUrl);
 
         if (AUTHENTICATED) {
             loadRecentUploads().catch(() => {});
@@ -2392,6 +2366,44 @@
         }, 3500);
     }
 
+    function setupIdleCopy(text) {
+        idleCopyDone = false;
+        idleCopyBannerShown = false;
+        const infoBox = stageOutput.querySelector('.info-box');
+        if (infoBox) {
+            const idleMsg = document.createElement('p');
+            idleMsg.className = 'info-text';
+            idleMsg.id = 'idle-copy-msg';
+            idleMsg.textContent = 'Move your mouse to copy link';
+            idleMsg.style.cursor = 'pointer';
+            idleMsg.style.color = 'var(--accent)';
+            infoBox.parentNode.insertBefore(idleMsg, infoBox);
+        }
+
+        const onMove = () => {
+            copyToClipboard(text, true, true).then(ok => {
+                if (ok) {
+                    idleCopyDone = true;
+                    const msg = document.getElementById('idle-copy-msg');
+                    if (msg) msg.textContent = 'Link copied to clipboard';
+                    showShareBanner();
+                    setTimeout(() => {
+                        idleCopyDone = false;
+                        const msg2 = document.getElementById('idle-copy-msg');
+                        if (msg2) msg2.textContent = 'Move your mouse to copy link';
+                        document.addEventListener('mousemove', onMove, { once: true });
+                        document.addEventListener('touchstart', onMove, { once: true });
+                        document.addEventListener('keydown', onMove, { once: true });
+                    }, 4000);
+                }
+            });
+        };
+
+        document.addEventListener('mousemove', onMove, { once: true });
+        document.addEventListener('touchstart', onMove, { once: true });
+        document.addEventListener('keydown', onMove, { once: true });
+    }
+
     function showToast(message) {
          
         const existingToast = document.querySelector('.toast');
@@ -2442,8 +2454,10 @@
         isUploading = false;
         uploadComplete = false;
         uploadError = null;
+        idleCopyDone = false;
+        idleCopyBannerShown = false;
+        lastShareUrl = '';
 
-         
         if (sessionToCancel) {
             fetch('/api/upload/cancel', {
                 method: 'DELETE',
@@ -2454,6 +2468,21 @@
                 body: JSON.stringify({ session_id: sessionToCancel })
             }).catch(e => console.error('Failed to cancel upload:', e));
         }
+
+        fileInput.value = '';
+        dropZone.classList.remove('hidden');
+        fileDetails.classList.add('hidden');
+        finalizeBtn.disabled = true;
+        statusText.textContent = 'Ready';
+        statusText.style.color = 'var(--accent)';
+        stageEntry.classList.remove('hidden');
+        stageProcessing.classList.add('hidden');
+        stagePending.classList.add('hidden');
+        stageOutput.classList.add('hidden');
+
+        const msg = document.getElementById('idle-copy-msg');
+        if (msg) msg.remove();
+    }
 
          
         fileInput.value = '';

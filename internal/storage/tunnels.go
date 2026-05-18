@@ -144,23 +144,43 @@ func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, userID int64
 		return nil, models.ErrFileExpired
 	}
 
-	if tunnel.PeerCNSUserID.Valid {
-		_ = tx.Rollback()
-		return nil, models.ErrFileNotFound
-	}
-
 	_, err = tx.ExecContext(ctx, `
-		UPDATE tunnels
-		SET peer_cns_user_id = $1,
-			peer_device_id = $2,
-			peer_confirmed = TRUE,
-			status = CASE WHEN initiator_confirmed THEN $3 ELSE $4 END,
-			confirmed_at = CASE WHEN initiator_confirmed THEN NOW() ELSE confirmed_at END
-		WHERE id = $5
-	`, userID, nullableString(deviceID), models.TunnelStatusActive, models.TunnelStatusJoined, tunnelID)
+		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING
+	`, tunnelID, nullableInt64(userID), nullableString(deviceID))
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
+	}
+
+	if !tunnel.PeerCNSUserID.Valid && userID != 0 {
+		_, err = tx.ExecContext(ctx, `
+			UPDATE tunnels
+			SET peer_cns_user_id = $1,
+				peer_device_id = $2,
+				peer_confirmed = TRUE,
+				status = CASE WHEN initiator_confirmed THEN $3 ELSE $4 END,
+				confirmed_at = CASE WHEN initiator_confirmed THEN NOW() ELSE confirmed_at END
+			WHERE id = $5
+		`, userID, nullableString(deviceID), models.TunnelStatusActive, models.TunnelStatusJoined, tunnelID)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
+	} else if !tunnel.PeerCNSUserID.Valid && userID == 0 && deviceID != "" {
+		_, err = tx.ExecContext(ctx, `
+			UPDATE tunnels
+			SET peer_device_id = $1,
+				peer_confirmed = TRUE,
+				status = CASE WHEN initiator_confirmed THEN $2 ELSE $3 END,
+				confirmed_at = CASE WHEN initiator_confirmed THEN NOW() ELSE confirmed_at END
+			WHERE id = $4
+		`, nullableString(deviceID), models.TunnelStatusActive, models.TunnelStatusJoined, tunnelID)
+		if err != nil {
+			_ = tx.Rollback()
+			return nil, err
+		}
 	}
 
 	if err := tx.GetContext(ctx, &tunnel, `SELECT * FROM tunnels WHERE id = $1`, tunnelID); err != nil {
@@ -298,6 +318,45 @@ func (p *Postgres) TunnelCodeExists(ctx context.Context, code string) (bool, err
 	query := `SELECT COUNT(*) FROM tunnels WHERE code = $1`
 	err := p.db.GetContext(ctx, &count, query, code)
 	return count > 0, err
+}
+
+func (p *Postgres) AddTunnelParticipant(ctx context.Context, tunnelID string, userID int64, deviceID string) error {
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING
+	`, tunnelID, nullableInt64(userID), nullableString(deviceID))
+	return err
+}
+
+func (p *Postgres) GetTunnelParticipants(ctx context.Context, tunnelID string) ([]models.TunnelParticipant, error) {
+	var participants []models.TunnelParticipant
+	query := `SELECT * FROM tunnel_participants WHERE tunnel_id = $1 ORDER BY joined_at ASC`
+	err := p.db.SelectContext(ctx, &participants, query, tunnelID)
+	return participants, err
+}
+
+func (p *Postgres) RemoveTunnelParticipant(ctx context.Context, tunnelID string, userID int64, deviceID string) error {
+	if userID != 0 {
+		_, err := p.db.ExecContext(ctx, `DELETE FROM tunnel_participants WHERE tunnel_id = $1 AND cns_user_id = $2`, tunnelID, userID)
+		return err
+	}
+	_, err := p.db.ExecContext(ctx, `DELETE FROM tunnel_participants WHERE tunnel_id = $1 AND device_id = $2`, tunnelID, deviceID)
+	return err
+}
+
+func (p *Postgres) CountTunnelParticipants(ctx context.Context, tunnelID string) (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM tunnel_participants WHERE tunnel_id = $1`
+	err := p.db.GetContext(ctx, &count, query, tunnelID)
+	return count, err
+}
+
+func nullableInt64(value int64) sql.NullInt64 {
+	if value == 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: value, Valid: true}
 }
 
 func nullableString(value string) sql.NullString {

@@ -34,14 +34,23 @@ type TunnelFileListItem struct {
 	ExpiresAt time.Time `db:"expires_at" json:"expires_at"`
 }
 
+type TunnelParticipant struct {
+	ID          string         `db:"id" json:"id"`
+	TunnelID    string         `db:"tunnel_id" json:"tunnel_id"`
+	CNSUserID   sql.NullInt64  `db:"cns_user_id" json:"cns_user_id"`
+	DeviceID    sql.NullString `db:"device_id" json:"device_id"`
+	JoinedAt    time.Time      `db:"joined_at" json:"joined_at"`
+}
+
 type TunnelStartRequest struct {
 	Duration string `json:"duration" binding:"required"`
 	DeviceID string `json:"device_id"`
 }
 
 type TunnelStartResponse struct {
-	Tunnel    Tunnel `json:"tunnel"`
-	QRPayload string `json:"qr_payload"`
+	Tunnel        Tunnel              `json:"tunnel"`
+	QRPayload     string              `json:"qr_payload"`
+	Participants  []TunnelParticipant `json:"participants,omitempty"`
 }
 
 type TunnelJoinRequest struct {
@@ -83,7 +92,7 @@ func ParseTunnelDuration(d string) (time.Duration, error) {
 	if err != nil {
 		return 0, ErrInvalidDuration
 	}
-	if parsed < 10*time.Minute || parsed > 12*time.Hour {
+	if parsed < 10*time.Minute || parsed > 24*time.Hour {
 		return 0, ErrInvalidDuration
 	}
 	return parsed, nil

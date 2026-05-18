@@ -114,9 +114,10 @@ func main() {
 	})
 
 	router.GET("/", pageHandler.Index)
+	router.GET("/quickshare", pageHandler.QuickShare)
+	router.GET("/link", pageHandler.Link)
 	router.GET("/tos", pageHandler.ToS)
 	router.GET("/privacy", pageHandler.Privacy)
-	router.GET("/shared", pageHandler.SharedLookup)
 	router.GET("/shared/:id", pageHandler.SharedFile)
 
 	auth := router.Group("/auth")
@@ -158,6 +159,7 @@ func main() {
 			me.POST("/tunnels/start", tunnelHandler.Start)
 			me.POST("/tunnels/join", tunnelHandler.Join)
 			me.GET("/tunnels/:id", tunnelHandler.Get)
+			me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
 			me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 			me.GET("/tunnels/:id/files", tunnelHandler.Files)
 			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
@@ -299,6 +301,7 @@ func main() {
 				me.POST("/tunnels/start", tunnelHandler.Start)
 				me.POST("/tunnels/join", tunnelHandler.Join)
 				me.GET("/tunnels/:id", tunnelHandler.Get)
+				me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
 				me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 				me.GET("/tunnels/:id/files", tunnelHandler.Files)
 				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)

@@ -7,8 +7,8 @@ type Tier struct {
 	AllowedDurations []string
 }
 
-var GuestDurations = []string{"24h", "7d"}
-var AuthDurations = []string{"24h", "7d", "30d", "90d"}
+var GuestDurations = []string{"7d"}
+var AuthDurations = []string{"90d"}
 
 func GuestTier(cfg *config.Config) Tier {
 	return Tier{

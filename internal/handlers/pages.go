@@ -98,6 +98,88 @@ func (h *PageHandler) SharedLookup(c *gin.Context) {
 	})
 }
 
+func (h *PageHandler) QuickShare(c *gin.Context) {
+	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	tier := middleware.GetTier(h.cfg, user)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
+	configData := map[string]interface{}{
+		"baseURL":          h.cfg.BaseURL,
+		"maxFileSize":      tier.MaxFileSize,
+		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
+		"authenticated":    authenticated,
+		"cnsUserId":        userIDOrZero(user),
+		"cnsUsername":      username,
+		"allowedDurations": tier.AllowedDurations,
+		"tosVersion":       h.cfg.TOSVersion,
+	}
+	configJSON, err := json.Marshal(configData)
+	if err != nil {
+		configJSON = []byte("{}")
+	}
+	c.HTML(http.StatusOK, "quickshare.html", gin.H{
+		"title":            "ShareIt - Quick Share",
+		"baseURL":          h.cfg.BaseURL,
+		"maxFileSize":      tier.MaxFileSize,
+		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
+		"authenticated":    authenticated,
+		"allowedDurations": tier.AllowedDurations,
+		"tosVersion":       h.cfg.TOSVersion,
+		"authLoginURL":     authLoginURL,
+		"username":         username,
+		"configJSON":       template.JS(string(configJSON)),
+	})
+}
+
+func (h *PageHandler) Link(c *gin.Context) {
+	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	tier := middleware.GetTier(h.cfg, user)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
+	configData := map[string]interface{}{
+		"baseURL":          h.cfg.BaseURL,
+		"maxFileSize":      tier.MaxFileSize,
+		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
+		"authenticated":    authenticated,
+		"cnsUserId":        userIDOrZero(user),
+		"cnsUsername":      username,
+		"allowedDurations": tier.AllowedDurations,
+		"tosVersion":       h.cfg.TOSVersion,
+	}
+	configJSON, err := json.Marshal(configData)
+	if err != nil {
+		configJSON = []byte("{}")
+	}
+	c.HTML(http.StatusOK, "link.html", gin.H{
+		"title":            "ShareIt - Link Share",
+		"baseURL":          h.cfg.BaseURL,
+		"maxFileSize":      tier.MaxFileSize,
+		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
+		"authenticated":    authenticated,
+		"allowedDurations": tier.AllowedDurations,
+		"tosVersion":       h.cfg.TOSVersion,
+		"authLoginURL":     authLoginURL,
+		"username":         username,
+		"configJSON":       template.JS(string(configJSON)),
+	})
+}
+
 func (h *PageHandler) SharedFile(c *gin.Context) {
 	setCSRFTokenCookie(c)
 	fileID := c.Param("id")

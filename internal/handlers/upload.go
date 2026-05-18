@@ -50,7 +50,14 @@ func (h *UploadHandler) Init(c *gin.Context) {
 	}
 
 	tier := middleware.GetTier(h.cfg, middleware.GetCNSUser(c))
-	if req.FileSize > tier.MaxFileSize {
+	maxSize := tier.MaxFileSize
+	if req.TunnelID != "" {
+		const tunnelMaxSize int64 = 3 * 1024 * 1024 * 1024
+		if maxSize < tunnelMaxSize {
+			maxSize = tunnelMaxSize
+		}
+	}
+	if req.FileSize > maxSize {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: models.ErrFileTooLarge.Message,
 			Code:  models.ErrFileTooLarge.Code,

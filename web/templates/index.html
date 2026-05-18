@@ -9,7 +9,8 @@
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="alternate icon" href="/static/favicon.svg">
 </head>
-<body>
+<body class="page-index">
+
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
             <p class="tos-modal-kicker">Hold up, not so fast</p>
@@ -25,9 +26,9 @@
     </div>
 
     <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:1rem;font-size:0.85rem;color:#888;">
-        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 30/90 day retention.</span>
+        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 90 day retention.</span>
     </div>
-    
+
     <div id="error-banner" class="error-banner hidden">
         <div class="error-banner-content">
             <span id="error-banner-text" class="error-banner-text"></span>
@@ -76,334 +77,190 @@
         </div>
     </div>
 
-    <div class="container">
-        <header>
-            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 2rem;">
-                <div class="space-y-1">
-                    <h1>ShareIt</h1>
-                    <p class="subtitle">End-to-End Encrypted File Sharing</p>
-                </div>
-                {{if .authenticated}}
-                <div style="display:flex; align-items:center; gap:0.65rem; margin-left:auto;">
-                    <button id="recent-recover-device" class="btn btn-secondary recent-recover-btn hidden" type="button">Recover this browser</button>
-                    <a href="/auth/logout" class="btn btn-secondary btn-cns-login" style="white-space: nowrap;" >
-                        Logged in as {{.username}}
-                    </a>
-                </div>
-                {{else}}
-                <a href="{{.authLoginURL}}" class="btn btn-secondary btn-cns-login" style="white-space: nowrap; margin-left: auto;">
-                    Login with CNS
-                </a>
-                {{end}}
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">ShareIt</a>
+                <nav class="quicklinks">
+                    <a href="/quickshare">Quick Share</a>
+                    <a href="/link">Link</a>
+                </nav>
             </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
         </header>
+    </div>
 
-        <main>
-            <div class="left-column">
-                <h2 class="serif reveal-text" style="font-size: 4rem; line-height: 0.85; margin-bottom: 3rem;">
-                    Privacy is <br> 
-                    <span style="color: var(--accent);">Absolute.</span>
-                </h2>
+    <div class="main-content">
 
-                <a href="/shared" class="btn btn-secondary" style="margin-bottom: 3rem; width: fit-content; gap: 0.5rem; text-decoration: none;">
-                    <i data-lucide="search" style="width: 1rem; height: 1rem;"></i>
-                    File Lookup
+        <div class="action-buttons">
+            <div class="action-btn-group">
+                <a class="circle-btn" href="/quickshare" aria-label="Quick Share">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 3 4 7l4 4"/>
+                        <path d="M4 7h16"/>
+                        <path d="m16 21 4-4-4-4"/>
+                        <path d="M20 17H4"/>
+                    </svg>
                 </a>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 700px; color: #555; font-size: 0.9rem;">
-                    <div style="border-top: 1px solid #333; padding-top: 1.5rem;">
-                        <span class="mono" style="font-size: 0.625rem; color: var(--accent); text-transform: uppercase;">01 // FREEDOM</span>
-                        <p style="margin-top: 1rem; line-height: 1.6;">
-                            Upload what you need, when you need it. ShareIt is built for quick, secure transfers without unnecessary friction, so you can send important files fast and keep full control over your data from start to finish.
-                        </p>
+                <span class="action-label">Quick Share</span>
+            </div>
+            <div class="action-btn-group">
+                <a class="circle-btn" href="/link" aria-label="Link">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                </a>
+                <span class="action-label">Link</span>
+            </div>
+        </div>
+
+        <section class="file-section">
+            <h2>Recent files</h2>
+            <div class="file-list">
+                <div class="file-entry" style="opacity: 1;">
+                    <div class="file-entry-left">
+                        <span class="file-name">filename.txt</span>
+                        <span class="file-info">02.05 • Expires tomorrow</span>
                     </div>
-                    <div style="border-top: 1px solid #333; padding-top: 1.5rem;">
-                        <span class="mono" style="font-size: 0.625rem; color: var(--accent); text-transform: uppercase;">02 // ACCESS</span>
-                        <p style="margin-top: 1rem; line-height: 1.6;">
-                            Retrieve shared files quickly from any modern browser using a simple lookup flow or direct link. ShareIt is designed for smooth access with minimal steps, so recipients can open what they need without creating accounts, installing extra software, or navigating unnecessary complexity.
-                        </p>
+                    <div class="file-entry-right">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
                     </div>
-                    <div style="border-top: 1px solid #333; padding-top: 1.5rem;">
-                        <span class="mono" style="font-size: 0.625rem; color: var(--accent); text-transform: uppercase;">03 // LIMITS</span>
-                        <p style="margin-top: 1rem; line-height: 1.6;">
-                            Upload up to 750 MB as a guest with maximum 7-day file expiry, or up to 1.5 GB with extended retention options up to 90 days when logged into a CNS account.
-                        </p>
+                </div>
+                <div class="file-entry" style="opacity: 0.75;">
+                    <div class="file-entry-left">
+                        <span class="file-name">filename.txt</span>
+                        <span class="file-info">02.05 • Expires tomorrow</span>
+                    </div>
+                    <div class="file-entry-right">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="file-entry" style="opacity: 0.50;">
+                    <div class="file-entry-left">
+                        <span class="file-name">filename.txt</span>
+                        <span class="file-info">02.05 • Expires tomorrow</span>
+                    </div>
+                    <div class="file-entry-right">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="file-entry" style="opacity: 0.25;">
+                    <div class="file-entry-left">
+                        <span class="file-name">filename.txt</span>
+                        <span class="file-info">02.05 • Expires tomorrow</span>
+                    </div>
+                    <div class="file-entry-right">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="file-entry" style="opacity: 0.05;">
+                    <div class="file-entry-left">
+                        <span class="file-name">filename.txt</span>
+                        <span class="file-info">02.05 • Expires tomorrow</span>
+                    </div>
+                    <div class="file-entry-right">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                        </svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
                     </div>
                 </div>
             </div>
+        </section>
 
-            <div class="right-column">
-                <div class="vault-card">
-                    <div class="vault-card-label">
-                        Status: <span id="status-text" class="status-indicator">Ready</span>
-                    </div>
-
-                    <div id="stage-entry" class="form-section">
-                        <div id="drop-zone" class="drop-zone">
-                            <input type="file" id="file-input" class="hidden">
-                            <i data-lucide="circle-fading-arrow-up" class="drop-zone-icon"></i>
-                            <h3>Upload File</h3>
-                            <p>Drag and Drop a file here or click to browse.</p>
-                        </div>
-
-                        <div id="file-details" class="hidden">
-                            <div class="file-details-box">
-                                <div class="file-icon-box">
-                                    <i data-lucide="file-digit" class="file-icon"></i>
-                                </div>
-                                <div class="file-meta-container">
-                                    <span id="file-name" class="file-name">payload.bin</span>
-                                    <span id="file-size" class="file-size">Processing file...</span>
-                                </div>
-                                <button id="reset-vault" class="btn-icon" style="color: #555; transition: color 0.3s;">
-                                    <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
-                                </button>
-                            </div>
-                            
-                            <div style="margin-top: 2rem; display: flex; flex-direction: column; gap: 1rem;">
-                                <p class="info-text">
-                                    File is encrypted client-side and uploaded to our servers.
-                                </p>
-                                <button id="start-over-btn" class="btn btn-secondary btn-large">
-                                    Choose Another File
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="stage-processing" class="hidden processing-container">
-                        <div class="scanner absolute inset-0 pointer-events-none opacity-20" style="position: absolute; top: -100%; width: 100%; height: 100%; opacity: 0.2;"></div>
-                        <div class="spinner-container">
-                            <div class="spinner-outer">
-                                <div class="spinner-inner"></div>
-                            </div>
-                            <div class="progress-text-container" id="progress-val">
-                                0%
-                            </div>
-                        </div>
-                        <div class="progress-label">
-                            <p id="process-sub" class="progress-sub">Scrambling data using passcode</p>
-                            <h4 class="progress-main" id="process-main">Encrypting...</h4>
-                        </div>
-                    </div>
-
-                    <div id="stage-pending" class="hidden form-section">
-                        <div class="output-header">
-                            <div class="success-badge">
-                                Start your Upload
-                            </div>
-                        </div>
-
-                        <p class="info-text">
-                            Select expiration to share this file.
-                        </p>
-
-                        <div class="form-group">
-                            <label class="form-label">Expiration</label>
-                            <div class="expiration-options" id="expiration-options">
-                                <label class="duration-option">
-                                    <input type="radio" name="expiration" value="24h" checked>
-                                    <span>24 hours</span>
-                                </label>
-                                <label class="duration-option">
-                                    <input type="radio" name="expiration" value="7d">
-                                    <span>7 days</span>
-                                </label>
-                                <label class="duration-option duration-locked" id="opt-30d">
-                                    <input type="radio" name="expiration" value="30d" disabled>
-                                    <span>30 days <span class="lock-hint">— <a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">log in</a></span></span>
-                                </label>
-                                <label class="duration-option duration-locked" id="opt-90d">
-                                    <input type="radio" name="expiration" value="90d" disabled>
-                                    <span>3 months <span class="lock-hint">— <a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">log in</a></span></span>
-                                </label>
-                            </div>
-                        </div>
-
-                        <div class="info-box" style="margin-top: 0;">
-                            <p class="info-text">
-                                Upload your file, session expires in <span id="pending-countdown">10:00</span>.
-                            </p>
-                        </div>
-
-                        <button id="finalize-btn" class="btn-accent btn-large">
-                            Upload
-                        </button>
-                    </div>
-
-                    <div id="stage-output" class="hidden form-section">
-                        <div class="output-header">
-                            <div class="success-badge">
-                                Success!
-                            </div>
-                        </div>
-
-                        <div style="display: flex; flex-direction: column; gap: 1rem;">
-                            <div class="form-group">
-                                <label class="form-label">Sharing Link</label>
-                                <div class="form-input-wrapper">
-                                    <input id="out-url" readonly type="text" class="form-input" value="SILENCE.STORAGE/X-992">
-                                    <button class="copy-trigger" title="Copy to clipboard">
-                                        <i data-lucide="copy" style="width: 1rem; height: 1rem;"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="two-column-grid">
-                                <div class="form-group">
-                                    <label class="form-label">Lookup Code</label>
-                                    <input id="out-pin" readonly type="text" class="fancy-input" value="992-001">
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Passcode</label>
-                                    <input id="out-key" readonly type="text" class="fancy-input" value="void-echo-zero">
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="info-box">
-                            <p id="out-expiry-label" class="info-text">Storage policy active.</p>
-
-                        </div>
-                        <div class="info-box" style="margin-top: 1rem; background: #181818; border-radius: 4px; border: 1px solid var(--border); color: var(--accent); text-align: center;">
-                            <strong>Note:</strong> To access this file later, you will need either the sharing link or the Lookup Code & Passcode shown above. Keep them safe!
-                        </div>
-                        <button onclick="location.reload()" class="btn btn-secondary btn-large" style="margin-top: auto;">
-                            Start over
-                        </button>
-                    </div>
+        <div class="shapes-container">
+            <div class="floating-shape shape-pill">
+                <div class="shape-pill-inner">
+                    <svg width="149" height="191" viewBox="0 0 149 191" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <pattern id="pillPattern" patternUnits="objectBoundingBox" width="1" height="1">
+                                <image href="/static/images/pill.png" x="0" y="0" width="149" height="210" preserveAspectRatio="xMidYMid slice"/>
+                            </pattern>
+                        </defs>
+                        <rect x="78.3611" y="-17.6997" width="100" height="202.971" rx="50" transform="rotate(28.2471 78.3611 -17.6997)" fill="url(#pillPattern)"/>
+                    </svg>
                 </div>
-
-                <section id="recent-uploads-section" class="recent-uploads hidden" style="margin-top: 1.25rem;">
-                    <div class="recent-header">
-                        <h3>Recently Uploaded</h3>
-                        <div class="recent-header-actions">
-                            <span id="recent-count" class="recent-count">0 files</span>
-                            <button id="recent-search-toggle" class="recent-search-toggle" title="Search uploads" aria-label="Search uploads" aria-expanded="false">
-                                <i data-lucide="search" style="width: 0.9rem; height: 0.9rem;"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div id="recent-search-wrap" class="recent-search-wrap hidden">
-                        <input id="recent-search-input" type="text" class="recent-search-input" placeholder="Search by file name" autocomplete="off" spellcheck="false">
-                    </div>
-                    <div id="recent-loading" class="recent-state">
-                        <div class="recent-skeleton-list" aria-hidden="true">
-                            <div class="recent-skeleton-item"></div>
-                            <div class="recent-skeleton-item"></div>
-                            <div class="recent-skeleton-item"></div>
-                        </div>
-                    </div>
-                    <div id="recent-error" class="recent-state hidden">Unable to load recent uploads.</div>
-                    <div id="recent-empty" class="recent-state hidden">No uploads yet on this account.</div>
-                    <div id="recent-list" class="recent-list hidden"></div>
-                    <div id="recent-pagination" class="recent-pagination hidden">
-                        <button id="recent-prev" class="recent-page-btn" aria-label="Previous page">
-                            <i data-lucide="chevron-left" style="width: 0.85rem; height: 0.85rem;"></i>
-                        </button>
-                        <span id="recent-page-label" class="recent-page-label">Page 1 of 1</span>
-                        <button id="recent-next" class="recent-page-btn" aria-label="Next page">
-                            <i data-lucide="chevron-right" style="width: 0.85rem; height: 0.85rem;"></i>
-                        </button>
-                    </div>
-                </section>
-
-                <button id="tunnel-end-btn" class="btn btn-secondary btn-large hidden" style="margin-top: 1rem; width: 100%;">
-                    End Tunnel Session
-                </button>
-
-                <section id="tunnel-files-section" class="recent-uploads hidden" style="margin-top: 1rem;">
-                    <div class="recent-header">
-                        <h3>Tunnel</h3>
-                        <div class="recent-header-actions">
-                            <span id="tunnel-count" class="recent-count">0 files</span>
-                        </div>
-                    </div>
-                    <div id="tunnel-empty" class="recent-state hidden">No files in this tunnel yet.</div>
-                    <div id="tunnel-list" class="recent-list hidden"></div>
-                </section>
-
-                <section id="tunnel-controls-section" class="recent-uploads hidden" style="margin-top: 1rem;">
-                    <div class="recent-header">
-                        <h3>Tunnel Session</h3>
-                    </div>
-                    <div class="tunnel-controls-grid">
-                        <div class="tunnel-control-row">
-                            <label class="tunnel-control-label" for="tunnel-duration-select">Duration</label>
-                            <select id="tunnel-duration-select" class="recent-search-input tunnel-select">
-                                <option value="10m">10 minutes</option>
-                                <option value="30m">30 minutes</option>
-                                <option value="1h" selected>1 hour</option>
-                                <option value="2h">2 hours</option>
-                                <option value="4h">4 hours</option>
-                                <option value="8h">8 hours</option>
-                                <option value="12h">12 hours</option>
-                            </select>
-                        </div>
-                        <div class="tunnel-control-row tunnel-button-row">
-                            <button id="tunnel-start-btn" class="btn btn-secondary">Start Tunnel</button>
-                        </div>
-                        <div class="tunnel-control-row">
-                            <label class="tunnel-control-label" for="tunnel-join-code">Join By Code</label>
-                            <div class="tunnel-join-row">
-                                <input id="tunnel-join-code" type="text" class="recent-search-input" placeholder="Enter 6-digit code" maxlength="6" autocomplete="off" spellcheck="false">
-                                <button id="tunnel-join-btn" class="btn btn-secondary">Join</button>
-                            </div>
-                        </div>
-                        <div id="tunnel-active-meta" class="tunnel-meta hidden"></div>
-                        <div id="tunnel-qr-wrap" class="tunnel-qr-wrap hidden">
-                            <div id="tunnel-qr-code" class="tunnel-qr-code"></div>
-                        </div>
-                        <div class="tunnel-control-row tunnel-button-row hidden" id="tunnel-confirm-wrap">
-                            <button id="tunnel-confirm-btn" class="btn btn-secondary">Confirm Connection</button>
-                        </div>
-                    </div>
-                </section>
             </div>
-        </main>
+            <div class="floating-shape shape-star">
+                <div class="shape-star-inner">
+                    <svg width="118" height="118" viewBox="0 0 118 118" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <pattern id="starPattern" patternUnits="objectBoundingBox" width="1" height="1">
+                                <image href="/static/images/star.png" x="0" y="0" width="118" height="118" preserveAspectRatio="xMidYMid slice"/>
+                            </pattern>
+                        </defs>
+                        <path d="M0.99492 36.4482C-4.69518 14.9444 14.9446 -4.69539 36.4484 0.99471L51.5303 4.98553C56.3922 6.27203 61.5051 6.27203 66.367 4.98553L81.449 0.994712C102.953 -4.69539 122.593 14.9444 116.902 36.4482L112.912 51.5301C111.625 56.392 111.625 61.5049 112.912 66.3668L116.902 81.4488C122.593 102.953 102.953 122.592 81.449 116.902L66.367 112.911C61.5051 111.625 56.3922 111.625 51.5303 112.911L36.4484 116.902C14.9446 122.592 -4.69518 102.953 0.994919 81.4488L4.98574 66.3668C6.27224 61.5049 6.27224 56.392 4.98574 51.5301L0.99492 36.4482Z" fill="url(#starPattern)"/>
+                    </svg>
+                </div>
+            </div>
+            <div class="floating-shape shape-bun">
+                <div class="shape-bun-inner">
+                    <svg width="154" height="136" viewBox="0 0 154 136" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <pattern id="bunPattern" patternUnits="userSpaceOnUse" width="154" height="136">
+                                <image href="/static/images/bun.png" x="0" y="0" width="154" height="136" preserveAspectRatio="xMidYMid slice"/>
+                            </pattern>
+                        </defs>
+                        <rect width="154" height="68" rx="34" fill="url(#bunPattern)"/>
+                        <rect y="68" width="154" height="68" rx="34" fill="url(#bunPattern)"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
 
     </div>
 
-    <footer>
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
-            <p>Secured file sharing made easy. Powered by CNS</p>
-            <nav style="display: flex; gap: 2rem; font-size: 0.9rem;">
-                <a href="/tos" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Terms</a>
-                <a href="/privacy" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Privacy</a>
-            </nav>
-        </div>
+    <footer class="footer">
+        <a href="/tos">Terms of Service</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="#">Limits</a>
+        <a href="#">Data Encryption</a>
+        <a href="#">Help</a>
     </footer>
-
-    <div id="share-banner" class="share-banner hidden">
-        <span class="share-banner-title">Link Copied!</span>
-        <span class="share-banner-message">Your sharing link has been copied to the clipboard.</span>
-        <button id="close-share-banner" class="share-banner-close" title="Close">
-            <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
-        </button>
-    </div>
-
-    <div id="download-activity-overlay" class="download-activity-overlay hidden" aria-hidden="true">
-        <div class="download-activity-panel" role="status" aria-live="polite">
-            <div class="download-activity-head">
-                <div class="download-activity-icon" aria-hidden="true">
-                    <i data-lucide="download" style="width: 1rem; height: 1rem;"></i>
-                </div>
-                <div class="download-activity-copy">
-                    <p class="download-activity-label">Downloading and decrypting your file...</p>
-                    <p class="download-activity-text">Preparing secure transfer</p>
-                </div>
-                <div class="download-activity-state" aria-hidden="true">
-                    <i class="download-activity-state-check" data-lucide="check" style="width: 0.9rem; height: 0.9rem;"></i>
-                </div>
-            </div>
-
-            <div class="download-activity-progress">
-                <div class="download-activity-bar" aria-hidden="true">
-                    <span class="download-activity-bar-fill"></span>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal action-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
@@ -421,7 +278,6 @@
         window.CONFIG = {{.configJSON}};
     </script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function() {
             if (window.lucide && lucide.createIcons) {

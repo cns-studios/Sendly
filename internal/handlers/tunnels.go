@@ -65,9 +65,14 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 		return
 	}
 
+	_ = h.db.AddTunnelParticipant(c.Request.Context(), tunnel.ID, initiatorUserID, req.DeviceID)
+
+	participants, _ := h.db.GetTunnelParticipants(c.Request.Context(), tunnel.ID)
+
 	c.JSON(http.StatusOK, models.TunnelStartResponse{
-		Tunnel:    *tunnel,
-		QRPayload: h.buildQRPayload(tunnel),
+		Tunnel:       *tunnel,
+		QRPayload:    h.buildQRPayload(tunnel),
+		Participants: participants,
 	})
 }
 
@@ -93,6 +98,11 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		return
 	}
 
+	if tunnel.Status == models.TunnelStatusActive {
+		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is already active and no longer accepting new members", Code: "TUNNEL_ALREADY_ACTIVE"})
+		return
+	}
+
 	var peerUserID int64
 	user := middleware.GetCNSUser(c)
 	if user != nil {
@@ -113,9 +123,12 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		return
 	}
 
+	participants, _ := h.db.GetTunnelParticipants(c.Request.Context(), tunnel.ID)
+
 	c.JSON(http.StatusOK, models.TunnelStartResponse{
-		Tunnel:    *joined,
-		QRPayload: h.buildQRPayload(joined),
+		Tunnel:       *joined,
+		QRPayload:    h.buildQRPayload(joined),
+		Participants: participants,
 	})
 }
 
@@ -171,19 +184,33 @@ func (h *TunnelHandler) End(c *gin.Context) {
 		return
 	}
 
-	fileIDs, err := h.db.GetTunnelFileIDs(c.Request.Context(), tunnelID)
-	if err == nil {
-		for _, fileID := range fileIDs {
-			_ = h.fs.DeleteFile(fileID)
-		}
+	user := middleware.GetCNSUser(c)
+	var userID int64
+	var deviceID string
+	if user != nil {
+		userID = int64(user.ID)
+	}
+	if d, _ := c.GetPostForm("device_id"); d != "" {
+		deviceID = d
 	}
 
-	if err := h.db.DeleteTunnel(c.Request.Context(), tunnelID); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to end tunnel", Code: "TUNNEL_END_FAILED"})
+	if err := h.db.RemoveTunnelParticipant(c.Request.Context(), tunnelID, userID, deviceID); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to leave tunnel", Code: "TUNNEL_LEAVE_FAILED"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	count, countErr := h.db.CountTunnelParticipants(c.Request.Context(), tunnelID)
+	if countErr != nil || count <= 1 {
+		fileIDs, _ := h.db.GetTunnelFileIDs(c.Request.Context(), tunnelID)
+		for _, fileID := range fileIDs {
+			_ = h.fs.DeleteFile(fileID)
+		}
+		_ = h.db.DeleteTunnel(c.Request.Context(), tunnelID)
+		c.JSON(http.StatusOK, gin.H{"success": true, "tunnel_ended": true})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "tunnel_ended": false, "remaining": count})
 }
 
 func (h *TunnelHandler) Get(c *gin.Context) {
@@ -209,9 +236,12 @@ func (h *TunnelHandler) Get(c *gin.Context) {
 		return
 	}
 
+	participants, _ := h.db.GetTunnelParticipants(c.Request.Context(), tunnelID)
+
 	c.JSON(http.StatusOK, gin.H{
-		"tunnel": tunnel,
-		"files":  files,
+		"tunnel":       tunnel,
+		"files":        files,
+		"participants": participants,
 	})
 }
 
@@ -229,6 +259,22 @@ func (h *TunnelHandler) Files(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"items": files})
+}
+
+func (h *TunnelHandler) Participants(c *gin.Context) {
+	tunnelID := c.Param("id")
+	if tunnelID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
+		return
+	}
+
+	participants, err := h.db.GetTunnelParticipants(c.Request.Context(), tunnelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to load participants", Code: "TUNNEL_PARTICIPANTS_FAILED"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": participants})
 }
 
 func (h *TunnelHandler) PeerWrapKey(c *gin.Context) {
@@ -339,8 +385,8 @@ func (h *TunnelHandler) GuestFileAccess(c *gin.Context) {
 }
 
 func (h *TunnelHandler) generateUniqueTunnelCode(ctx context.Context) (string, error) {
-	for i := 0; i < 10; i++ {
-		code := generateVerificationCode(6)
+	for i := 0; i < 20; i++ {
+		code := generateVerificationCode(4)
 		exists, err := h.db.TunnelCodeExists(ctx, code)
 		if err != nil {
 			return "", err

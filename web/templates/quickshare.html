@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/static/favicon.svg">
+</head>
+<body class="page-quickshare">
+
+    <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
+            <p class="tos-modal-kicker">Hold up, not so fast</p>
+            <h2 id="tos-modal-title">Terms of Service Approval Required</h2>
+            <p id="tos-modal-description" class="tos-modal-description">
+                Please review and accept our <a href="/tos" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> to use ShareIt.
+            </p>
+            <div class="tos-modal-actions">
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">Decline</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">Accept</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:1rem;font-size:0.85rem;color:#888;">
+        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock extended tunnel durations.</span>
+    </div>
+
+    <div id="error-banner" class="error-banner hidden">
+        <div class="error-banner-content">
+            <span id="error-banner-text" class="error-banner-text"></span>
+            <div class="error-banner-actions">
+                <button id="error-banner-close" class="error-banner-close" title="Close">
+                    <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="device-approval-modal" class="device-approval-modal hidden" aria-hidden="true">
+        <div class="device-approval-panel" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+            <div class="device-approval-header">
+                <div>
+                    <p class="device-approval-kicker">Approval required</p>
+                    <h2 id="device-approval-title">New device wants access</h2>
+                </div>
+                <span id="device-approval-count" class="device-approval-count"></span>
+            </div>
+            <p id="device-approval-message" class="device-approval-message">
+                A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.
+            </p>
+            <div id="device-approval-meta" class="device-approval-meta"></div>
+            <div id="device-approval-waiting" class="device-approval-waiting hidden">
+                <div class="device-approval-waiting-icon">
+                    <div class="spinner"></div>
+                </div>
+                <div>
+                    <p class="device-approval-waiting-title">Waiting for approval</p>
+                    <p class="device-approval-waiting-copy">
+                        Keep this tab open. A trusted device must approve this browser before it can decrypt uploads or open protected files.
+                    </p>
+                    <p class="device-approval-waiting-note">
+                        If you lost the only trusted device, you will need to recover access from another CNS session before this browser can be approved.
+                    </p>
+                </div>
+            </div>
+            <div class="device-approval-actions">
+                <button id="device-approval-decline" class="btn btn-secondary btn-large">Decline</button>
+                <button id="device-approval-approve" class="btn btn-accent btn-large">Approve</button>
+            </div>
+            <button id="device-approval-recover" class="device-approval-recover hidden" type="button">
+                Lost the old device? Start fresh on this browser.
+            </button>
+        </div>
+    </div>
+
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">ShareIt</a>
+                <nav class="quicklinks">
+                    <a href="/quickshare">Quick Share</a>
+                    <a href="/link">Link</a>
+                </nav>
+            </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
+        </header>
+    </div>
+
+    <div class="main-content">
+
+        <div class="action-buttons" id="initialView">
+            <div class="action-btn-group">
+                <button class="circle-btn" id="createBtn" aria-label="Create">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                </button>
+                <span class="action-label">Create</span>
+            </div>
+
+            <div class="action-btn-group">
+                <button class="circle-btn" id="joinBtn" aria-label="Join">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9.5 2H20v10.5"/>
+                        <path d="M20 2 4 18"/>
+                    </svg>
+                </button>
+                <span class="action-label">Join</span>
+            </div>
+        </div>
+
+        <div class="create-view" id="createView">
+            <h1>Invite others</h1>
+            <p class="subtitle">Share this code with the people you want to share files with. Once they join, they'll show up here.</p>
+
+            <div class="code-squares" id="codeSquares">
+                <div class="code-square" id="code0">–</div>
+                <div class="code-square" id="code1">–</div>
+                <div class="code-square" id="code2">–</div>
+                <div class="code-square" id="code3">–</div>
+            </div>
+
+            <h2 class="people-heading">People</h2>
+
+            <div class="people-row" id="peopleRow">
+                <div class="person">
+                    <div class="person-circle">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <span class="person-name">You</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-bar" id="bottomBar" style="display:none;">
+            <button class="start-btn" id="startBtn">Start</button>
+        </div>
+
+        <div class="session-view" id="sessionView">
+            <div class="session-left">
+                <h2>Received files</h2>
+                <div class="file-list" id="fileList"></div>
+                <div id="fileListEmpty" class="recent-state">No files in this session yet.</div>
+            </div>
+
+            <div class="session-right">
+                <div class="drop-zone" id="dropZone">
+                    <span class="drop-zone-main-text" id="dropMainText">Place files here</span>
+                    <span class="drop-zone-sub-text" id="dropSubText"></span>
+                    <input type="file" id="fileInput" multiple>
+                </div>
+                <div class="session-bottom-row">
+                    <span class="connected-text" id="connectedText"></span>
+                    <button class="blue-btn" id="leaveBtn">Leave</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="join-view" id="joinView">
+            <h1>Join</h1>
+            <p class="subtitle">Enter the Room Code to join a Quick Share</p>
+
+            <div class="join-code-squares" id="joinCodeSquares">
+                <div class="join-code-square" data-index="0" tabindex="0">–</div>
+                <div class="join-code-square" data-index="1" tabindex="0">–</div>
+                <div class="join-code-square" data-index="2" tabindex="0">–</div>
+                <div class="join-code-square" data-index="3" tabindex="0">–</div>
+            </div>
+        </div>
+
+        <div class="join-bottom-bar" id="joinBottomBar" style="display:none;">
+            <button class="blue-btn disabled" id="joinSubmitBtn" disabled>Join</button>
+        </div>
+
+        <div class="queue-view" id="queueView">
+            <h1>Invite others</h1>
+            <p class="subtitle">Share this code with the people you want to share files with. Once they join, they'll show up here.</p>
+
+            <div class="code-squares" id="queueCodeSquares">
+                <div class="code-square" id="queueCode0">–</div>
+                <div class="code-square" id="queueCode1">–</div>
+                <div class="code-square" id="queueCode2">–</div>
+                <div class="code-square" id="queueCode3">–</div>
+            </div>
+
+            <h2 class="people-heading">People</h2>
+
+            <div class="people-row" id="queuePeopleRow">
+                <div class="person">
+                    <div class="person-circle">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                            <circle cx="12" cy="7" r="4"/>
+                        </svg>
+                    </div>
+                    <span class="person-name">You</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="footer">
+        <a href="/tos">Terms of Service</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="#">Limits</a>
+        <a href="#">Data Encryption</a>
+        <a href="#">Help</a>
+    </footer>
+
+    <div id="share-banner" class="share-banner hidden">
+        <span class="share-banner-title">Link Copied!</span>
+        <span class="share-banner-message">Your sharing link has been copied to the clipboard.</span>
+        <button id="close-share-banner" class="share-banner-close" title="Close">
+            <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
+        </button>
+    </div>
+
+    <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal action-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
+            <p id="action-modal-kicker" class="tos-modal-kicker">Heads up</p>
+            <h2 id="action-modal-title">Confirm action</h2>
+            <p id="action-modal-description" class="tos-modal-description"></p>
+            <div class="tos-modal-actions">
+                <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
+                <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.CONFIG = {{.configJSON}};
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            } else if (window.lucide && lucide.replace) {
+                lucide.replace();
+            }
+        });
+    </script>
+    <script src="/static/js/crypto.js"></script>
+    <script src="/static/js/quick-share.js"></script>
+</body>
+</html>
