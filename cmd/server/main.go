@@ -144,8 +144,8 @@ func main() {
 
 		file := api.Group("/file")
 		{
-			file.GET("/:id", downloadHandler.GetMetadata)
 			file.GET("/:id/download", downloadRateLimiter.Handler(), downloadHandler.Download)
+			file.GET("/:id", downloadHandler.GetMetadata)
 			file.GET("/code/:code", downloadHandler.GetByCode)
 			file.POST("/:id/report", reportHandler.Report)
 		}
@@ -164,6 +164,11 @@ func main() {
 			me.GET("/tunnels/:id/files", tunnelHandler.Files)
 			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 			me.DELETE("/tunnels/:id", tunnelHandler.End)
+
+			// ── Participant key exchange (E2E session password delivery) ──────────
+			me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
+			me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
+			me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
 
 			devices := me.Group("/devices")
 			{
@@ -221,7 +226,7 @@ func main() {
 	desktopCORS := func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization, X-Device-ID")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -229,6 +234,7 @@ func main() {
 		c.Next()
 	}
 
+	// Existing OPTIONS routes
 	router.OPTIONS("/desktop/auth/verify", desktopCORS)
 	router.OPTIONS("/desktop/auth/oauth/config", desktopCORS)
 	router.OPTIONS("/desktop/auth/oauth/verify", desktopCORS)
@@ -258,6 +264,10 @@ func main() {
 	router.OPTIONS("/desktop/me/devices/enrollments/pending", desktopCORS)
 	router.OPTIONS("/desktop/me/devices/enrollments/:id/approve", desktopCORS)
 	router.OPTIONS("/desktop/me/devices/enrollments/:id/reject", desktopCORS)
+	// New OPTIONS routes for participant key exchange
+	router.OPTIONS("/desktop/me/tunnels/:id/participant-keys", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/envelopes", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/envelopes/:device_id", desktopCORS)
 
 	desktop := router.Group("/desktop")
 	desktop.Use(desktopCORS)
@@ -306,6 +316,11 @@ func main() {
 				me.GET("/tunnels/:id/files", tunnelHandler.Files)
 				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 				me.DELETE("/tunnels/:id", tunnelHandler.End)
+
+				// ── Participant key exchange (E2E session password delivery) ──────
+				me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
+				me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
+				me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
 
 				devices := me.Group("/devices")
 				{

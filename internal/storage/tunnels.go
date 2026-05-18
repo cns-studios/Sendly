@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -331,9 +333,25 @@ func (p *Postgres) AddTunnelParticipant(ctx context.Context, tunnelID string, us
 
 func (p *Postgres) GetTunnelParticipants(ctx context.Context, tunnelID string) ([]models.TunnelParticipant, error) {
 	var participants []models.TunnelParticipant
-	query := `SELECT * FROM tunnel_participants WHERE tunnel_id = $1 ORDER BY joined_at ASC`
+	query := `
+		SELECT
+			id,
+			tunnel_id,
+			cns_user_id,
+			device_id,
+			joined_at,
+			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			COALESCE(key_algorithm, '') AS key_algorithm,
+			COALESCE(key_version, 0) AS key_version
+		FROM tunnel_participants
+		WHERE tunnel_id = $1
+		ORDER BY joined_at ASC
+	`
 	err := p.db.SelectContext(ctx, &participants, query, tunnelID)
-	return participants, err
+	if err != nil {
+		return participants, err
+	}
+	return participants, nil
 }
 
 func (p *Postgres) RemoveTunnelParticipant(ctx context.Context, tunnelID string, userID int64, deviceID string) error {
@@ -364,4 +382,90 @@ func nullableString(value string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: value, Valid: true}
+}
+
+
+
+// SaveParticipantPublicKey stores a participant's ephemeral public key
+// so the host can wrap the session DEK for them.
+func (p *Postgres) SaveParticipantPublicKey(ctx context.Context, tunnelID, deviceID string, publicKeyJWK json.RawMessage, keyAlgorithm string, keyVersion int) error {
+	_, err := p.db.ExecContext(ctx, `
+		UPDATE tunnel_participants
+		SET    public_key_jwk = $1,
+		       key_algorithm  = $2,
+		       key_version    = $3
+		WHERE  tunnel_id = $4
+		  AND  device_id = $5
+	`, publicKeyJWK, keyAlgorithm, keyVersion, tunnelID, deviceID)
+	return err
+}
+
+// GetParticipantsWithPublicKeys returns all participants that have submitted
+// a public key (i.e. guests that need a DEK envelope from the host).
+func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID string) ([]models.TunnelParticipant, error) {
+	var participants []models.TunnelParticipant
+	err := p.db.SelectContext(ctx, &participants, `
+		SELECT * FROM tunnel_participants
+		WHERE  tunnel_id      = $1
+		  AND  public_key_jwk IS NOT NULL
+		ORDER BY joined_at ASC
+	`, tunnelID)
+	return participants, err
+}
+
+// SaveTunnelParticipantEnvelope stores a host-wrapped DEK envelope
+// keyed by (tunnel_id, participant device_id).
+func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, participantDeviceID string, wrappedDEK, nonce []byte, wrapAlg string, wrapVersion int) error {
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO tunnel_participant_envelopes
+			(tunnel_id, participant_device_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (tunnel_id, participant_device_id)
+		DO UPDATE SET
+			wrapped_dek      = EXCLUDED.wrapped_dek,
+			dek_wrap_alg     = EXCLUDED.dek_wrap_alg,
+			dek_wrap_nonce   = EXCLUDED.dek_wrap_nonce,
+			dek_wrap_version = EXCLUDED.dek_wrap_version,
+			created_at       = NOW()
+	`, tunnelID, participantDeviceID, wrappedDEK, wrapAlg, nonce, wrapVersion)
+	return err
+}
+
+// GetTunnelParticipantEnvelope fetches the host-wrapped DEK for a guest device.
+func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, deviceID string) (*models.TunnelGuestEnvelope, error) {
+	var row struct {
+		WrappedDEK     []byte `db:"wrapped_dek"`
+		DEKWrapAlg     string `db:"dek_wrap_alg"`
+		DEKWrapNonce   []byte `db:"dek_wrap_nonce"`
+		DEKWrapVersion int    `db:"dek_wrap_version"`
+	}
+	err := p.db.GetContext(ctx, &row, `
+		SELECT wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version
+		FROM   tunnel_participant_envelopes
+		WHERE  tunnel_id             = $1
+		  AND  participant_device_id = $2
+	`, tunnelID, deviceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil // not ready yet — host hasn't wrapped yet
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &models.TunnelGuestEnvelope{
+		WrappedDEKB64:   base64.StdEncoding.EncodeToString(row.WrappedDEK),
+		DEKWrapAlg:      row.DEKWrapAlg,
+		DEKWrapNonceB64: base64.StdEncoding.EncodeToString(row.DEKWrapNonce),
+		DEKWrapVersion:  row.DEKWrapVersion,
+	}, nil
+}
+
+// ParticipantHasEnvelope checks whether the host has already pushed an
+// envelope for the given device in this tunnel.
+func (p *Postgres) ParticipantHasEnvelope(ctx context.Context, tunnelID, deviceID string) (bool, error) {
+	var count int
+	err := p.db.GetContext(ctx, &count, `
+		SELECT COUNT(*) FROM tunnel_participant_envelopes
+		WHERE tunnel_id = $1 AND participant_device_id = $2
+	`, tunnelID, deviceID)
+	return count > 0, err
 }

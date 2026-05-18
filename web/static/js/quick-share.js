@@ -24,6 +24,9 @@
     let hasStarted = false;
     let guestNameMap = new Map();
     let guestCounter = 0;
+    let ephemeralKeyPair = null;
+    let myDeviceId = '';
+    let joinCodeInput = '';
 
     const initialView = document.getElementById('initialView');
     const createView = document.getElementById('createView');
@@ -56,9 +59,6 @@
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
 
-    let joinCodeInput = '';
-    let guestDeviceId = '';
-
     function getCookieValue(name) {
         const value = `; ${document.cookie}`;
         const parts = value.split(`; ${name}=`);
@@ -76,20 +76,115 @@
 
     function setupTOSGate() {
         if (!tosOverlay) return;
-        if (hasAcceptedCurrentTOS()) { tosOverlay.classList.add('hidden'); return; }
+        if (hasAcceptedCurrentTOS()) {
+            tosOverlay.classList.add('hidden');
+            return;
+        }
         tosOverlay.classList.remove('hidden');
-        tosAcceptBtn?.addEventListener('click', () => { setCookie(TOS_COOKIE_NAME, TOS_VERSION, 31536000); tosOverlay.classList.add('hidden'); });
-        tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns-studios.com'; });
+        tosAcceptBtn?.addEventListener('click', () => {
+            setCookie(TOS_COOKIE_NAME, TOS_VERSION, 31536000);
+            tosOverlay.classList.add('hidden');
+        });
+        tosDeclineBtn?.addEventListener('click', () => {
+            window.location.href = 'https://cns-studios.com';
+        });
     }
 
     function getOrCreateGuestDeviceId() {
-        if (guestDeviceId) return guestDeviceId;
-        guestDeviceId = localStorage.getItem('shareit_guest_device_id');
-        if (!guestDeviceId) {
-            guestDeviceId = crypto.randomUUID();
-            localStorage.setItem('shareit_guest_device_id', guestDeviceId);
+        if (myDeviceId && !AUTHENTICATED) return myDeviceId;
+        const stored = localStorage.getItem('shareit_guest_device_id');
+        if (stored) {
+            if (!AUTHENTICATED) myDeviceId = stored;
+            return stored;
         }
-        return guestDeviceId;
+        const created = crypto.randomUUID();
+        localStorage.setItem('shareit_guest_device_id', created);
+        if (!AUTHENTICATED) myDeviceId = created;
+        return created;
+    }
+
+    function extractDeviceID(participant) {
+        if (!participant) return '';
+        const deviceID = participant.device_id;
+        if (!deviceID) return '';
+        if (typeof deviceID === 'string') return deviceID;
+        if (typeof deviceID === 'object') {
+            if (deviceID.Valid === false) return '';
+            return deviceID.String || '';
+        }
+        return '';
+    }
+
+    function extractUserID(participant) {
+        if (!participant) return 0;
+        const userID = participant.cns_user_id;
+        if (!userID) return 0;
+        if (typeof userID === 'number') return userID;
+        if (typeof userID === 'object') {
+            if (userID.Valid === false) return 0;
+            return Number(userID.Int64 || 0);
+        }
+        return 0;
+    }
+
+    function buildHeaders(extra = {}) {
+        const headers = { ...extra };
+        const csrf = getCookieValue('csrf_token');
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+        if (myDeviceId) headers['X-Device-ID'] = myDeviceId;
+        return headers;
+    }
+
+    async function ensureEphemeralKeyPair() {
+        if (ephemeralKeyPair) return ephemeralKeyPair;
+
+        const cached = sessionStorage.getItem('shareit_ephemeral_kp');
+        if (cached) {
+            ephemeralKeyPair = JSON.parse(cached);
+            return ephemeralKeyPair;
+        }
+
+        const keyPair = await crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: 'SHA-256'
+            },
+            true,
+            ['encrypt', 'decrypt']
+        );
+
+        const publicKeyJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+        const privateKeyJWK = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+
+        ephemeralKeyPair = { publicKeyJWK, privateKeyJWK };
+        sessionStorage.setItem('shareit_ephemeral_kp', JSON.stringify(ephemeralKeyPair));
+        return ephemeralKeyPair;
+    }
+
+    async function wrapWithPublicKey(plaintextBytes, publicKeyJWK) {
+        const publicKey = await crypto.subtle.importKey(
+            'jwk',
+            publicKeyJWK,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            false,
+            ['encrypt']
+        );
+        const wrapped = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, plaintextBytes);
+        return new Uint8Array(wrapped);
+    }
+
+    async function unwrapWithPrivateKey(wrappedBytes, privateKeyJWK) {
+        const privateKey = await crypto.subtle.importKey(
+            'jwk',
+            privateKeyJWK,
+            { name: 'RSA-OAEP', hash: 'SHA-256' },
+            false,
+            ['decrypt']
+        );
+        const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedBytes);
+        return new Uint8Array(raw);
     }
 
     async function ensureDeviceReady() {
@@ -101,9 +196,10 @@
                 authUserKeyRaw = SecureCrypto.generateUserKeyRaw();
                 SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             }
+
             const response = await fetch('/api/me/devices/register', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     device_id: authDeviceIdentity.deviceId,
                     device_label: `${CNS_USERNAME || 'ShareIt User'} device`,
@@ -112,17 +208,24 @@
                     key_version: authDeviceIdentity.keyVersion,
                 })
             });
+
             if (!response.ok) throw new Error('Device registration failed');
+
             const payload = await response.json();
             if (payload.needs_enrollment) {
                 showErrorBanner('Approve this device from a trusted device before using Quick Share.');
                 return false;
             }
+
             if (payload.user_key_envelope?.wrapped_uk_b64 && !authUserKeyRaw) {
                 const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(
+                    wrappedUK,
+                    authDeviceIdentity.privateKeyJWK
+                );
                 SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             }
+
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
@@ -138,7 +241,10 @@
         queueView.classList.toggle('active', view === 'queue');
         bottomBar.style.display = view === 'create' ? '' : 'none';
         joinBottomBar.style.display = view === 'join' ? '' : 'none';
-        if (startBtn) startBtn.style.display = (view === 'create' && isHost && !hasStarted) ? '' : 'none';
+
+        if (startBtn) {
+            startBtn.style.display = (view === 'create' && isHost && !hasStarted) ? '' : 'none';
+        }
     }
 
     function setCodeDisplay(squares, code) {
@@ -148,34 +254,36 @@
         });
     }
 
-    function getParticipantName(p) {
-        const userId = p.cns_user_id;
-        if (userId && userId.Valid) {
-            return 'User';
-        }
-        const deviceId = p.device_id?.String || p.device_id;
-        if (deviceId) {
-            if (!guestNameMap.has(deviceId)) {
+    function getParticipantName(participant) {
+        const userID = extractUserID(participant);
+        if (userID) return 'User';
+
+        const deviceID = extractDeviceID(participant);
+        if (deviceID) {
+            if (!guestNameMap.has(deviceID)) {
                 guestCounter++;
-                guestNameMap.set(deviceId, `Guest${guestCounter}`);
+                guestNameMap.set(deviceID, `Guest ${guestCounter}`);
             }
-            return guestNameMap.get(deviceId);
+            return guestNameMap.get(deviceID);
         }
+
         return 'Guest';
     }
 
     function renderParticipants(items) {
         const container = isHost ? peopleRow : queuePeopleRow;
         if (!container) return;
+
+        const myCurrentDeviceID = myDeviceId || (AUTHENTICATED ? authDeviceIdentity?.deviceId || '' : getOrCreateGuestDeviceId());
+        const allParticipants = Array.isArray(items) ? items : [];
+        const otherPeers = allParticipants.filter(p => extractDeviceID(p) !== myCurrentDeviceID);
+
         container.innerHTML = '';
-        const otherPeers = items.filter(p => {
-            if (AUTHENTICATED) return p.cns_user_id && p.cns_user_id !== CNS_USER_ID;
-            return p.device_id && p.device_id !== getOrCreateGuestDeviceId();
-        });
+
         if (otherPeers.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'recent-state';
-            empty.textContent = 'Noone joined yet';
+            empty.textContent = 'Nobody joined yet';
             empty.style.color = '#888';
             empty.style.fontSize = '0.85rem';
             empty.style.textAlign = 'center';
@@ -196,23 +304,27 @@
                 container.appendChild(person);
             });
         }
+
         if (connectedText) {
-            const total = 1 + otherPeers.length;
-            connectedText.textContent = `${total} connected`;
+            connectedText.textContent = `${allParticipants.length} connected`;
         }
     }
 
     function renderTunnelFiles(files) {
         if (!fileList || !fileListEmpty) return;
+
         const items = Array.isArray(files) ? files : [];
         fileList.innerHTML = '';
+
         if (items.length === 0) {
             fileList.classList.add('hidden');
             fileListEmpty.classList.remove('hidden');
             return;
         }
+
         fileList.classList.remove('hidden');
         fileListEmpty.classList.add('hidden');
+
         items.forEach(item => {
             const el = document.createElement('div');
             el.className = 'file-entry';
@@ -223,10 +335,14 @@
                     <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)}</span>
                 </div>
                 <div class="file-entry-right">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-download-btn" title="Download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-download-btn" title="Download">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
                 </div>
             `;
-            el.querySelector('.file-download-btn').addEventListener('click', () => downloadTunnelFile(item.file_id, item.filename));
+            el.querySelector('.file-download-btn').addEventListener('click', () => {
+                downloadTunnelFile(item.file_id, item.filename);
+            });
             fileList.appendChild(el);
         });
     }
@@ -237,39 +353,111 @@
         return div.innerHTML;
     }
 
+    async function resolveSessionPassword(fileId) {
+        if (sessionPassword) return sessionPassword;
+
+        if (fileId) {
+            const cached = SecureCrypto.getCachedFileKey(fileId);
+            if (cached) {
+                sessionPassword = cached;
+                return sessionPassword;
+            }
+        }
+
+        if (activeTunnel?.id) {
+            const stored = localStorage.getItem(SESSION_PASSWORD_PREFIX + activeTunnel.id);
+            if (stored) {
+                sessionPassword = stored;
+                return sessionPassword;
+            }
+        }
+
+        if (activeTunnel?.id && ephemeralKeyPair && myDeviceId) {
+            try {
+                const res = await fetch(
+                    `/api/me/tunnels/${activeTunnel.id}/envelopes/${encodeURIComponent(myDeviceId)}`,
+                    { headers: buildHeaders() }
+                );
+
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.ready && data.envelope) {
+                        const wrappedBytes = SecureCrypto.fromBase64(data.envelope.wrapped_dek_b64);
+                        const rawBytes = await unwrapWithPrivateKey(wrappedBytes, ephemeralKeyPair.privateKeyJWK);
+                        const pw = new TextDecoder().decode(rawBytes);
+
+                        sessionPassword = pw;
+                        localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, pw);
+                        if (fileId) SecureCrypto.cacheFileKey(fileId, pw);
+                        return sessionPassword;
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to resolve session password from participant envelope:', error);
+            }
+        }
+
+        if (AUTHENTICATED && authUserKeyRaw && activeTunnel?.id && fileId) {
+            try {
+                const accessRes = await fetch(
+                    `/api/tunnels/${activeTunnel.id}/files/${fileId}/access`,
+                    { headers: buildHeaders() }
+                );
+
+                if (accessRes.ok) {
+                    const accessData = await accessRes.json();
+                    const envelope = accessData.file_key_envelope;
+                    if (envelope?.wrapped_dek_b64) {
+                        const wrappedDEK = SecureCrypto.fromBase64(envelope.wrapped_dek_b64);
+                        const nonce = envelope.dek_wrap_nonce_b64
+                            ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64)
+                            : null;
+
+                        const rawDEK = await SecureCrypto.unwrapSecretWithUserKey(
+                            wrappedDEK,
+                            nonce,
+                            authUserKeyRaw
+                        );
+
+                        const pw = new TextDecoder().decode(rawDEK);
+                        sessionPassword = pw;
+                        localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, pw);
+                        SecureCrypto.cacheFileKey(fileId, pw);
+                        return sessionPassword;
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to resolve session password from file access envelope:', error);
+            }
+        }
+
+        return null;
+    }
+
     async function downloadTunnelFile(fileId, fileName) {
         try {
-            let password = SecureCrypto.getCachedFileKey(fileId);
-
-            if (!password && AUTHENTICATED) {
-                const accessRes = await fetch(`/api/tunnels/${activeTunnel.id}/files/${fileId}/access`);
-                if (!accessRes.ok) throw new Error('Failed to access file');
-                const accessData = await accessRes.json();
-                const envelope = accessData.file_key_envelope;
-                if (envelope?.wrapped_dek_b64 && authUserKeyRaw) {
-                    const wrappedDEK = SecureCrypto.fromBase64(envelope.wrapped_dek_b64);
-                    const nonce = envelope.dek_wrap_nonce_b64 ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64) : null;
-                    const rawDEK = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, authUserKeyRaw);
-                    password = new TextDecoder().decode(rawDEK);
-                    SecureCrypto.cacheFileKey(fileId, password);
-                }
-            }
-
+            const password = await resolveSessionPassword(fileId);
             if (!password) {
-                const storedPw = localStorage.getItem(SESSION_PASSWORD_PREFIX + activeTunnel.id);
-                if (storedPw) password = storedPw;
-            }
-
-            if (!password) {
-                showErrorBanner('No decryption key for this file.');
+                showErrorBanner('No decryption key available yet. Try again in a moment.');
                 return;
             }
 
-            const chunkRes = await fetch(`/api/file/${fileId}/download`);
-            if (!chunkRes.ok) throw new Error('Download failed');
-            const blob = await chunkRes.blob();
+            const response = await fetch(`/api/file/${fileId}/download`, {
+                headers: buildHeaders()
+            });
 
-            const decrypted = await SecureCrypto.decryptBlob(blob, password);
+            if (!response.ok) {
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Download failed');
+                }
+                throw new Error(`Download failed (${response.status})`);
+            }
+
+            const encryptedBlob = await response.blob();
+            const decrypted = await SecureCrypto.decryptBlob(encryptedBlob, password);
+
             const url = URL.createObjectURL(new Blob([decrypted]));
             const a = document.createElement('a');
             a.href = url;
@@ -284,27 +472,79 @@
         }
     }
 
+    async function pushEnvelopesToGuests() {
+        if (!isHost || !sessionPassword || !activeTunnel?.id || !myDeviceId) return;
+
+        try {
+            const res = await fetch(`/api/me/tunnels/${activeTunnel.id}/participant-keys`, {
+                headers: buildHeaders()
+            });
+
+            if (!res.ok) return;
+
+            const data = await res.json();
+            const guestParticipants = Array.isArray(data.participants) ? data.participants : [];
+            const pending = guestParticipants.filter(p => !p.has_envelope);
+
+            if (pending.length === 0) return;
+
+            const passwordBytes = new TextEncoder().encode(sessionPassword);
+
+            for (const participant of pending) {
+                try {
+                    const wrapped = await wrapWithPublicKey(passwordBytes, participant.public_key_jwk);
+                    await fetch(`/api/me/tunnels/${activeTunnel.id}/envelopes`, {
+                        method: 'POST',
+                        headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                        body: JSON.stringify({
+                            participant_device_id: participant.device_id,
+                            wrapped_dek_b64: SecureCrypto.toBase64(wrapped),
+                            dek_wrap_alg: 'RSA-OAEP-2048',
+                            dek_wrap_version: 1
+                        })
+                    });
+                } catch (error) {
+                    console.warn('Failed to push envelope for participant:', participant.device_id, error);
+                }
+            }
+        } catch (error) {
+            console.warn('pushEnvelopesToGuests failed:', error);
+        }
+    }
+
     async function handleCreateTunnel() {
         if (AUTHENTICATED) {
             const ready = await ensureDeviceReady();
             if (!ready) return;
+            myDeviceId = authDeviceIdentity.deviceId;
+        } else {
+            myDeviceId = getOrCreateGuestDeviceId();
         }
 
-        const deviceId = AUTHENTICATED ? authDeviceIdentity.deviceId : getOrCreateGuestDeviceId();
+        await ensureEphemeralKeyPair();
 
         try {
             const response = await fetch('/api/me/tunnels/start', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({ duration: '24h', device_id: deviceId })
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    duration: '24h',
+                    device_id: myDeviceId
+                })
             });
-            if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to create tunnel'); }
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to create tunnel');
+            }
+
             const payload = await response.json();
             activeTunnel = payload.tunnel;
             participants = payload.participants || [];
             sessionPassword = null;
             isHost = true;
             hasStarted = false;
+
             setCodeDisplay(codeSquares, activeTunnel.code);
             setCodeDisplay(queueCodeSquares, activeTunnel.code);
             renderParticipants(participants);
@@ -318,33 +558,47 @@
 
     async function handleJoinTunnel() {
         if (joinCodeInput.length !== 4) return;
+
         if (AUTHENTICATED) {
             const ready = await ensureDeviceReady();
             if (!ready) return;
+            myDeviceId = authDeviceIdentity.deviceId;
+        } else {
+            myDeviceId = getOrCreateGuestDeviceId();
         }
 
-        const deviceId = AUTHENTICATED ? authDeviceIdentity.deviceId : getOrCreateGuestDeviceId();
+        await ensureEphemeralKeyPair();
 
         try {
             const response = await fetch('/api/me/tunnels/join', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({ code: joinCodeInput, device_id: deviceId })
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    code: joinCodeInput,
+                    device_id: myDeviceId,
+                    public_key_jwk: ephemeralKeyPair.publicKeyJWK,
+                    key_algorithm: 'RSA-OAEP-2048',
+                    key_version: 1
+                })
             });
-            if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to join tunnel'); }
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to join tunnel');
+            }
+
             const payload = await response.json();
             activeTunnel = payload.tunnel;
             participants = payload.participants || [];
-            sessionPassword = null;
             isHost = false;
             hasStarted = activeTunnel.status === 'active';
+
+            const storedPw = localStorage.getItem(SESSION_PASSWORD_PREFIX + activeTunnel.id);
+            sessionPassword = storedPw || null;
+
             setCodeDisplay(queueCodeSquares, activeTunnel.code);
             renderParticipants(participants);
-            if (!hasStarted) {
-                setView('queue');
-            } else {
-                setView('session');
-            }
+            setView(hasStarted ? 'session' : 'queue');
             startTunnelPolling();
         } catch (error) {
             console.error('Join tunnel failed:', error);
@@ -358,23 +612,31 @@
 
     async function handleStartTunnel() {
         if (!activeTunnel?.id || !isHost) return;
-        const deviceId = AUTHENTICATED ? authDeviceIdentity.deviceId : getOrCreateGuestDeviceId();
 
         try {
             const response = await fetch(`/api/me/tunnels/${activeTunnel.id}/confirm`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({ device_id: deviceId })
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ device_id: myDeviceId })
             });
-            if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to start'); }
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to start');
+            }
+
             const payload = await response.json();
             if (payload.tunnel) activeTunnel = payload.tunnel;
+
             hasStarted = true;
             setView('session');
+
             if (!sessionPassword) {
                 sessionPassword = await SecureCrypto.generatePassword();
                 localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, sessionPassword);
             }
+
+            await pushEnvelopesToGuests();
             await refreshTunnelState();
         } catch (error) {
             console.error('Start tunnel failed:', error);
@@ -384,13 +646,14 @@
 
     async function handleLeaveTunnel() {
         if (!activeTunnel?.id) return;
-        const deviceId = AUTHENTICATED ? authDeviceIdentity.deviceId : getOrCreateGuestDeviceId();
+
         try {
             const response = await fetch(`/api/me/tunnels/${activeTunnel.id}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({ device_id: deviceId })
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ device_id: myDeviceId })
             });
+
             if (response.ok) {
                 const data = await response.json();
                 if (data.tunnel_ended) {
@@ -400,16 +663,19 @@
         } catch (error) {
             console.error('Leave tunnel failed:', error);
         }
+
         clearTunnelState();
         setView('initial');
     }
 
     async function refreshTunnelState() {
         if (!activeTunnel?.id) return;
+
         try {
             const response = await fetch(`/api/me/tunnels/${activeTunnel.id}?t=${Date.now()}`, {
-                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                headers: buildHeaders()
             });
+
             if (!response.ok) {
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState();
@@ -419,21 +685,29 @@
                 }
                 throw new Error('Failed to refresh tunnel state');
             }
+
             const payload = await response.json();
             if (payload?.tunnel) {
                 activeTunnel = payload.tunnel;
                 participants = payload.participants || [];
+
                 const tunnelStatus = activeTunnel.status || '';
                 if (!isHost && !hasStarted && tunnelStatus === 'active') {
                     hasStarted = true;
                     setView('session');
                     if (!sessionPassword) {
-                        sessionPassword = await SecureCrypto.generatePassword();
-                        localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, sessionPassword);
+                        const storedPw = localStorage.getItem(SESSION_PASSWORD_PREFIX + activeTunnel.id);
+                        if (storedPw) sessionPassword = storedPw;
                     }
                 }
+
+                if (isHost && sessionPassword) {
+                    await pushEnvelopesToGuests();
+                }
+
                 updateTunnelUI();
             }
+
             renderTunnelFiles(payload?.files || []);
         } catch (error) {
             console.error('Tunnel refresh failed:', error);
@@ -453,7 +727,10 @@
     }
 
     function stopTunnelPolling() {
-        if (tunnelPollTimer) { clearInterval(tunnelPollTimer); tunnelPollTimer = null; }
+        if (tunnelPollTimer) {
+            clearInterval(tunnelPollTimer);
+            tunnelPollTimer = null;
+        }
     }
 
     function clearTunnelState() {
@@ -465,28 +742,50 @@
         hasStarted = false;
         guestNameMap.clear();
         guestCounter = 0;
+
         if (fileList) fileList.innerHTML = '';
         if (fileListEmpty) fileListEmpty.classList.remove('hidden');
         if (fileList) fileList.classList.add('hidden');
+        if (connectedText) connectedText.textContent = '';
     }
 
     async function processFileForTunnel(file) {
         if (isUploading || !activeTunnel?.id) return;
-        if (file.size > TUNNEL_MAX_FILE_SIZE) { showErrorBanner(`File too large. Maximum: ${SecureCrypto.formatFileSize(TUNNEL_MAX_FILE_SIZE)}`); return; }
-        if (file.size === 0) { showErrorBanner('Cannot upload empty file.'); return; }
+
+        if (file.size > TUNNEL_MAX_FILE_SIZE) {
+            showErrorBanner(`File too large. Maximum: ${SecureCrypto.formatFileSize(TUNNEL_MAX_FILE_SIZE)}`);
+            return;
+        }
+
+        if (file.size === 0) {
+            showErrorBanner('Cannot upload empty file.');
+            return;
+        }
 
         isUploading = true;
         dropMainText.textContent = 'Uploading...';
         dropSubText.textContent = file.name;
 
         try {
-            let password = sessionPassword;
-            if (!password) {
-                password = await SecureCrypto.generatePassword();
-                sessionPassword = password;
-                localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, password);
+            if (isHost && !sessionPassword) {
+                sessionPassword = await SecureCrypto.generatePassword();
+                localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, sessionPassword);
+                await pushEnvelopesToGuests();
             }
 
+            if (!isHost && !sessionPassword) {
+                dropSubText.textContent = 'Waiting for encryption key...';
+                for (let attempt = 0; attempt < 10; attempt++) {
+                    const resolved = await resolveSessionPassword(null);
+                    if (resolved) break;
+                    await new Promise(r => setTimeout(r, 1500));
+                }
+                if (!sessionPassword) {
+                    throw new Error('Could not obtain encryption key from host yet. Please try again in a moment.');
+                }
+            }
+
+            const password = sessionPassword;
             const dekBytes = new TextEncoder().encode(password);
             let envelopePayload = {};
 
@@ -500,76 +799,119 @@
                 };
             }
 
+            dropSubText.textContent = file.name;
+
             const encryptedBlob = await SecureCrypto.encryptFile(file, password, () => {});
             const totalChunks = Math.ceil(encryptedBlob.size / CHUNK_SIZE);
 
             const initRes = await fetch('/api/upload/init', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({ file_name: file.name, file_size: encryptedBlob.size, total_chunks: totalChunks, chunk_size: CHUNK_SIZE, tunnel_id: activeTunnel.id })
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    file_name: file.name,
+                    file_size: encryptedBlob.size,
+                    total_chunks: totalChunks,
+                    chunk_size: CHUNK_SIZE,
+                    tunnel_id: activeTunnel.id
+                })
             });
-            if (!initRes.ok) { const error = await initRes.json(); throw new Error(error.error || 'Init failed'); }
+
+            if (!initRes.ok) {
+                const error = await initRes.json();
+                throw new Error(error.error || 'Init failed');
+            }
+
             const initData = await initRes.json();
             const sessionId = initData.session_id;
 
-            let uploadedChunks = 0;
             const concurrency = Math.max(1, Math.min(PARALLEL_CHUNK_UPLOADS, totalChunks));
             let nextChunkIndex = 0;
+
             const worker = async () => {
                 while (true) {
                     const chunkIndex = nextChunkIndex++;
                     if (chunkIndex >= totalChunks) return;
+
                     const start = chunkIndex * CHUNK_SIZE;
                     const end = Math.min(start + CHUNK_SIZE, encryptedBlob.size);
                     const chunk = encryptedBlob.slice(start, end);
-                    let lastError;
+
+                    let lastError = null;
+
                     for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
-                        if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
+                        if (attempt > 0) {
+                            await new Promise(r => setTimeout(r, 2000 * attempt));
+                        }
+
                         try {
                             const formData = new FormData();
                             formData.append('session_id', sessionId);
                             formData.append('chunk_index', chunkIndex.toString());
                             formData.append('chunk', chunk);
-                            const res = await fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
-                            if (!res.ok) { const error = await res.json(); throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`); }
+
+                            const res = await fetch('/api/upload/chunk', {
+                                method: 'POST',
+                                headers: buildHeaders(),
+                                body: formData
+                            });
+
+                            if (!res.ok) {
+                                const error = await res.json();
+                                throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`);
+                            }
+
+                            lastError = null;
                             break;
-                        } catch (error) { lastError = error; }
+                        } catch (error) {
+                            lastError = error;
+                        }
                     }
+
                     if (lastError) throw lastError;
-                    uploadedChunks++;
                 }
             };
+
             await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
             await fetch('/api/upload/complete', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ session_id: sessionId, confirmed: true })
             });
 
             const deadline = Date.now() + 600000;
             while (Date.now() < deadline) {
-                const statusRes = await fetch(`/api/upload/status/${sessionId}`);
+                const statusRes = await fetch(`/api/upload/status/${sessionId}`, {
+                    headers: buildHeaders()
+                });
                 if (!statusRes.ok) throw new Error('Assembly status check failed');
+
                 const { status } = await statusRes.json();
                 if (status === 'done') break;
                 if (status.startsWith('error:')) throw new Error(status.slice(6));
+
                 await new Promise(r => setTimeout(r, 1500));
             }
 
-            const finalizePayload = {
-                session_id: sessionId,
-                tunnel_id: activeTunnel.id,
-                ...envelopePayload
-            };
             const finalizeRes = await fetch('/api/upload/finalize', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify(finalizePayload)
+                headers: buildHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    session_id: sessionId,
+                    tunnel_id: activeTunnel.id,
+                    ...envelopePayload
+                })
             });
-            if (!finalizeRes.ok) { const error = await finalizeRes.json(); throw new Error(error.error || 'Finalize failed'); }
+
+            if (!finalizeRes.ok) {
+                const error = await finalizeRes.json();
+                throw new Error(error.error || 'Finalize failed');
+            }
+
             const finalizeData = await finalizeRes.json();
-            if (finalizeData.file_id) SecureCrypto.cacheFileKey(finalizeData.file_id, password);
+            if (finalizeData.file_id) {
+                SecureCrypto.cacheFileKey(finalizeData.file_id, password);
+            }
 
             dropMainText.textContent = 'Place files here';
             dropSubText.textContent = '';
@@ -585,63 +927,87 @@
     }
 
     function setupEventListeners() {
-        createBtn.addEventListener('click', handleCreateTunnel);
-        joinBtn.addEventListener('click', () => { setView('join'); joinCodeInput = ''; setCodeDisplay(joinCodeSquares, ''); joinCodeSquares[0]?.focus(); });
-        startBtn.addEventListener('click', handleStartTunnel);
-        joinSubmitBtn.addEventListener('click', handleJoinTunnel);
-        leaveBtn.addEventListener('click', handleLeaveTunnel);
+        createBtn?.addEventListener('click', handleCreateTunnel);
 
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('active'); });
-        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active'); });
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active');
-            if (e.dataTransfer.files.length > 0) processFileForTunnel(e.dataTransfer.files[0]);
+        joinBtn?.addEventListener('click', () => {
+            setView('join');
+            joinCodeInput = '';
+            setCodeDisplay(joinCodeSquares, '');
+            joinCodeSquares[0]?.focus();
         });
-        fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) processFileForTunnel(e.target.files[0]); });
+
+        startBtn?.addEventListener('click', handleStartTunnel);
+        joinSubmitBtn?.addEventListener('click', handleJoinTunnel);
+        leaveBtn?.addEventListener('click', handleLeaveTunnel);
+
+        dropZone?.addEventListener('click', () => fileInput?.click());
+        dropZone?.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('active');
+        });
+        dropZone?.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('active');
+        });
+        dropZone?.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('active');
+            if (e.dataTransfer.files.length > 0) {
+                processFileForTunnel(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput?.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                processFileForTunnel(e.target.files[0]);
+            }
+        });
 
         joinCodeSquares.forEach((sq, index) => {
-            sq.addEventListener('click', () => { joinCodeSquares.forEach(s => s.classList.remove('focused')); sq.classList.add('focused'); });
+            sq.addEventListener('click', () => {
+                joinCodeSquares.forEach(s => s.classList.remove('focused'));
+                sq.classList.add('focused');
+            });
+
             sq.addEventListener('keydown', (e) => {
                 if (e.key >= '0' && e.key <= '9') {
                     e.preventDefault();
-                    joinCodeInput = joinCodeInput.substring(0, index) + e.key + joinCodeInput.substring(index + 1);
+                    const chars = joinCodeInput.split('');
+                    chars[index] = e.key;
+                    joinCodeInput = chars.join('').slice(0, 4);
                     setCodeDisplay(joinCodeSquares, joinCodeInput);
                     if (index < 3) joinCodeSquares[index + 1].focus();
-                    joinCodeInput = joinCodeInput.substring(0, 4);
-                    joinSubmitBtn.disabled = joinCodeInput.length !== 4;
-                    joinSubmitBtn.classList.toggle('disabled', joinCodeInput.length !== 4);
                 } else if (e.key === 'Backspace') {
                     e.preventDefault();
-                    if (joinCodeInput[index]) {
-                        joinCodeInput = joinCodeInput.substring(0, index) + joinCodeInput.substring(index + 1);
+                    const chars = joinCodeInput.split('');
+                    if (chars[index]) {
+                        chars[index] = '';
                     } else if (index > 0) {
-                        joinCodeInput = joinCodeInput.substring(0, index - 1) + joinCodeInput.substring(index);
+                        chars[index - 1] = '';
                         joinCodeSquares[index - 1].focus();
                     }
+                    joinCodeInput = chars.join('').slice(0, 4);
                     setCodeDisplay(joinCodeSquares, joinCodeInput);
-                    joinSubmitBtn.disabled = joinCodeInput.length !== 4;
-                    joinSubmitBtn.classList.toggle('disabled', joinCodeInput.length !== 4);
                 } else if (e.key === 'ArrowLeft' && index > 0) {
-                    e.preventDefault(); joinCodeSquares[index - 1].focus();
+                    e.preventDefault();
+                    joinCodeSquares[index - 1].focus();
                 } else if (e.key === 'ArrowRight' && index < 3) {
-                    e.preventDefault(); joinCodeSquares[index + 1].focus();
+                    e.preventDefault();
+                    joinCodeSquares[index + 1].focus();
                 }
-            });
-            sq.addEventListener('input', (e) => {
-                const val = e.target.textContent.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-                if (val) {
-                    joinCodeInput = joinCodeInput.substring(0, index) + val + joinCodeInput.substring(index + 1);
-                    joinCodeInput = joinCodeInput.substring(0, 4);
-                    setCodeDisplay(joinCodeSquares, joinCodeInput);
-                    if (index < 3) joinCodeSquares[index + 1].focus();
-                    joinSubmitBtn.disabled = joinCodeInput.length !== 4;
-                    joinSubmitBtn.classList.toggle('disabled', joinCodeInput.length !== 4);
-                }
+
+                joinCodeInput = joinCodeInput.replace(/[^0-9]/g, '').slice(0, 4);
+                joinSubmitBtn.disabled = joinCodeInput.length !== 4;
+                joinSubmitBtn.classList.toggle('disabled', joinCodeInput.length !== 4);
             });
         });
 
-        if (errorBannerClose) errorBannerClose.addEventListener('click', hideErrorBanner);
+        if (errorBannerClose) {
+            errorBannerClose.addEventListener('click', hideErrorBanner);
+        }
     }
 
     let errorBannerHideTimer = null;
@@ -649,9 +1015,11 @@
 
     function showErrorBanner(message) {
         if (!errorBanner) return;
+
         if (errorBannerText) errorBannerText.textContent = message;
         if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
         if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
+
         errorBanner.classList.remove('hidden');
         requestAnimationFrame(() => errorBanner.classList.add('visible'));
         errorBannerHideTimer = setTimeout(() => hideErrorBanner(), 4500);
@@ -662,17 +1030,37 @@
         if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
         if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
         if (errorBanner.classList.contains('hidden')) return;
+
         errorBanner.classList.remove('visible');
-        errorBannerCloseTimer = setTimeout(() => { if (!errorBanner.classList.contains('visible')) errorBanner.classList.add('hidden'); }, 320);
+        errorBannerCloseTimer = setTimeout(() => {
+            if (!errorBanner.classList.contains('visible')) {
+                errorBanner.classList.add('hidden');
+            }
+        }, 320);
     }
 
     async function init() {
         setupTOSGate();
-        try { await SecureCrypto.loadWordList(); } catch (error) { console.error('Word list failed:', error); }
+
+        try {
+            await ensureEphemeralKeyPair();
+        } catch (error) {
+            console.error('Ephemeral keypair init failed:', error);
+        }
+
+        try {
+            await SecureCrypto.loadWordList();
+        } catch (error) {
+            console.error('Word list failed:', error);
+        }
+
         setupEventListeners();
         setView('initial');
     }
 
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-    else init();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
 })();

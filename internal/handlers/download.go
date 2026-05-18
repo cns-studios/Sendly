@@ -91,7 +91,6 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	 
 	if !isValidFileID(fileID) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid file ID format",
@@ -100,7 +99,6 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	 
 	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -121,7 +119,6 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	 
 	reader, err := h.fs.GetFileReader(fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
@@ -132,7 +129,6 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 	}
 	defer reader.Close()
 
-	 
 	fileSize, err := h.fs.GetFileSize(fileID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
@@ -142,24 +138,16 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	 
-	 
-	 
-	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.enc\"", fileID))
-	c.Header("Content-Transfer-Encoding", "binary")
 	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
 	c.Header("X-Original-Filename", file.OriginalName)
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-	c.Header("Pragma", "no-cache")
-	c.Header("Expires", "0")
 
-	 
 	c.Status(http.StatusOK)
+	c.Writer.Flush()
 	_, err = io.Copy(c.Writer, reader)
 	if err != nil {
-		 
 		fmt.Printf("Error streaming file %s: %v\n", fileID, err)
 	}
 }

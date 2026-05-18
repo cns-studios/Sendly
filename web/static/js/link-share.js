@@ -383,6 +383,7 @@
         }
 
         const onMove = () => {
+            if (idleCopyDone) return;
             copyToClipboard(text, true).then(ok => {
                 if (ok) {
                     idleCopyDone = true;

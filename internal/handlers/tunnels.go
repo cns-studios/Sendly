@@ -97,7 +97,6 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
 		return
 	}
-
 	if tunnel.Status == models.TunnelStatusActive {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is already active and no longer accepting new members", Code: "TUNNEL_ALREADY_ACTIVE"})
 		return
@@ -121,6 +120,18 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to join tunnel", Code: "TUNNEL_JOIN_FAILED"})
 		return
+	}
+
+	// Save the guest's ephemeral public key so the host can wrap the session DEK for them
+	if len(req.PublicKeyJWK) > 0 && req.DeviceID != "" {
+		_ = h.db.SaveParticipantPublicKey(
+			c.Request.Context(),
+			tunnel.ID,
+			req.DeviceID,
+			req.PublicKeyJWK,
+			req.KeyAlgorithm,
+			req.KeyVersion,
+		)
 	}
 
 	participants, _ := h.db.GetTunnelParticipants(c.Request.Context(), tunnel.ID)
@@ -184,23 +195,25 @@ func (h *TunnelHandler) End(c *gin.Context) {
 		return
 	}
 
+	var req models.TunnelEndRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// non-fatal — device_id is best-effort
+		req.DeviceID = ""
+	}
+
 	user := middleware.GetCNSUser(c)
 	var userID int64
-	var deviceID string
 	if user != nil {
 		userID = int64(user.ID)
 	}
-	if d, _ := c.GetPostForm("device_id"); d != "" {
-		deviceID = d
-	}
 
-	if err := h.db.RemoveTunnelParticipant(c.Request.Context(), tunnelID, userID, deviceID); err != nil {
+	if err := h.db.RemoveTunnelParticipant(c.Request.Context(), tunnelID, userID, req.DeviceID); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to leave tunnel", Code: "TUNNEL_LEAVE_FAILED"})
 		return
 	}
 
 	count, countErr := h.db.CountTunnelParticipants(c.Request.Context(), tunnelID)
-	if countErr != nil || count <= 1 {
+	if countErr != nil || count == 0 {
 		fileIDs, _ := h.db.GetTunnelFileIDs(c.Request.Context(), tunnelID)
 		for _, fileID := range fileIDs {
 			_ = h.fs.DeleteFile(fileID)
@@ -382,6 +395,188 @@ func (h *TunnelHandler) GuestFileAccess(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// GetParticipantPublicKeys — host calls this to get all guest public keys
+// so it can wrap the session DEK for each one.
+func (h *TunnelHandler) GetParticipantPublicKeys(c *gin.Context) {
+	tunnelID := c.Param("id")
+	if tunnelID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
+		return
+	}
+
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+
+	// Verify caller is the host
+	isHost := h.callerIsHost(c, tunnel)
+	if !isHost {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Only the tunnel host can list participant keys", Code: "FORBIDDEN"})
+		return
+	}
+
+	participants, err := h.db.GetParticipantsWithPublicKeys(c.Request.Context(), tunnelID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch participants", Code: "PARTICIPANTS_FETCH_FAILED"})
+		return
+	}
+
+	result := make([]models.TunnelParticipantPublicKey, 0, len(participants))
+	for _, p := range participants {
+		if len(p.PublicKeyJWK) == 0 || !p.DeviceID.Valid {
+			continue
+		}
+		// Skip the host's own entry
+		if h.participantIsHost(p, tunnel) {
+			continue
+		}
+		hasEnv, _ := h.db.ParticipantHasEnvelope(c.Request.Context(), tunnelID, p.DeviceID.String)
+		result = append(result, models.TunnelParticipantPublicKey{
+			ParticipantID: p.ID,
+			DeviceID:      p.DeviceID.String,
+			PublicKeyJWK:  p.PublicKeyJWK,
+			KeyAlgorithm:  p.KeyAlgorithm.String,
+			KeyVersion:    int(p.KeyVersion.Int32),
+			HasEnvelope:   hasEnv,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"participants": result})
+}
+
+// PushParticipantEnvelope — host calls this to push a wrapped DEK
+// for each guest participant that has submitted a public key.
+func (h *TunnelHandler) PushParticipantEnvelope(c *gin.Context) {
+	tunnelID := c.Param("id")
+	if tunnelID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
+		return
+	}
+
+	var req models.TunnelPushEnvelopeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
+		return
+	}
+
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+	if tunnel.Status != models.TunnelStatusActive {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
+		return
+	}
+
+	if !h.callerIsHost(c, tunnel) {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Only the tunnel host can push envelopes", Code: "FORBIDDEN"})
+		return
+	}
+
+	wrappedDEK, err := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK"})
+		return
+	}
+
+	var nonce []byte
+	if req.DEKWrapNonceB64 != "" {
+		nonce, err = base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid nonce", Code: "INVALID_NONCE"})
+			return
+		}
+	}
+
+	version := req.DEKWrapVersion
+	if version == 0 {
+		version = 1
+	}
+
+	if err := h.db.SaveTunnelParticipantEnvelope(
+		c.Request.Context(),
+		tunnelID,
+		req.ParticipantDeviceID,
+		wrappedDEK,
+		nonce,
+		req.DEKWrapAlg,
+		version,
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to save envelope", Code: "ENVELOPE_SAVE_FAILED"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// GetParticipantEnvelope — guest polls this to get their wrapped DEK
+// once the host has pushed it.
+func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
+	tunnelID := c.Param("id")
+	deviceID := c.Param("device_id")
+	if tunnelID == "" || deviceID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "tunnel_id and device_id required", Code: "INVALID_REQUEST"})
+		return
+	}
+
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
+		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+	if tunnel.Status == models.TunnelStatusEnded || tunnel.Status == models.TunnelStatusExpired {
+		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+
+	envelope, err := h.db.GetTunnelParticipantEnvelope(c.Request.Context(), tunnelID, deviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch envelope", Code: "ENVELOPE_FETCH_FAILED"})
+		return
+	}
+	if envelope == nil {
+		// Not ready yet — host hasn't wrapped for this device
+		c.JSON(http.StatusAccepted, gin.H{"ready": false})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ready": true, "envelope": envelope})
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// callerIsHost returns true if the authenticated user or device matches
+// the tunnel's initiator.
+func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool {
+	user := middleware.GetCNSUser(c)
+	if user != nil && int64(user.ID) == tunnel.InitiatorCNSUserID {
+		return true
+	}
+	// Guest host: match via X-Device-ID header
+	hostDeviceID := c.GetHeader("X-Device-ID")
+	if hostDeviceID != "" && tunnel.InitiatorDeviceID.Valid &&
+		strings.EqualFold(tunnel.InitiatorDeviceID.String, hostDeviceID) {
+		return true
+	}
+	return false
+}
+
+// participantIsHost returns true if the participant row belongs to the host.
+func (h *TunnelHandler) participantIsHost(p models.TunnelParticipant, tunnel *models.Tunnel) bool {
+	if tunnel.InitiatorCNSUserID != 0 && p.CNSUserID.Valid &&
+		p.CNSUserID.Int64 == tunnel.InitiatorCNSUserID {
+		return true
+	}
+	if tunnel.InitiatorDeviceID.Valid && p.DeviceID.Valid &&
+		strings.EqualFold(p.DeviceID.String, tunnel.InitiatorDeviceID.String) {
+		return true
+	}
+	return false
 }
 
 func (h *TunnelHandler) generateUniqueTunnelCode(ctx context.Context) (string, error) {
