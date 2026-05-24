@@ -244,7 +244,7 @@
                 }
             }
 
-            zoneSubtext.textContent = 'Encrypting...';
+            zoneSubtext.textContent = 'Uploading...';
             encryptedBlob = await SecureCrypto.encryptFile(selectedFile, generatedPassword, () => {});
             await startUploadInBackground();
             uploadComplete = true;
@@ -437,18 +437,37 @@
 
     async function copyToClipboard(text, silent = false) {
         try {
-            await navigator.clipboard.writeText(text);
-            if (!silent) showToast('Copied to clipboard!');
-            return true;
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(text);
+                if (!silent) showToast('Copied to clipboard!');
+                return true;
+            }
         } catch (error) {
-            const textarea = document.createElement('textarea');
-            textarea.value = text; textarea.style.position = 'fixed'; textarea.style.opacity = '0';
-            document.body.appendChild(textarea); textarea.select();
-            const ok = document.execCommand('copy'); document.body.removeChild(textarea);
-            if (!ok) return false;
+        }
+
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '0';
+        textarea.style.top = '0';
+        textarea.style.width = '1px';
+        textarea.style.height = '1px';
+        textarea.style.opacity = '0';
+        textarea.setAttribute('readonly', '');
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } catch (error) {
+        }
+        document.body.removeChild(textarea);
+        if (ok) {
             if (!silent) showToast('Copied to clipboard!');
             return true;
         }
+        return false;
     }
 
     function showNotification(message, type) {

@@ -382,7 +382,7 @@
             }
         }
 
-        if (AUTHENTICATED && authUserKeyRaw && activeTunnel?.id && fileId) {
+        if (activeTunnel?.id && fileId) {
             try {
                 const accessRes = await fetch(
                     `/api/tunnels/${activeTunnel.id}/files/${fileId}/access`,
@@ -394,21 +394,34 @@
                     const envelope = accessData.file_key_envelope;
                     if (envelope?.wrapped_dek_b64) {
                         const wrappedDEK = SecureCrypto.fromBase64(envelope.wrapped_dek_b64);
-                        const nonce = envelope.dek_wrap_nonce_b64
-                            ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64)
-                            : null;
+                        const alg = (envelope.dek_wrap_alg || '').toUpperCase();
+                        let rawDEK = null;
 
-                        const rawDEK = await SecureCrypto.unwrapSecretWithUserKey(
-                            wrappedDEK,
-                            nonce,
-                            authUserKeyRaw
-                        );
+                        if (alg === 'AES-GCM-UK-V1') {
+                            if (authUserKeyRaw) {
+                                const nonce = envelope.dek_wrap_nonce_b64
+                                    ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64)
+                                    : null;
+                                rawDEK = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, authUserKeyRaw);
+                            }
+                        } else if (alg.startsWith('RSA-OAEP')) {
+                            if (ephemeralKeyPair?.privateKey) {
+                                const raw = await crypto.subtle.decrypt(
+                                    { name: 'RSA-OAEP' },
+                                    ephemeralKeyPair.privateKey,
+                                    wrappedDEK
+                                );
+                                rawDEK = new Uint8Array(raw);
+                            }
+                        }
 
-                        const pw = new TextDecoder().decode(rawDEK);
-                        sessionPassword = pw;
-                        localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, pw);
-                        SecureCrypto.cacheFileKey(fileId, pw);
-                        return sessionPassword;
+                        if (rawDEK) {
+                            const pw = new TextDecoder().decode(rawDEK);
+                            sessionPassword = pw;
+                            localStorage.setItem(SESSION_PASSWORD_PREFIX + activeTunnel.id, pw);
+                            if (fileId) SecureCrypto.cacheFileKey(fileId, pw);
+                            return sessionPassword;
+                        }
                     }
                 }
             } catch (error) {
@@ -787,6 +800,13 @@
                     wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
                     dek_wrap_alg: 'AES-GCM-UK-v1',
                     dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
+                    dek_wrap_version: 1
+                };
+            } else if (ephemeralKeyPair) {
+                const wrapped = await wrapWithPublicKey(dekBytes, ephemeralKeyPair.publicKeyJWK);
+                envelopePayload = {
+                    wrapped_dek_b64: SecureCrypto.toBase64(wrapped),
+                    dek_wrap_alg: 'RSA-OAEP-2048',
                     dek_wrap_version: 1
                 };
             }

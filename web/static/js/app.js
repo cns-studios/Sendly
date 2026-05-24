@@ -187,6 +187,11 @@
             if (deviceReady) {
                 await loadRecentUploads();
                 await loadPendingEnrollments();
+            } else {
+                setRecentState('empty');
+                if (recentEmpty) {
+                    recentEmpty.textContent = 'Approve this device to access your files.';
+                }
             }
         }
     }
@@ -1335,17 +1340,17 @@
             return cached;
         }
 
+        if (!authDeviceIdentity) {
+            await ensureDeviceReady();
+        }
+
         let accessUrl = '';
-        if (AUTHENTICATED) {
-            if (!authDeviceIdentity) {
-                await ensureDeviceReady();
-            }
+        if (tunnelId) {
+            accessUrl = `/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`;
+        } else if (AUTHENTICATED) {
             accessUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
         } else {
-            if (!tunnelId) {
-                throw new Error('Guest decryption requires an active tunnel.');
-            }
-            accessUrl = `/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`;
+            throw new Error('A tunnel is required to access this file.');
         }
 
         const response = await fetch(accessUrl, {
@@ -1353,6 +1358,43 @@
         });
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
+            if (tunnelId && AUTHENTICATED && errorPayload.code !== 'TUNNEL_NOT_AVAILABLE') {
+                const fallbackUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
+                const fallbackRes = await fetch(fallbackUrl, {
+                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                });
+                if (fallbackRes.ok) {
+                    const payload = await fallbackRes.json();
+                    const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
+                    const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
+                    let dekBytes;
+                    if (dekWrapAlg.startsWith('RAW-DEK')) {
+                        dekBytes = wrappedDEK;
+                    } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
+                        if (!AUTHENTICATED) {
+                            if (!ephemeralKeyPair) throw new Error('Ephemeral key not available for guest decryption.');
+                            const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
+                            dekBytes = new Uint8Array(raw);
+                        } else {
+                            dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
+                        }
+                    } else {
+                        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+                        if (!userKeyRaw) {
+                            const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
+                            if (!wrappedUKB64) throw new Error('Unable to access decryption key for this file on this device.');
+                            const wrappedUK = SecureCrypto.fromBase64(wrappedUKB64);
+                            userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+                            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
+                        }
+                        const nonce = payload.file_key_envelope.dek_wrap_nonce_b64 ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64) : new Uint8Array();
+                        dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
+                    }
+                    const passphrase = new TextDecoder().decode(dekBytes);
+                    SecureCrypto.cacheFileKey(fileId, passphrase);
+                    return passphrase;
+                }
+            }
             throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
         }
 
@@ -1364,16 +1406,15 @@
         if (dekWrapAlg.startsWith('RAW-DEK')) {
             dekBytes = wrappedDEK;
         } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
-            if (!AUTHENTICATED) {
-                if (!ephemeralKeyPair) {
-                    throw new Error('Ephemeral key not available for guest decryption.');
-                }
+            if (ephemeralKeyPair?.privateKey) {
                 try {
                     const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
                     dekBytes = new Uint8Array(raw);
                 } catch (error) {
                     throw new Error('Failed to decrypt file key with ephemeral key.');
                 }
+            } else if (!AUTHENTICATED) {
+                throw new Error('Ephemeral key not available for guest decryption.');
             } else {
                 try {
                     dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
@@ -1837,19 +1878,19 @@
         stagePending.classList.add('hidden');
         stageOutput.classList.add('hidden');
         stageProcessing.classList.remove('hidden');
-        statusText.textContent = 'Encrypting...';
+        statusText.textContent = 'Uploading...';
         
         try {
              
             generatedPassword = await SecureCrypto.generatePassword();
-            updateProgress(0, 'Scrambling data', 'Encrypting...');
+            updateProgress(0, 'Scrambling data', 'Uploading...');
 
              
             encryptedBlob = await SecureCrypto.encryptFile(
                 selectedFile,
                 generatedPassword,
                 (progress, status) => {
-                    updateProgress(progress * 0.5, status, 'Encrypting...');
+                    updateProgress(progress * 0.5, status, 'Uploading...');
                 }
             );
 
