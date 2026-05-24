@@ -11,8 +11,6 @@
     const autoDecryptSection = document.getElementById('auto-decrypt-section');
     const noPasswordSection = document.getElementById('no-password-section');
     const progressSection = document.getElementById('progress-section');
-    const successSection = document.getElementById('success-section');
-    const errorSection = document.getElementById('error-section');
 
     const fileNameEl = document.getElementById('file-name');
     const fileSizeEl = document.getElementById('file-size');
@@ -20,22 +18,15 @@
     const fileExpiresEl = document.getElementById('file-expires');
 
     const downloadAutoBtn = document.getElementById('download-auto-btn');
-    const downloadAgainBtn = document.getElementById('download-again-btn');
-    const retryBtn = document.getElementById('retry-btn');
 
     const progressTitle = document.getElementById('progress-title');
     const progressText = document.getElementById('progress-text');
-    const errorTitle = document.getElementById('error-title');
-    const errorMessage = document.getElementById('error-message');
 
     const reportBtn = document.getElementById('report-btn');
     const reportModal = document.getElementById('report-modal');
     const reportCancel = document.getElementById('report-cancel');
     const reportConfirm = document.getElementById('report-confirm');
 
-    const errorBanner = document.getElementById('error-banner');
-    const errorBannerText = document.getElementById('error-banner-text');
-    const errorBannerClose = document.getElementById('error-banner-close');
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -65,15 +56,11 @@
 
     function setupEventListeners() {
         downloadAutoBtn?.addEventListener('click', () => downloadAndDecrypt(currentPassword));
-        downloadAgainBtn?.addEventListener('click', () => downloadAndDecrypt(currentPassword));
-        retryBtn?.addEventListener('click', () => loadFileMetadata(fileId));
 
         reportBtn?.addEventListener('click', () => { reportModal.classList.remove('hidden'); });
         reportCancel?.addEventListener('click', () => { reportModal.classList.add('hidden'); });
         reportConfirm?.addEventListener('click', submitReport);
         reportModal?.addEventListener('click', (e) => { if (e.target === reportModal) reportModal.classList.add('hidden'); });
-
-        if (errorBannerClose) errorBannerClose.addEventListener('click', hideErrorBanner);
     }
 
     async function loadFileMetadata(fileID) {
@@ -118,8 +105,7 @@
     async function downloadAndDecrypt(password) {
         const validation = SecureCrypto.validatePassword(password);
         if (!validation.valid) {
-            showError('Invalid Passcode', validation.error);
-            retryBtn.classList.remove('hidden');
+            showNotification(validation.error, 'error');
             return;
         }
 
@@ -129,8 +115,6 @@
         passwordSection.classList.add('hidden');
         autoDecryptSection.classList.add('hidden');
         progressSection.classList.remove('hidden');
-        successSection.classList.add('hidden');
-        errorSection.classList.add('hidden');
 
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
@@ -164,12 +148,10 @@
             console.error('Download/decrypt failed:', error);
             progressSection.classList.add('hidden');
 
-            if (error.message.includes('Decryption failed')) {
-                showError('Something failed', 'Error Code 4x001');
-                retryBtn.classList.remove('hidden');
-            } else {
-                showError('Something failed', 'Unexpected error occurred. Please try again.');
-                retryBtn.classList.remove('hidden');
+            showNotification('Download failed. Please try again.', 'error');
+            passwordSection.classList.remove('hidden');
+            if (currentPassword) {
+                autoDecryptSection.classList.remove('hidden');
             }
         }
     }
@@ -235,13 +217,13 @@
 
             if (response.ok) {
                 reportModal.classList.add('hidden');
-                showToast('Report submitted. Thank you for helping keep our platform safe.');
+                showNotification('Report submitted. Thank you for helping keep our platform safe.', 'info');
             } else {
-                showToast(result.error || 'Failed to submit report');
+                showNotification(result.error || 'Failed to submit report', 'error');
             }
         } catch (error) {
             console.error('Report failed:', error);
-            showToast('Failed to submit report. Please try again.');
+            showNotification('Failed to submit report. Please try again.', 'error');
         } finally {
             reportConfirm.disabled = false;
             reportConfirm.textContent = 'Report';
@@ -250,29 +232,12 @@
 
     function handleAPIError(error) {
         loadingSection.classList.add('hidden');
-        switch (error.code) {
-            case 'FILE_NOT_FOUND':
-                showError('File Not Found', 'This file does not exist or has been removed.');
-                break;
-            case 'FILE_EXPIRED':
-                showError('File Expired', 'This file has expired and is no longer available. Ask the sender to upload it again.');
-                break;
-            case 'FILE_DELETED':
-                showError('File Removed', 'This file has been removed due to policy violations.');
-                break;
-            default:
-                showError('Error', error.error || 'An unexpected error occurred.');
-        }
-    }
-
-    function showError(title, message) {
-        errorTitle.textContent = title;
-        errorMessage.textContent = message;
-        loadingSection.classList.add('hidden');
-        passwordSection.classList.add('hidden');
-        progressSection.classList.add('hidden');
-        successSection.classList.add('hidden');
-        errorSection.classList.remove('hidden');
+        const messages = {
+            FILE_NOT_FOUND: 'This file does not exist or has been removed.',
+            FILE_EXPIRED: 'This file has expired and is no longer available. Ask the sender to upload it again.',
+            FILE_DELETED: 'This file has been removed due to policy violations.',
+        };
+        showNotification(messages[error.code] || error.error || 'An unexpected error occurred.', 'error');
     }
 
     function updateProgress(percent, text) {
@@ -309,37 +274,45 @@
         }
     }
 
-    function showToast(message) {
-        const existing = document.querySelector('.toast');
-        if (existing) existing.remove();
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.textContent = message;
-        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 24px;border-radius:8px;z-index:1001;max-width:90%;text-align:center;';
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 4000);
-    }
+    let notificationTimer = null;
 
-    let errorBannerHideTimer = null;
-    let errorBannerCloseTimer = null;
+    function showNotification(message, type) {
+        const pill = document.getElementById('notification-pill');
+        const icon = document.getElementById('notification-icon');
+        const text = document.getElementById('notification-text');
+        if (!pill || !text) return;
 
-    function showErrorBanner(message) {
-        if (!errorBanner) return;
-        if (errorBannerText) errorBannerText.textContent = message;
-        if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
-        if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
-        errorBanner.classList.remove('hidden');
-        requestAnimationFrame(() => errorBanner.classList.add('visible'));
-        errorBannerHideTimer = setTimeout(() => hideErrorBanner(), 4500);
-    }
+        if (notificationTimer) {
+            clearTimeout(notificationTimer);
+            notificationTimer = null;
+        }
 
-    function hideErrorBanner() {
-        if (!errorBanner) return;
-        if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
-        if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
-        if (errorBanner.classList.contains('hidden')) return;
-        errorBanner.classList.remove('visible');
-        errorBannerCloseTimer = setTimeout(() => { if (!errorBanner.classList.contains('visible')) errorBanner.classList.add('hidden'); }, 320);
+        pill.classList.remove('visible');
+        pill.classList.add('hidden');
+
+        text.textContent = message;
+
+        if (icon) {
+            if (type === 'error') {
+                icon.setAttribute('data-lucide', 'circle-x');
+                icon.style.color = '#FF3B30';
+            } else {
+                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.style.color = '#000';
+            }
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            }
+        }
+
+        pill.classList.remove('hidden');
+        pill.offsetHeight;
+        pill.classList.add('visible');
+
+        notificationTimer = setTimeout(() => {
+            pill.classList.remove('visible');
+            setTimeout(() => pill.classList.add('hidden'), 350);
+        }, 3500);
     }
 
     async function init() {

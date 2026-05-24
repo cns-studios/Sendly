@@ -52,9 +52,7 @@
     const queueCodeSquares = document.querySelectorAll('#queueCodeSquares .code-square');
     const peopleRow = document.getElementById('peopleRow');
     const queuePeopleRow = document.getElementById('queuePeopleRow');
-    const errorBanner = document.getElementById('error-banner');
-    const errorBannerText = document.getElementById('error-banner-text');
-    const errorBannerClose = document.getElementById('error-banner-close');
+    let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -1005,39 +1003,52 @@
             });
         });
 
-        if (errorBannerClose) {
-            errorBannerClose.addEventListener('click', hideErrorBanner);
-        }
     }
 
-    let errorBannerHideTimer = null;
-    let errorBannerCloseTimer = null;
+    function showNotification(message, type) {
+        const pill = document.getElementById('notification-pill');
+        const icon = document.getElementById('notification-icon');
+        const text = document.getElementById('notification-text');
+        if (!pill || !text) return;
+
+        if (notificationTimer) {
+            clearTimeout(notificationTimer);
+            notificationTimer = null;
+        }
+
+        pill.classList.remove('visible');
+        pill.classList.add('hidden');
+
+        text.textContent = message;
+
+        if (icon) {
+            if (type === 'error') {
+                icon.setAttribute('data-lucide', 'circle-x');
+                icon.style.color = '#FF3B30';
+            } else {
+                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.style.color = '#000';
+            }
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            }
+        }
+
+        pill.classList.remove('hidden');
+        pill.offsetHeight;
+        pill.classList.add('visible');
+
+        notificationTimer = setTimeout(() => {
+            pill.classList.remove('visible');
+            setTimeout(() => pill.classList.add('hidden'), 350);
+        }, 3500);
+    }
 
     function showErrorBanner(message) {
-        if (!errorBanner) return;
-
-        if (errorBannerText) errorBannerText.textContent = message;
-        if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
-        if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
-
-        errorBanner.classList.remove('hidden');
-        requestAnimationFrame(() => errorBanner.classList.add('visible'));
-        errorBannerHideTimer = setTimeout(() => hideErrorBanner(), 4500);
+        showNotification(message, 'error');
     }
 
-    function hideErrorBanner() {
-        if (!errorBanner) return;
-        if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
-        if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
-        if (errorBanner.classList.contains('hidden')) return;
-
-        errorBanner.classList.remove('visible');
-        errorBannerCloseTimer = setTimeout(() => {
-            if (!errorBanner.classList.contains('visible')) {
-                errorBanner.classList.add('hidden');
-            }
-        }, 320);
-    }
+    function hideErrorBanner() {}
 
     async function init() {
         setupTOSGate();

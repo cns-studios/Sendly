@@ -28,15 +28,9 @@
         <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 90 day retention.</span>
     </div>
 
-    <div id="error-banner" class="error-banner hidden">
-        <div class="error-banner-content">
-            <span id="error-banner-text" class="error-banner-text"></span>
-            <div class="error-banner-actions">
-                <button id="error-banner-close" class="error-banner-close" title="Close">
-                    <i data-lucide="x" style="width: 1rem; height: 1rem;"></i>
-                </button>
-            </div>
-        </div>
+    <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
+        <i id="notification-icon" class="notification-icon" data-lucide="circle-alert" style="width: 20px; height: 20px;"></i>
+        <span id="notification-text" class="notification-text"></span>
     </div>
 
     <div id="device-approval-modal" class="device-approval-modal hidden" aria-hidden="true">
@@ -81,8 +75,9 @@
             <div class="header-left">
                 <a href="/" class="logo-text">ShareIt</a>
                 <nav class="quicklinks">
-                    <a href="/quickshare">Quick Share</a>
-                    <a href="/link">Link</a>
+                    <a href="/limits">Pricing</a>
+                    <a href="/data-encryption">Security</a>
+                    <a href="/help">FAQ</a>
                 </nav>
             </div>
             {{if .authenticated}}
@@ -122,93 +117,21 @@
 
         <section class="file-section">
             <h2>Recent files</h2>
-            <div class="file-list">
-                <div class="file-entry" style="opacity: 1;">
-                    <div class="file-entry-left">
-                        <span class="file-name">filename.txt</span>
-                        <span class="file-info">02.05 • Expires tomorrow</span>
-                    </div>
-                    <div class="file-entry-right">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </div>
-                </div>
-                <div class="file-entry" style="opacity: 0.75;">
-                    <div class="file-entry-left">
-                        <span class="file-name">filename.txt</span>
-                        <span class="file-info">02.05 • Expires tomorrow</span>
-                    </div>
-                    <div class="file-entry-right">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </div>
-                </div>
-                <div class="file-entry" style="opacity: 0.50;">
-                    <div class="file-entry-left">
-                        <span class="file-name">filename.txt</span>
-                        <span class="file-info">02.05 • Expires tomorrow</span>
-                    </div>
-                    <div class="file-entry-right">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </div>
-                </div>
-                <div class="file-entry" style="opacity: 0.25;">
-                    <div class="file-entry-left">
-                        <span class="file-name">filename.txt</span>
-                        <span class="file-info">02.05 • Expires tomorrow</span>
-                    </div>
-                    <div class="file-entry-right">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </div>
-                </div>
-                <div class="file-entry" style="opacity: 0.05;">
-                    <div class="file-entry-left">
-                        <span class="file-name">filename.txt</span>
-                        <span class="file-info">02.05 • Expires tomorrow</span>
-                    </div>
-                    <div class="file-entry-right">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                        </svg>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </div>
+            {{if .authenticated}}
+            <div id="recent-uploads-section">
+                <div class="file-list" id="recent-list"></div>
+                <p class="recent-state" id="recent-loading">Loading...</p>
+                <p class="recent-state hidden" id="recent-error">Failed to load recent files.</p>
+                <p class="recent-state hidden" id="recent-empty">No recently uploaded files.</p>
+                <div class="hidden" id="recent-pagination" style="display:flex;align-items:center;justify-content:center;gap:1rem;margin-top:1rem;">
+                    <button id="recent-prev" class="recent-action" style="font-size:0.8rem;padding:4px 12px;">Previous</button>
+                    <span id="recent-page-label" style="font-size:0.75rem;color:#888;"></span>
+                    <button id="recent-next" class="recent-action" style="font-size:0.8rem;padding:4px 12px;">Next</button>
                 </div>
             </div>
+            {{else}}
+            <p class="recent-state">Log In to access your previous files</p>
+            {{end}}
         </section>
 
         <div class="shapes-container">
@@ -256,9 +179,9 @@
     <footer class="footer">
         <a href="/tos">Terms of Service</a>
         <a href="/privacy">Privacy Policy</a>
-        <a href="#">Limits</a>
-        <a href="#">Data Encryption</a>
-        <a href="#">Help</a>
+        <a href="/limits">Limits</a>
+        <a href="/data-encryption">Data Encryption</a>
+        <a href="/help">Help</a>
     </footer>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">

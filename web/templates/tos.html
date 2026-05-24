@@ -10,19 +10,30 @@
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="space-y-1">
-                <h1><a href="/" style="text-decoration: none; color: inherit;">ShareIt</a></h1>
-                <p class="subtitle">End-to-End Encrypted File Sharing</p>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">ShareIt</a>
+                <nav class="quicklinks">
+                    <a href="/limits">Pricing</a>
+                    <a href="/data-encryption">Security</a>
+                    <a href="/help">FAQ</a>
+                </nav>
             </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
         </header>
+    </div>
 
         <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
             <article class="legal-document">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
                     <h1>Terms of Service</h1>
-                    <a href="/" class="btn btn-secondary" style="white-space: nowrap;">< Back to Home</a>
                 </div>
                 <p class="last-updated">Last updated: April 5, 2026</p>
 
@@ -100,6 +111,9 @@
             <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
                 <p>Secured file sharing made easy. Powered by CNS</p>
                 <nav style="display: flex; gap: 2rem; font-size: 0.9rem;">
+                    <a href="/limits" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Limits</a>
+                    <a href="/data-encryption" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Encryption</a>
+                    <a href="/help" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Help</a>
                     <a href="/tos" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Terms</a>
                     <a href="/privacy" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Privacy</a>
                 </nav>

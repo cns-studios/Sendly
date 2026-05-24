@@ -118,6 +118,9 @@ func main() {
 	router.GET("/link", pageHandler.Link)
 	router.GET("/tos", pageHandler.ToS)
 	router.GET("/privacy", pageHandler.Privacy)
+	router.GET("/limits", pageHandler.LimitsPage)
+	router.GET("/data-encryption", pageHandler.DataEncryption)
+	router.GET("/help", pageHandler.HelpPage)
 	router.GET("/shared/:id", pageHandler.SharedFile)
 
 	auth := router.Group("/auth")

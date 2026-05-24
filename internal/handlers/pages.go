@@ -76,17 +76,106 @@ func (h *PageHandler) Index(c *gin.Context) {
 
 func (h *PageHandler) ToS(c *gin.Context) {
 	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
 	c.HTML(http.StatusOK, "tos.html", gin.H{
-		"title":   "Terms of Service - ShareIt",
-		"baseURL": h.cfg.BaseURL,
+		"title":         "Terms of Service - ShareIt",
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
 	})
 }
 
 func (h *PageHandler) Privacy(c *gin.Context) {
 	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
 	c.HTML(http.StatusOK, "privacy.html", gin.H{
-		"title":   "Privacy Policy - ShareIt",
-		"baseURL": h.cfg.BaseURL,
+		"title":         "Privacy Policy - ShareIt",
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
+	})
+}
+
+func (h *PageHandler) LimitsPage(c *gin.Context) {
+	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
+	c.HTML(http.StatusOK, "limits.html", gin.H{
+		"title":         "Limits - ShareIt",
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
+	})
+}
+
+func (h *PageHandler) DataEncryption(c *gin.Context) {
+	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
+	c.HTML(http.StatusOK, "data-encryption.html", gin.H{
+		"title":         "Data Encryption - ShareIt",
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
+	})
+}
+
+func (h *PageHandler) HelpPage(c *gin.Context) {
+	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
+	c.HTML(http.StatusOK, "help.html", gin.H{
+		"title":         "Help - ShareIt",
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
 	})
 }
 

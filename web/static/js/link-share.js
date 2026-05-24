@@ -44,9 +44,7 @@
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
     const outExpiryLabel = document.getElementById('out-expiry-label');
-    const errorBanner = document.getElementById('error-banner');
-    const errorBannerText = document.getElementById('error-banner-text');
-    const errorBannerClose = document.getElementById('error-banner-close');
+    let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -133,7 +131,6 @@
         dropZone.addEventListener('drop', handleDrop);
         fileInput.addEventListener('change', handleFileSelect);
         finalizeBtn.addEventListener('click', handleFinalize);
-        if (errorBannerClose) errorBannerClose.addEventListener('click', hideErrorBanner);
     }
 
     function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; dropZone.classList.add('active'); }
@@ -423,23 +420,51 @@
         }
     }
 
+    function showNotification(message, type) {
+        const pill = document.getElementById('notification-pill');
+        const icon = document.getElementById('notification-icon');
+        const text = document.getElementById('notification-text');
+        if (!pill || !text) return;
+
+        if (notificationTimer) {
+            clearTimeout(notificationTimer);
+            notificationTimer = null;
+        }
+
+        pill.classList.remove('visible');
+        pill.classList.add('hidden');
+
+        text.textContent = message;
+
+        if (icon) {
+            if (type === 'error') {
+                icon.setAttribute('data-lucide', 'circle-x');
+                icon.style.color = '#FF3B30';
+            } else {
+                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.style.color = '#000';
+            }
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            }
+        }
+
+        pill.classList.remove('hidden');
+        pill.offsetHeight;
+        pill.classList.add('visible');
+
+        notificationTimer = setTimeout(() => {
+            pill.classList.remove('visible');
+            setTimeout(() => pill.classList.add('hidden'), 350);
+        }, 3500);
+    }
+
     function showShareBanner() {
-        const banner = document.getElementById('share-banner');
-        if (!banner) return;
-        banner.classList.remove('hidden'); banner.classList.add('visible');
-        const closeBtn = document.getElementById('close-share-banner');
-        if (closeBtn) closeBtn.onclick = () => { banner.classList.remove('visible'); setTimeout(() => banner.classList.add('hidden'), 350); };
-        setTimeout(() => { banner.classList.remove('visible'); setTimeout(() => banner.classList.add('hidden'), 350); }, 3500);
+        showNotification('Link Copied!', 'info');
     }
 
     function showToast(message) {
-        const existing = document.querySelector('.toast');
-        if (existing) existing.remove();
-        const toast = document.createElement('div');
-        toast.className = 'toast'; toast.textContent = message;
-        toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:12px 24px;border-radius:8px;z-index:1000;animation:fadeIn 0.3s ease;';
-        document.body.appendChild(toast);
-        setTimeout(() => { toast.style.animation = 'fadeOut 0.3s ease'; setTimeout(() => toast.remove(), 300); }, 3000);
+        showNotification(message, 'info');
     }
 
     function resetUpload() {
@@ -476,27 +501,11 @@
         if (pendingCountdownTimer) { clearInterval(pendingCountdownTimer); pendingCountdownTimer = null; }
     }
 
-    let errorBannerHideTimer = null;
-    let errorBannerCloseTimer = null;
-
     function showErrorBanner(message) {
-        if (!errorBanner) return;
-        if (errorBannerText) errorBannerText.textContent = message;
-        if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
-        if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
-        errorBanner.classList.remove('hidden');
-        requestAnimationFrame(() => errorBanner.classList.add('visible'));
-        errorBannerHideTimer = setTimeout(() => hideErrorBanner(), 4500);
+        showNotification(message, 'error');
     }
 
-    function hideErrorBanner() {
-        if (!errorBanner) return;
-        if (errorBannerHideTimer) clearTimeout(errorBannerHideTimer);
-        if (errorBannerCloseTimer) clearTimeout(errorBannerCloseTimer);
-        if (errorBanner.classList.contains('hidden')) return;
-        errorBanner.classList.remove('visible');
-        errorBannerCloseTimer = setTimeout(() => { if (!errorBanner.classList.contains('visible')) errorBanner.classList.add('hidden'); }, 320);
-    }
+    function hideErrorBanner() {}
 
     async function init() {
         setupTOSGate();

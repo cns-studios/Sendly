@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/static/favicon.svg">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">ShareIt</a>
+                <nav class="quicklinks">
+                    <a href="/limits">Pricing</a>
+                    <a href="/data-encryption">Security</a>
+                    <a href="/help">FAQ</a>
+                </nav>
+            </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
+        </header>
+    </div>
+
+        <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
+            <article class="legal-document">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                    <h1>Help</h1>
+                </div>
+                <p class="last-updated">Last updated: April 5, 2026</p>
+
+                <section>
+                    <h2>How do I share a file?</h2>
+                    <p>
+                        Go to the homepage, upload your file, and you will receive a shareable link. Send this link to anyone you want to share the file with. The link contains the decryption information, so only people with the link can access the file.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>How long are files stored?</h2>
+                    <p>
+                        Guest uploads are stored for 7 days. Authenticated users get 90 days of storage. After the retention period expires, the file is automatically and permanently deleted.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>What is the maximum file size I can upload?</h2>
+                    <p>
+                        Guest users can upload files up to 750 MB. Authenticated users can upload files up to 1.5 GB.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>Is my file secure?</h2>
+                    <p>
+                        Yes. All files are encrypted with AES-256-GCM before they are stored. The link you share contains the key needed for decryption. TLS 1.3 protects the data during transit.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>How do I download a file I received?</h2>
+                    <p>
+                        Click the link the sender shared with you. The page will automatically load the file details. If no password is required, the download will start automatically or present a download button depending on the settings chosen by the sender.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>Can I cancel an upload?</h2>
+                    <p>
+                        Yes, during the upload process you can cancel by clicking the cancel button. This will abort the upload and clean up any temporary data.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>What happens if the link is wrong or broken?</h2>
+                    <p>
+                        If you visit a share link that does not contain a valid password or session, the page will show a "Wrong Link" message. Double-check the URL you received and make sure you copied the entire link.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>How do I report an issue?</h2>
+                    <p>
+                        If you encounter a problem, please use the "Report abuse" link on the download page or contact us at <a href="mailto:contact@cns-studios.com">contact@cns-studios.com</a>.
+                    </p>
+                </section>
+            </article>
+        </main>
+
+        <footer>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                <p>Secured file sharing made easy. Powered by CNS</p>
+                <nav style="display: flex; gap: 2rem; font-size: 0.9rem;">
+                    <a href="/limits" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Limits</a>
+                    <a href="/data-encryption" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Encryption</a>
+                    <a href="/help" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Help</a>
+                    <a href="/tos" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Terms</a>
+                    <a href="/privacy" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Privacy</a>
+                </nav>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

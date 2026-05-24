@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/static/favicon.svg">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">ShareIt</a>
+                <nav class="quicklinks">
+                    <a href="/limits">Pricing</a>
+                    <a href="/data-encryption">Security</a>
+                    <a href="/help">FAQ</a>
+                </nav>
+            </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
+        </header>
+    </div>
+
+        <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
+            <article class="legal-document">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                    <h1>Limits</h1>
+                </div>
+                <p class="last-updated">Last updated: April 5, 2026</p>
+
+                <p>
+                    ShareIt offers two tiers of service depending on whether you are logged in or accessing the service as a guest. Below are the current limits for each tier.
+                </p>
+
+                <section>
+                    <h2>Guest (Anonymous)</h2>
+                    <ul>
+                        <li><strong>Maximum file size:</strong> 750 MB</li>
+                        <li><strong>Retention period:</strong> 7 days</li>
+                        <li><strong>Uploads:</strong> Subject to IP-based rate limits</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2>Authenticated (CNS Account)</h2>
+                    <ul>
+                        <li><strong>Maximum file size:</strong> 1.5 GB</li>
+                        <li><strong>Retention period:</strong> 90 days</li>
+                        <li><strong>Uploads:</strong> Higher rate limits applied</li>
+                        <li><strong>Device management:</strong> Full trusted-device enrollment</li>
+                        <li><strong>Recent uploads:</strong> Browse and re-download your file history</li>
+                    </ul>
+                </section>
+
+                <section>
+                    <h2>Rate Limits</h2>
+                    <p>
+                        To ensure fair usage and prevent abuse, the following rate limits are enforced per IP address:
+                    </p>
+                    <ul>
+                        <li><strong>Standard:</strong> 2 requests per minute (upload init, finalize)</li>
+                        <li><strong>Strict:</strong> 1 request per minute (device register/recover, enrollments)</li>
+                        <li><strong>Download:</strong> 10 requests per minute (file downloads)</li>
+                    </ul>
+                    <p>
+                        These limits are deliberately conservative during development and can be adjusted via environment variables.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>File Expiration</h2>
+                    <p>
+                        All uploaded files are automatically deleted from our servers after their retention period expires. We do not retain copies of expired files. The expiration timer starts at the moment the file upload is finalized.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>Contact</h2>
+                    <p>
+                        If you need higher limits or have questions about these restrictions, please contact us at <a href="mailto:contact@cns-studios.com">contact@cns-studios.com</a>.
+                    </p>
+                </section>
+            </article>
+        </main>
+
+        <footer>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                <p>Secured file sharing made easy. Powered by CNS</p>
+                <nav style="display: flex; gap: 2rem; font-size: 0.9rem;">
+                    <a href="/limits" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Limits</a>
+                    <a href="/data-encryption" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Encryption</a>
+                    <a href="/help" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Help</a>
+                    <a href="/tos" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Terms</a>
+                    <a href="/privacy" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Privacy</a>
+                </nav>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" href="/static/favicon.svg">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">ShareIt</a>
+                <nav class="quicklinks">
+                    <a href="/limits">Pricing</a>
+                    <a href="/data-encryption">Security</a>
+                    <a href="/help">FAQ</a>
+                </nav>
+            </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
+        </header>
+    </div>
+
+        <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
+            <article class="legal-document">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+                    <h1>Data Encryption</h1>
+                </div>
+                <p class="last-updated">Last updated: April 5, 2026</p>
+
+                <p>
+                    ShareIt takes your privacy and data security seriously. Every file uploaded to our service is encrypted before it is stored on our servers, ensuring that your data remains confidential.
+                </p>
+
+                <section>
+                    <h2>Encryption at Rest</h2>
+                    <p>
+                        All uploaded files are encrypted using AES-256-GCM before being written to disk. The encryption keys are generated per-upload and are never stored alongside the encrypted file data. This means that even if the storage volume is compromised, the file contents remain unreadable.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>Encryption in Transit</h2>
+                    <p>
+                        All communication between your browser and ShareIt's servers is protected by TLS 1.3. This ensures that your files, metadata, and any personal information are encrypted during transmission and cannot be intercepted by third parties.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>Key Management</h2>
+                    <p>
+                        Each upload generates a unique encryption key that is required to decrypt the file. The share link contains the necessary information for decryption, meaning only recipients with the link can access the file. We do not retain copies of encryption keys on our servers after the upload session is complete.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>Zero-Knowledge Design</h2>
+                    <p>
+                        ShareIt operates on a zero-knowledge principle where possible. Your files are encrypted with keys that we do not possess. While we store encrypted file data, the decryption material is embedded in the share URL and is only accessible to the sender and intended recipients.
+                    </p>
+                </section>
+
+                <section>
+                    <h2>File Deletion</h2>
+                    <p>
+                        When a file expires or is manually deleted, the encrypted blob is securely removed from disk. We do not keep backup copies of expired files.
+                    </p>
+                </section>
+            </article>
+        </main>
+
+        <footer>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                <p>Secured file sharing made easy. Powered by CNS</p>
+                <nav style="display: flex; gap: 2rem; font-size: 0.9rem;">
+                    <a href="/limits" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Limits</a>
+                    <a href="/data-encryption" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Encryption</a>
+                    <a href="/help" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Help</a>
+                    <a href="/tos" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Terms</a>
+                    <a href="/privacy" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Privacy</a>
+                </nav>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>

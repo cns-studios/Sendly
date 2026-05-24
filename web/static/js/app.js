@@ -32,35 +32,7 @@
     let pendingAutoCopyText = null;
     let pendingAutoCopyBanner = false;
     let pendingAutoCopyBound = false;
-    let errorBannerHideTimer = null;
-    let errorBannerCloseTimer = null;
-    let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
-    let finalizeEnvelopePayload = null;
-    let recentCurrentPage = 1;
-    let recentTotalPages = 0;
-    let recentSearchQuery = '';
-    let recentSearchDebounceTimer = null;
-    let recentSearchOpen = false;
-    let activeTunnel = null;
-    let tunnelPollTimer = null;
-    let idleCopyDone = false;
-    let idleCopyBannerShown = false;
-    let lastShareUrl = '';
-
-     
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-    const fileDetails = document.getElementById('file-details');
-    const fileName = document.getElementById('file-name');
-    const fileSize = document.getElementById('file-size');
-    const resetVault = document.getElementById('reset-vault');
-    const startOverBtn = document.getElementById('start-over-btn');
-    const finalizeBtn = document.getElementById('finalize-btn');
-    const statusText = document.getElementById('status-text');
-    const errorBanner = document.getElementById('error-banner');
-    const errorBannerText = document.getElementById('error-banner-text');
-    const errorBannerClose = document.getElementById('error-banner-close');
+    let notificationTimer = null;
 
     const stageEntry = document.getElementById('stage-entry');
     const stageProcessing = document.getElementById('stage-processing');
@@ -837,49 +809,46 @@
             if (recentEmpty) {
                 recentEmpty.textContent = recentSearchQuery
                     ? 'No uploads match this search.'
-                    : 'No uploads yet on this account.';
+                    : 'No recently uploaded files.';
             }
-            if (recentCount) recentCount.textContent = `${totalItems} files`;
             updateRecentPagination();
             return;
         }
 
         setRecentState('ready');
-        if (recentCount) {
-            recentCount.textContent = `${totalItems} file${totalItems === 1 ? '' : 's'}`;
-        }
 
-        recentList.innerHTML = items.map((item) => `
-            <article class="recent-item ${recentFileStates.get(item.file_id)?.locked ? 'is-locked' : ''}" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}">
-                <div class="recent-main">
-                    <div class="recent-name-wrap">
-                        <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
-                        ${recentFileStates.get(item.file_id)?.locked ? `<div class="recent-lock-pill" title="${escapeHtml(LOCKED_FILE_INFO)}" aria-label="${escapeHtml(LOCKED_FILE_INFO)}">Locked on this browser</div>` : ''}
+        recentList.innerHTML = items.map((item, idx) => {
+            const locked = recentFileStates.get(item.file_id)?.locked;
+            const opacity = Math.max(0.05, 1.0 - idx * 0.19);
+            return `
+                <div class="file-entry${locked ? ' is-locked' : ''}" style="opacity: ${opacity};" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}">
+                    <div class="file-entry-left">
+                        <span class="file-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
+                        <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)} · Uploaded ${formatUploadDate(item.created_at)} · Expires ${formatExpiryDate(item.expires_at)}</span>
                     </div>
-                    <div class="recent-actions">
-                        <button class="recent-action" data-action="download" aria-label="Download file" title="Download file" ${recentFileStates.get(item.file_id)?.locked ? 'disabled' : ''}>
-                            <i data-lucide="download" style="width: 0.85rem; height: 0.85rem;"></i>
+                    <div class="file-entry-right">
+                        <button class="recent-action" data-action="copy" aria-label="Copy share link" title="Copy share link" ${locked ? 'disabled' : ''}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                            </svg>
                         </button>
-                        <button class="recent-action" data-action="copy" aria-label="Copy share link" title="Copy share link" ${recentFileStates.get(item.file_id)?.locked ? 'disabled' : ''}>
-                            <i data-lucide="link" style="width: 0.85rem; height: 0.85rem;"></i>
+                        <button class="recent-action" data-action="download" aria-label="Download file" title="Download file" ${locked ? 'disabled' : ''}>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="7 10 12 15 17 10"/>
+                                <line x1="12" y1="15" x2="12" y2="3"/>
+                            </svg>
                         </button>
                     </div>
                 </div>
-                <div class="recent-meta">
-                    <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
-                    <span>Uploaded ${formatUploadDate(item.created_at)}</span>
-                    <span>Expires ${formatExpiryDate(item.expires_at)}</span>
-                </div>
-            </article>
-        `).join('');
+            `;
+        }).join('');
 
         recentList.querySelectorAll('.recent-action').forEach((btn) => {
             btn.addEventListener('click', handleRecentAction);
         });
         updateRecentPagination();
-        if (window.lucide?.createIcons) {
-            window.lucide.createIcons();
-        }
     }
 
     function showTunnelInfo(state) {
@@ -1279,7 +1248,7 @@
 
     async function handleRecentAction(event) {
         const button = event.currentTarget;
-        const item = button.closest('.recent-item');
+        const item = button.closest('.file-entry');
         if (!item) return;
 
         const fileId = item.dataset.fileId;
@@ -1475,24 +1444,13 @@
     function updateRecentFileLockedState(fileId) {
         if (!recentList || !fileId) return;
 
-        const item = recentList.querySelector(`.recent-item[data-file-id="${CSS.escape(fileId)}"]`);
+        const item = recentList.querySelector(`.file-entry[data-file-id="${CSS.escape(fileId)}"]`);
         if (!item) return;
 
         item.classList.add('is-locked');
         item.querySelectorAll('.recent-action').forEach((btn) => {
             btn.disabled = true;
         });
-
-        const nameWrap = item.querySelector('.recent-name-wrap');
-        if (nameWrap && !nameWrap.querySelector('.recent-lock-pill')) {
-            const pill = document.createElement('div');
-            pill.className = 'recent-lock-pill';
-            pill.textContent = 'Locked on this browser';
-            pill.title = LOCKED_FILE_INFO;
-            pill.setAttribute('aria-label', LOCKED_FILE_INFO);
-            nameWrap.appendChild(pill);
-        }
-
     }
 
     function formatUploadDate(dateStr) {
@@ -1588,10 +1546,6 @@
                 loadRecentUploads(recentCurrentPage + 1);
             }
         });
-
-        if (errorBannerClose) {
-            errorBannerClose.addEventListener('click', hideErrorBanner);
-        }
 
         recentRecoverDevice?.addEventListener('click', handleRecoverLostDevice);
 
@@ -2182,39 +2136,51 @@
         }
     }
 
-    function showBanner(message, tone = 'error') {
-        if (!errorBanner) return;
-        if (errorBannerText) {
-            errorBannerText.textContent = message;
-        }
-        errorBanner.classList.remove('banner-error', 'banner-info');
-        errorBanner.classList.add(tone === 'info' ? 'banner-info' : 'banner-error');
+    function showNotification(message, type = 'error') {
+        const pill = document.getElementById('notification-pill');
+        const icon = document.getElementById('notification-icon');
+        const text = document.getElementById('notification-text');
+        if (!pill || !text) return;
 
-        if (errorBannerHideTimer) {
-            clearTimeout(errorBannerHideTimer);
-            errorBannerHideTimer = null;
-        }
-        if (errorBannerCloseTimer) {
-            clearTimeout(errorBannerCloseTimer);
-            errorBannerCloseTimer = null;
+        if (notificationTimer) {
+            clearTimeout(notificationTimer);
+            notificationTimer = null;
         }
 
-        errorBanner.classList.remove('hidden');
-        requestAnimationFrame(() => {
-            errorBanner.classList.add('visible');
-        });
+        pill.classList.remove('visible');
+        pill.classList.add('hidden');
 
-        errorBannerHideTimer = setTimeout(() => {
-            hideErrorBanner();
-        }, 4500);
+        text.textContent = message;
+
+        if (icon) {
+            if (type === 'error') {
+                icon.setAttribute('data-lucide', 'circle-x');
+                icon.style.color = '#FF3B30';
+            } else {
+                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.style.color = '#000';
+            }
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            }
+        }
+
+        pill.classList.remove('hidden');
+        pill.offsetHeight;
+        pill.classList.add('visible');
+
+        notificationTimer = setTimeout(() => {
+            pill.classList.remove('visible');
+            setTimeout(() => pill.classList.add('hidden'), 350);
+        }, 3500);
     }
 
     function showErrorBanner(message) {
-        showBanner(message, 'error');
+        showNotification(message, 'error');
     }
 
     function showInfoBanner(message) {
-        showBanner(message, 'info');
+        showNotification(message, 'info');
     }
 
     function showRecoveryBanner(message) {
@@ -2223,29 +2189,7 @@
         showInfoBanner(message);
     }
 
-    function hideErrorBanner() {
-        if (!errorBanner) return;
-
-        if (errorBannerHideTimer) {
-            clearTimeout(errorBannerHideTimer);
-            errorBannerHideTimer = null;
-        }
-        if (errorBannerCloseTimer) {
-            clearTimeout(errorBannerCloseTimer);
-            errorBannerCloseTimer = null;
-        }
-
-        if (errorBanner.classList.contains('hidden')) {
-            return;
-        }
-
-        errorBanner.classList.remove('visible');
-        errorBannerCloseTimer = setTimeout(() => {
-            if (!errorBanner.classList.contains('visible')) {
-                errorBanner.classList.add('hidden');
-            }
-        }, 320);
-    }
+    function hideErrorBanner() {}
 
     function updateProgress(percent, sub, main) {
         progressVal.textContent = `${Math.floor(percent)}%`;
@@ -2349,21 +2293,7 @@
     }
 
     function showShareBanner() {
-        const banner = document.getElementById('share-banner');
-        if (!banner) return;
-        banner.classList.remove('hidden');
-        banner.classList.add('visible');
-        const closeBtn = document.getElementById('close-share-banner');
-        if (closeBtn) {
-            closeBtn.onclick = () => {
-                banner.classList.remove('visible');
-                setTimeout(() => banner.classList.add('hidden'), 350);
-            };
-        }
-        setTimeout(() => {
-            banner.classList.remove('visible');
-            setTimeout(() => banner.classList.add('hidden'), 350);
-        }, 3500);
+        showNotification('Link Copied!', 'info');
     }
 
     function setupIdleCopy(text) {
@@ -2406,36 +2336,7 @@
     }
 
     function showToast(message) {
-         
-        const existingToast = document.querySelector('.toast');
-        if (existingToast) {
-            existingToast.remove();
-        }
-
-         
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.textContent = message;
-        toast.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #333;
-            color: white;
-            padding: 12px 24px;
-            border-radius: 8px;
-            z-index: 1000;
-            animation: fadeIn 0.3s ease;
-        `;
-
-        document.body.appendChild(toast);
-
-         
-        setTimeout(() => {
-            toast.style.animation = 'fadeOut 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        showNotification(message, 'info');
     }
 
     function resetUpload() {
