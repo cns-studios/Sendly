@@ -125,7 +125,7 @@
     }
 
     function setupEventListeners() {
-        dropZone.addEventListener('click', () => fileInput.click());
+        dropZone.addEventListener('click', handleZoneClick);
         dropZone.addEventListener('dragover', handleDragOver);
         dropZone.addEventListener('dragleave', handleDragLeave);
         dropZone.addEventListener('drop', handleDrop);
@@ -133,10 +133,24 @@
         finalizeBtn.addEventListener('click', handleFinalize);
     }
 
+    function handleZoneClick(e) {
+        if (dropZone.classList.contains('success')) {
+            if (lastShareUrl) {
+                copyToClipboard(lastShareUrl, true);
+                showShareBanner();
+                const sub = dropZone.querySelector('p');
+                if (sub) sub.textContent = 'Link copied to clipboard';
+            }
+            return;
+        }
+        if (dropZone.classList.contains('uploading')) return;
+        fileInput.click();
+    }
+
     function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; dropZone.classList.add('active'); }
     function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); if (e.target === dropZone) dropZone.classList.remove('active'); }
-    function handleDrop(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active'); if (e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); }
-    function handleFileSelect(e) { if (e.target.files.length > 0) processFile(e.target.files[0]); }
+    function handleDrop(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active'); if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); }
+    function handleFileSelect(e) { if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.target.files.length > 0) processFile(e.target.files[0]); }
 
     async function processFile(file) {
         if (isUploading || isFinalizing) return;
@@ -148,10 +162,12 @@
 
         selectedFile = file;
 
-        stageEntry.classList.add('hidden');
-        stageProcessing.classList.remove('hidden');
-        processMain.textContent = 'Uploading...';
-        processSub.textContent = '0%';
+        const zoneHeading = dropZone.querySelector('h3');
+        const zoneSubtext = dropZone.querySelector('p');
+        dropZone.classList.add('uploading');
+        zoneHeading.textContent = selectedFile.name;
+        zoneSubtext.textContent = 'Processing...';
+
         runProtocolInBackground();
     }
 
@@ -199,6 +215,8 @@
         processMain.textContent = 'Uploading...';
         processSub.textContent = `${pct}%`;
         if (progressVal) progressVal.textContent = `${pct}%`;
+        const zoneSubtext = dropZone.querySelector('p');
+        if (zoneSubtext) zoneSubtext.textContent = `Uploading... ${pct}%`;
     }
 
     async function runProtocolInBackground() {
@@ -206,6 +224,8 @@
         uploadComplete = false;
         uploadError = null;
         finalizeEnvelopePayload = null;
+
+        const zoneSubtext = dropZone.querySelector('p');
 
         try {
             generatedPassword = await SecureCrypto.generatePassword();
@@ -224,19 +244,23 @@
                 }
             }
 
+            zoneSubtext.textContent = 'Encrypting...';
             encryptedBlob = await SecureCrypto.encryptFile(selectedFile, generatedPassword, () => {});
             await startUploadInBackground();
             uploadComplete = true;
             isUploading = false;
             updateFinalizeButtonState();
-            stageProcessing.classList.add('hidden');
-            stagePending.classList.remove('hidden');
+
+            isFinalizing = true;
+            await finalizeUpload();
         } catch (error) {
             console.error('Upload pipeline failed:', error);
             uploadError = error.message;
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
-            stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
+            const zoneHeading = dropZone.querySelector('h3');
+            zoneHeading.textContent = 'Upload failed';
+            zoneSubtext.textContent = error.message;
             showErrorBanner('Upload failed: ' + error.message);
         }
     }
@@ -346,7 +370,11 @@
         } catch (error) {
             console.error('Finalize failed:', error);
             isFinalizing = false; updateFinalizeButtonState();
-            stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
+            dropZone.classList.remove('uploading');
+            const zoneHeading = dropZone.querySelector('h3');
+            const zoneSubtext = dropZone.querySelector('p');
+            zoneHeading.textContent = 'Upload failed';
+            zoneSubtext.textContent = error.message;
             showErrorBanner('Finalize failed: ' + error.message);
         }
     }
@@ -357,40 +385,43 @@
         if (response.file_id && generatedPassword) SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         lastShareUrl = fullShareUrl;
-        outExpiryLabel.textContent = `Expiry: ${RETENTION_LABEL} retention.`;
+
+        dropZone.classList.remove('uploading');
+        dropZone.classList.add('success');
+        const zoneIcon = dropZone.querySelector('.drop-zone-icon');
+        const zoneHeading = dropZone.querySelector('h3');
+        const zoneSubtext = dropZone.querySelector('p');
+        zoneIcon.setAttribute('data-lucide', 'circle-check-big');
+        zoneHeading.textContent = 'Uploaded';
+        zoneSubtext.textContent = 'Link copied to clipboard';
+        if (window.lucide && lucide.createIcons) lucide.createIcons();
+
+        copyToClipboard(fullShareUrl, true);
+        showShareBanner();
+
+        setupIdleCopy(fullShareUrl);
+
         uploadSessionId = null;
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
-        stageOutput.classList.remove('hidden');
-        setupIdleCopy(fullShareUrl);
+        stageOutput.classList.add('hidden');
     }
 
     function setupIdleCopy(text) {
         idleCopyDone = false;
         idleCopyBannerShown = false;
-        const infoBox = stageOutput.querySelector('.info-box');
-        if (infoBox) {
-            const idleMsg = document.createElement('p');
-            idleMsg.className = 'info-text';
-            idleMsg.id = 'idle-copy-msg';
-            idleMsg.textContent = 'Move your mouse to copy link';
-            idleMsg.style.cursor = 'pointer';
-            idleMsg.style.color = 'var(--accent)';
-            infoBox.parentNode.insertBefore(idleMsg, infoBox);
-        }
 
         const onMove = () => {
             if (idleCopyDone) return;
             copyToClipboard(text, true).then(ok => {
                 if (ok) {
                     idleCopyDone = true;
-                    const msg = document.getElementById('idle-copy-msg');
-                    if (msg) msg.textContent = 'Link copied to clipboard';
+                    const zoneSubtext = dropZone.querySelector('p');
+                    if (zoneSubtext) zoneSubtext.textContent = 'Link copied to clipboard';
                     showShareBanner();
                     setTimeout(() => {
                         idleCopyDone = false;
-                        const msg2 = document.getElementById('idle-copy-msg');
-                        if (msg2) msg2.textContent = 'Move your mouse to copy link';
+                        if (zoneSubtext) zoneSubtext.textContent = 'Link copied to clipboard';
                         document.addEventListener('mousemove', onMove, { once: true });
                         document.addEventListener('touchstart', onMove, { once: true });
                         document.addEventListener('keydown', onMove, { once: true });
@@ -441,7 +472,7 @@
                 icon.setAttribute('data-lucide', 'circle-x');
                 icon.style.color = '#FF3B30';
             } else {
-                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.setAttribute('data-lucide', 'info');
                 icon.style.color = '#000';
             }
             if (window.lucide && lucide.createIcons) {
@@ -476,6 +507,16 @@
         idleCopyDone = false;
         if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
         fileInput.value = '';
+
+        dropZone.classList.remove('uploading', 'success');
+        const zoneIcon = dropZone.querySelector('.drop-zone-icon');
+        const zoneHeading = dropZone.querySelector('h3');
+        const zoneSubtext = dropZone.querySelector('p');
+        zoneIcon.setAttribute('data-lucide', 'circle-fading-arrow-up');
+        zoneHeading.textContent = 'Upload File';
+        zoneSubtext.textContent = 'Drag and Drop a file here or click to browse.';
+        if (window.lucide && lucide.createIcons) lucide.createIcons();
+
         stageEntry.classList.remove('hidden');
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');

@@ -24,12 +24,15 @@
         </div>
     </div>
 
-    <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:1rem;font-size:0.85rem;color:#888;">
+    <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
         <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock extended tunnel durations.</span>
+        <button id="auth-nudge-close" aria-label="Close" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
+            <i data-lucide="x" style="width:14px;height:14px;"></i>
+        </button>
     </div>
 
     <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
-        <i id="notification-icon" class="notification-icon" data-lucide="circle-alert" style="width: 20px; height: 20px;"></i>
+        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
         <span id="notification-text" class="notification-text"></span>
     </div>
 
@@ -184,10 +187,9 @@
     </footer>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
-        <div class="tos-modal action-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
-            <p id="action-modal-kicker" class="tos-modal-kicker">Heads up</p>
-            <h2 id="action-modal-title">Confirm action</h2>
-            <p id="action-modal-description" class="tos-modal-description"></p>
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
+            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Confirm action</h2>
+            <p id="action-modal-description" class="tos-modal-description" style="margin-bottom:28px;"></p>
             <div class="tos-modal-actions">
                 <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
                 <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>

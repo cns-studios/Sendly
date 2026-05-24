@@ -1026,7 +1026,7 @@
                 icon.setAttribute('data-lucide', 'circle-x');
                 icon.style.color = '#FF3B30';
             } else {
-                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.setAttribute('data-lucide', 'info');
                 icon.style.color = '#000';
             }
             if (window.lucide && lucide.createIcons) {

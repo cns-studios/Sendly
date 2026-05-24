@@ -91,7 +91,7 @@
             passwordSection.classList.remove('hidden');
         } catch (error) {
             console.error('Failed to load file metadata:', error);
-            showError('Connection Error', 'Failed to connect to server. Please try again.');
+            showFileError('cloud-alert', 'Connection error', 'Failed to connect to server. Please try again.');
         }
     }
 
@@ -230,16 +230,6 @@
         }
     }
 
-    function handleAPIError(error) {
-        loadingSection.classList.add('hidden');
-        const messages = {
-            FILE_NOT_FOUND: 'This file does not exist or has been removed.',
-            FILE_EXPIRED: 'This file has expired and is no longer available. Ask the sender to upload it again.',
-            FILE_DELETED: 'This file has been removed due to policy violations.',
-        };
-        showNotification(messages[error.code] || error.error || 'An unexpected error occurred.', 'error');
-    }
-
     function updateProgress(percent, text) {
         if (progressText) progressText.textContent = `${Math.round(percent)}%`;
         if (text && progressTitle) progressTitle.textContent = text;
@@ -276,6 +266,52 @@
 
     let notificationTimer = null;
 
+    function showFileError(icon, title, subtitle) {
+        loadingSection.classList.add('hidden');
+        passwordSection.classList.add('hidden');
+        progressSection.classList.add('hidden');
+
+        const section = document.getElementById('error-section');
+        const iconEl = document.getElementById('error-icon');
+        const titleEl = document.getElementById('error-title');
+        const subtitleEl = document.getElementById('error-subtitle');
+        if (!section || !titleEl || !subtitleEl) return;
+
+        if (iconEl) {
+            iconEl.innerHTML = `<i data-lucide="${icon}" style="width:48px;height:48px;"></i>`;
+        }
+        titleEl.textContent = title;
+        subtitleEl.textContent = subtitle;
+
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
+        }
+
+        section.classList.remove('hidden');
+    }
+
+    function handleAPIError(error) {
+        const code = error.code || '';
+        switch (code) {
+            case 'INVALID_FILE_ID':
+            case 'MISSING_FILE_ID':
+                showFileError('cloud-alert', 'Invalid link', 'The link is invalid or the file ID format is incorrect. Please check the link and try again.');
+                break;
+            case 'FILE_NOT_FOUND':
+            case 'FILE_NOT_ON_DISK':
+                showFileError('file-question-mark', 'File not found', 'This file does not exist or has been moved');
+                break;
+            case 'FILE_DELETED':
+                showFileError('shredder', 'File removed', 'This file has been removed');
+                break;
+            case 'FILE_EXPIRED':
+                showFileError('file-question-mark', 'File expired', 'This file has expired and is no longer available. Ask the sender to upload it again.');
+                break;
+            default:
+                showNotification(error.error || 'An unexpected error occurred.', 'error');
+        }
+    }
+
     function showNotification(message, type) {
         const pill = document.getElementById('notification-pill');
         const icon = document.getElementById('notification-icon');
@@ -297,7 +333,7 @@
                 icon.setAttribute('data-lucide', 'circle-x');
                 icon.style.color = '#FF3B30';
             } else {
-                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.setAttribute('data-lucide', 'info');
                 icon.style.color = '#000';
             }
             if (window.lucide && lucide.createIcons) {
@@ -321,7 +357,7 @@
         setupEventListeners();
 
         if (!fileId) {
-            showError('Something failed', 'Error code 4x000. Please check the link and try again.');
+            showFileError('cloud-alert', 'Invalid link', 'No file ID provided. Please check the link and try again.');
             return;
         }
 

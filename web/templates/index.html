@@ -24,49 +24,36 @@
         </div>
     </div>
 
-    <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 1.5rem;display:flex;align-items:center;justify-content:center;gap:1rem;font-size:0.85rem;color:#888;">
+    <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
         <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 90 day retention.</span>
+        <button id="auth-nudge-close" aria-label="Close" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
+            <i data-lucide="x" style="width:14px;height:14px;"></i>
+        </button>
     </div>
 
     <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
-        <i id="notification-icon" class="notification-icon" data-lucide="circle-alert" style="width: 20px; height: 20px;"></i>
+        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
         <span id="notification-text" class="notification-text"></span>
     </div>
 
-    <div id="device-approval-modal" class="device-approval-modal hidden" aria-hidden="true">
-        <div class="device-approval-panel" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
-            <div class="device-approval-header">
-                <div>
-                    <p class="device-approval-kicker">Approval required</p>
-                    <h2 id="device-approval-title">New device wants access</h2>
-                </div>
-                <span id="device-approval-count" class="device-approval-count"></span>
-            </div>
-            <p id="device-approval-message" class="device-approval-message">
-                A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.
+    <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Connect new device</h2>
+            <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
+                A new device wants to view your files. If you did not ask for this, decline and change your CNS password.
             </p>
-            <div id="device-approval-meta" class="device-approval-meta"></div>
-            <div id="device-approval-waiting" class="device-approval-waiting hidden">
-                <div class="device-approval-waiting-icon">
-                    <div class="spinner"></div>
-                </div>
-                <div>
-                    <p class="device-approval-waiting-title">Waiting for approval</p>
-                    <p class="device-approval-waiting-copy">
-                        Keep this tab open. A trusted device must approve this browser before it can decrypt uploads or open protected files.
-                    </p>
-                    <p class="device-approval-waiting-note">
-                        If you lost the only trusted device, you will need to recover access from another CNS session before this browser can be approved.
-                    </p>
-                </div>
+            <div id="device-approval-meta" style="margin-bottom:28px;font-size:14px;color:#555;line-height:1.6;"></div>
+            <div id="device-approval-waiting" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:20px;margin-bottom:28px;">
+                <div class="downloading-spinner" style="width:36px;height:36px;"></div>
+                <button id="device-approval-recover" type="button" style="background:none;border:none;color:#595959;font-size:15px;text-decoration:underline;cursor:pointer;padding:0;">
+                    Lost all devices? Wipe data and start fresh
+                </button>
             </div>
-            <div class="device-approval-actions">
+            <span id="device-approval-count" style="display:none;"></span>
+            <div class="tos-modal-actions">
                 <button id="device-approval-decline" class="btn btn-secondary btn-large">Decline</button>
                 <button id="device-approval-approve" class="btn btn-accent btn-large">Approve</button>
             </div>
-            <button id="device-approval-recover" class="device-approval-recover hidden" type="button">
-                Lost the old device? Start fresh on this browser.
-            </button>
         </div>
     </div>
 
@@ -185,10 +172,9 @@
     </footer>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
-        <div class="tos-modal action-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
-            <p id="action-modal-kicker" class="tos-modal-kicker">Heads up</p>
-            <h2 id="action-modal-title">Confirm action</h2>
-            <p id="action-modal-description" class="tos-modal-description"></p>
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
+            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Confirm action</h2>
+            <p id="action-modal-description" class="tos-modal-description" style="margin-bottom:28px;"></p>
             <div class="tos-modal-actions">
                 <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
                 <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>

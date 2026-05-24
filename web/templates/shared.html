@@ -26,7 +26,7 @@
     </div>
 
     <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
-        <i id="notification-icon" class="notification-icon" data-lucide="circle-alert" style="width: 20px; height: 20px;"></i>
+        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
         <span id="notification-text" class="notification-text"></span>
     </div>
 
@@ -87,6 +87,12 @@
                     <div id="progress-icon" class="downloading-spinner"></div>
                     <p id="progress-text" class="downloading-percent">0%</p>
                 </div>
+            </div>
+
+            <div id="error-section" class="hidden">
+                <div id="error-icon" style="margin-bottom:24px;"></div>
+                <p id="error-title" style="color:black;font-size:32px;font-weight:590;margin-bottom:24px;"></p>
+                <p id="error-subtitle" style="color:#828282;font-size:16px;font-weight:510;text-align:center;"></p>
             </div>
 
             <div id="report-modal" class="tos-overlay hidden" aria-hidden="true">

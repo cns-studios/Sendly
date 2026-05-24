@@ -91,7 +91,6 @@
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
     const downloadActivityOverlay = document.getElementById('download-activity-overlay');
     const actionModal = document.getElementById('action-modal');
-    const actionModalKicker = document.getElementById('action-modal-kicker');
     const actionModalTitle = document.getElementById('action-modal-title');
     const actionModalDescription = document.getElementById('action-modal-description');
     const actionModalCancel = document.getElementById('action-modal-cancel');
@@ -193,7 +192,16 @@
     function applyTierUI() {
         if (!AUTHENTICATED) {
             const nudge = document.getElementById('auth-nudge');
-            if (nudge) nudge.classList.remove('hidden');
+            if (nudge && !localStorage.getItem('shareit_auth_nudge_dismissed')) {
+                nudge.classList.remove('hidden');
+            }
+            const closeBtn = document.getElementById('auth-nudge-close');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    nudge.classList.add('hidden');
+                    localStorage.setItem('shareit_auth_nudge_dismissed', '1');
+                });
+            }
         }
     }
 
@@ -433,8 +441,8 @@
         const keyAlgorithm = device.key_algorithm || 'unknown';
         const requestedAt = enrollment.created_at ? formatUploadDate(enrollment.created_at) : 'just now';
 
-        deviceApprovalTitle.textContent = 'New device wants access';
-        deviceApprovalMessage.textContent = 'A new device from your CNS account wants to view your files. If you did not ask for this, decline and change your CNS password.';
+        deviceApprovalTitle.textContent = 'Connect new device';
+        deviceApprovalMessage.textContent = 'A new device wants to view your files. If you did not ask for this, decline and change your CNS password.';
         deviceApprovalMeta.innerHTML = [
             `<span>Device: ${escapeHtml(deviceName)}</span>`,
             `<span>Device ID: ${escapeHtml(deviceId)}</span>`,
@@ -476,8 +484,8 @@
         const deviceId = device.id || enrollment.request_device_id || 'unknown';
         const requestedAt = enrollment.created_at ? formatUploadDate(enrollment.created_at) : 'just now';
 
-        deviceApprovalTitle.textContent = 'Waiting for approval';
-        deviceApprovalMessage.textContent = 'This browser requested access and is waiting for a trusted device to approve it.';
+        deviceApprovalTitle.textContent = 'Approval required';
+        deviceApprovalMessage.textContent = 'Keep this tab open. Approve this Browser from another logged-in device. If you lost all trusted devices, you can wipe all uploaded files and start fresh here';
         deviceApprovalMeta.innerHTML = [
             `<span>Device: ${escapeHtml(deviceName)}</span>`,
             `<span>Device ID: ${escapeHtml(deviceId)}</span>`,
@@ -1553,6 +1561,9 @@
         deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
         deviceApprovalRecover?.addEventListener('click', handleRecoverLostDevice);
 
+        const downloadCloseBtn = document.getElementById('download-activity-close');
+        downloadCloseBtn?.addEventListener('click', () => showDownloadActivityOverlay(false));
+
         tunnelControlsSection?.classList.remove('hidden');
         tunnelStartBtn?.addEventListener('click', async () => {
             try {
@@ -2157,7 +2168,7 @@
                 icon.setAttribute('data-lucide', 'circle-x');
                 icon.style.color = '#FF3B30';
             } else {
-                icon.setAttribute('data-lucide', 'circle-alert');
+                icon.setAttribute('data-lucide', 'info');
                 icon.style.color = '#000';
             }
             if (window.lucide && lucide.createIcons) {
@@ -2433,35 +2444,35 @@
 
     function showDownloadActivityOverlay(show) {
         if (!downloadActivityOverlay) return;
-        const panel = downloadActivityOverlay.querySelector('.download-activity-panel');
-        const label = downloadActivityOverlay.querySelector('.download-activity-label');
-        const text = downloadActivityOverlay.querySelector('.download-activity-text');
-        const icon = downloadActivityOverlay.querySelector('.download-activity-icon i[data-lucide]');
 
         if (!show) {
             downloadActivityOverlay.classList.add('hidden');
-            downloadActivityOverlay.classList.remove('is-complete');
             downloadActivityOverlay.setAttribute('aria-hidden', 'true');
             return;
         }
 
         const isComplete = show === 'complete';
-        downloadActivityOverlay.classList.toggle('is-complete', isComplete);
         downloadActivityOverlay.classList.remove('hidden');
         downloadActivityOverlay.setAttribute('aria-hidden', 'false');
 
-        if (panel) {
-            panel.classList.toggle('is-complete', isComplete);
+        const titleEl = document.getElementById('download-activity-title');
+        const iconEl = document.getElementById('download-activity-icon');
+        const percentEl = document.getElementById('download-activity-percent');
+
+        if (isComplete) {
+            if (titleEl) titleEl.textContent = 'Downloaded';
+            if (iconEl) {
+                iconEl.innerHTML = '<i data-lucide="check-circle" style="width:36px;height:36px;color:#007AFF;"></i>';
+            }
+            if (percentEl) percentEl.textContent = 'The download should start automatically';
+        } else {
+            if (titleEl) titleEl.textContent = 'Downloading and decrypting your file...';
+            if (iconEl) {
+                iconEl.innerHTML = '<div class="downloading-spinner"></div>';
+            }
+            if (percentEl) percentEl.textContent = '0%';
         }
-        if (label) {
-            label.textContent = isComplete ? 'Download complete' : 'Downloading and decrypting your file...';
-        }
-        if (text) {
-            text.textContent = isComplete ? 'Saved to your device' : 'Preparing secure transfer';
-        }
-        if (icon) {
-            icon.setAttribute('data-lucide', isComplete ? 'check' : 'download');
-        }
+
         if (window.lucide?.createIcons) {
             window.lucide.createIcons();
         }
@@ -2483,7 +2494,6 @@
             confirmText = 'Continue',
             cancelText = 'Cancel',
             hideCancel = false,
-            kicker = 'Heads up',
             tone = 'default'
         } = options || {};
 
@@ -2494,7 +2504,6 @@
 
         actionModalTitle.textContent = title;
         actionModalDescription.textContent = description;
-        actionModalKicker.textContent = kicker;
         actionModalConfirm.textContent = confirmText;
         actionModalCancel.textContent = cancelText;
         actionModalCancel.classList.toggle('hidden', !!hideCancel);
