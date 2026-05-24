@@ -35,7 +35,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
                     <h1>Limits</h1>
                 </div>
-                <p class="last-updated">Last updated: April 5, 2026</p>
+                <p class="last-updated">Last updated: May 24, 2026</p>
 
                 <p>
                     ShareIt offers two tiers of service depending on whether you are logged in or accessing the service as a guest. Below are the current limits for each tier.
@@ -46,7 +46,7 @@
                     <ul>
                         <li><strong>Maximum file size:</strong> 750 MB</li>
                         <li><strong>Retention period:</strong> 7 days</li>
-                        <li><strong>Uploads:</strong> Subject to IP-based rate limits</li>
+                        <li><strong>Rate Limit:</strong> Dynamic, based on Server Load and Usage Patterns</li>
                     </ul>
                 </section>
 
@@ -55,24 +55,24 @@
                     <ul>
                         <li><strong>Maximum file size:</strong> 1.5 GB</li>
                         <li><strong>Retention period:</strong> 90 days</li>
-                        <li><strong>Uploads:</strong> Higher rate limits applied</li>
-                        <li><strong>Device management:</strong> Full trusted-device enrollment</li>
-                        <li><strong>Recent uploads:</strong> Browse and re-download your file history</li>
+                        <li><strong>Rate Limit:</strong> Dynamic, based on Server Load and Usage Patterns. Higher allowance window</li>
+                        <li><strong>Device management:</strong> File sync between devices</li>
+                        <li><strong>Recent uploads:</strong> Browse and re-download your file history from any device</li>
                     </ul>
                 </section>
 
                 <section>
                     <h2>Rate Limits</h2>
                     <p>
-                        To ensure fair usage and prevent abuse, the following rate limits are enforced per IP address:
+                        To ensure fair usage and prevent abuse, the following rate limits are enforced per IP address and Session:
                     </p>
                     <ul>
-                        <li><strong>Standard:</strong> 2 requests per minute (upload init, finalize)</li>
-                        <li><strong>Strict:</strong> 1 request per minute (device register/recover, enrollments)</li>
-                        <li><strong>Download:</strong> 10 requests per minute (file downloads)</li>
+                        <li><strong>Standard:</strong> No requests limited</li>
+                        <li><strong>Limited:</strong> ~5 uploads per minute</li>
+                        <li><strong>Restricted:</strong> No requests allowed (Special Cases or Violations)</li>
                     </ul>
                     <p>
-                        These limits are deliberately conservative during development and can be adjusted via environment variables.
+                        These limits are deliberately conservative during development and can be adjusted dynamically and automatically.
                     </p>
                 </section>
 
@@ -92,18 +92,12 @@
             </article>
         </main>
 
-        <footer>
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
-                <p>Secured file sharing made easy. Powered by CNS</p>
-                <nav style="display: flex; gap: 2rem; font-size: 0.9rem;">
-                    <a href="/limits" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Limits</a>
-                    <a href="/data-encryption" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Encryption</a>
-                    <a href="/help" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Help</a>
-                    <a href="/tos" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Terms</a>
-                    <a href="/privacy" style="color: inherit; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s;" onmouseover="this.style.borderBottomColor='var(--accent)'" onmouseout="this.style.borderBottomColor='transparent'">Privacy</a>
-                </nav>
-            </div>
-        </footer>
-    </div>
+    <footer class="footer">
+        <a href="/tos">Terms of Service</a>
+        <a href="/privacy">Privacy Policy</a>
+        <a href="/limits">Limits</a>
+        <a href="/data-encryption">Data Encryption</a>
+        <a href="/help">Help</a>
+    </footer>
 </body>
 </html>
