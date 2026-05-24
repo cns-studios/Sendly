@@ -386,8 +386,8 @@ func nullableString(value string) sql.NullString {
 
 
 
-// SaveParticipantPublicKey stores a participant's ephemeral public key
-// so the host can wrap the session DEK for them.
+
+
 func (p *Postgres) SaveParticipantPublicKey(ctx context.Context, tunnelID, deviceID string, publicKeyJWK json.RawMessage, keyAlgorithm string, keyVersion int) error {
 	_, err := p.db.ExecContext(ctx, `
 		UPDATE tunnel_participants
@@ -400,8 +400,8 @@ func (p *Postgres) SaveParticipantPublicKey(ctx context.Context, tunnelID, devic
 	return err
 }
 
-// GetParticipantsWithPublicKeys returns all participants that have submitted
-// a public key (i.e. guests that need a DEK envelope from the host).
+
+
 func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID string) ([]models.TunnelParticipant, error) {
 	var participants []models.TunnelParticipant
 	err := p.db.SelectContext(ctx, &participants, `
@@ -413,8 +413,8 @@ func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID s
 	return participants, err
 }
 
-// SaveTunnelParticipantEnvelope stores a host-wrapped DEK envelope
-// keyed by (tunnel_id, participant device_id).
+
+
 func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, participantDeviceID string, wrappedDEK, nonce []byte, wrapAlg string, wrapVersion int) error {
 	_, err := p.db.ExecContext(ctx, `
 		INSERT INTO tunnel_participant_envelopes
@@ -431,7 +431,7 @@ func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, 
 	return err
 }
 
-// GetTunnelParticipantEnvelope fetches the host-wrapped DEK for a guest device.
+
 func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, deviceID string) (*models.TunnelGuestEnvelope, error) {
 	var row struct {
 		WrappedDEK     []byte `db:"wrapped_dek"`
@@ -446,7 +446,7 @@ func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, d
 		  AND  participant_device_id = $2
 	`, tunnelID, deviceID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil // not ready yet — host hasn't wrapped yet
+		return nil, nil 
 	}
 	if err != nil {
 		return nil, err
@@ -459,8 +459,8 @@ func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, d
 	}, nil
 }
 
-// ParticipantHasEnvelope checks whether the host has already pushed an
-// envelope for the given device in this tunnel.
+
+
 func (p *Postgres) ParticipantHasEnvelope(ctx context.Context, tunnelID, deviceID string) (bool, error) {
 	var count int
 	err := p.db.GetContext(ctx, &count, `

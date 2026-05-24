@@ -122,7 +122,7 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		return
 	}
 
-	// Save the guest's ephemeral public key so the host can wrap the session DEK for them
+	
 	if len(req.PublicKeyJWK) > 0 && req.DeviceID != "" {
 		_ = h.db.SaveParticipantPublicKey(
 			c.Request.Context(),
@@ -197,7 +197,7 @@ func (h *TunnelHandler) End(c *gin.Context) {
 
 	var req models.TunnelEndRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		// non-fatal — device_id is best-effort
+		
 		req.DeviceID = ""
 	}
 
@@ -397,8 +397,8 @@ func (h *TunnelHandler) GuestFileAccess(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// GetParticipantPublicKeys — host calls this to get all guest public keys
-// so it can wrap the session DEK for each one.
+
+
 func (h *TunnelHandler) GetParticipantPublicKeys(c *gin.Context) {
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
@@ -412,7 +412,7 @@ func (h *TunnelHandler) GetParticipantPublicKeys(c *gin.Context) {
 		return
 	}
 
-	// Verify caller is the host
+	
 	isHost := h.callerIsHost(c, tunnel)
 	if !isHost {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Only the tunnel host can list participant keys", Code: "FORBIDDEN"})
@@ -430,7 +430,7 @@ func (h *TunnelHandler) GetParticipantPublicKeys(c *gin.Context) {
 		if len(p.PublicKeyJWK) == 0 || !p.DeviceID.Valid {
 			continue
 		}
-		// Skip the host's own entry
+		
 		if h.participantIsHost(p, tunnel) {
 			continue
 		}
@@ -448,8 +448,8 @@ func (h *TunnelHandler) GetParticipantPublicKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"participants": result})
 }
 
-// PushParticipantEnvelope — host calls this to push a wrapped DEK
-// for each guest participant that has submitted a public key.
+
+
 func (h *TunnelHandler) PushParticipantEnvelope(c *gin.Context) {
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
@@ -514,8 +514,8 @@ func (h *TunnelHandler) PushParticipantEnvelope(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// GetParticipantEnvelope — guest polls this to get their wrapped DEK
-// once the host has pushed it.
+
+
 func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 	tunnelID := c.Param("id")
 	deviceID := c.Param("device_id")
@@ -540,7 +540,7 @@ func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 		return
 	}
 	if envelope == nil {
-		// Not ready yet — host hasn't wrapped for this device
+		
 		c.JSON(http.StatusAccepted, gin.H{"ready": false})
 		return
 	}
@@ -548,16 +548,16 @@ func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ready": true, "envelope": envelope})
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// callerIsHost returns true if the authenticated user or device matches
-// the tunnel's initiator.
+
+
+
 func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool {
 	user := middleware.GetCNSUser(c)
 	if user != nil && int64(user.ID) == tunnel.InitiatorCNSUserID {
 		return true
 	}
-	// Guest host: match via X-Device-ID header
+	
 	hostDeviceID := c.GetHeader("X-Device-ID")
 	if hostDeviceID != "" && tunnel.InitiatorDeviceID.Valid &&
 		strings.EqualFold(tunnel.InitiatorDeviceID.String, hostDeviceID) {
@@ -566,7 +566,7 @@ func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool
 	return false
 }
 
-// participantIsHost returns true if the participant row belongs to the host.
+
 func (h *TunnelHandler) participantIsHost(p models.TunnelParticipant, tunnel *models.Tunnel) bool {
 	if tunnel.InitiatorCNSUserID != 0 && p.CNSUserID.Valid &&
 		p.CNSUserID.Int64 == tunnel.InitiatorCNSUserID {

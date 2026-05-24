@@ -9,7 +9,7 @@
     const loadingSection = document.getElementById('loading-section');
     const passwordSection = document.getElementById('password-section');
     const autoDecryptSection = document.getElementById('auto-decrypt-section');
-    const manualDecryptSection = document.getElementById('manual-decrypt-section');
+    const noPasswordSection = document.getElementById('no-password-section');
     const progressSection = document.getElementById('progress-section');
     const successSection = document.getElementById('success-section');
     const errorSection = document.getElementById('error-section');
@@ -19,13 +19,11 @@
     const fileCreatedEl = document.getElementById('file-created');
     const fileExpiresEl = document.getElementById('file-expires');
 
-    const passwordInput = document.getElementById('password-input');
     const downloadAutoBtn = document.getElementById('download-auto-btn');
-    const downloadManualBtn = document.getElementById('download-manual-btn');
     const downloadAgainBtn = document.getElementById('download-again-btn');
     const retryBtn = document.getElementById('retry-btn');
 
-    const progressFill = document.getElementById('progress-fill');
+    const progressTitle = document.getElementById('progress-title');
     const progressText = document.getElementById('progress-text');
     const errorTitle = document.getElementById('error-title');
     const errorMessage = document.getElementById('error-message');
@@ -67,16 +65,8 @@
 
     function setupEventListeners() {
         downloadAutoBtn?.addEventListener('click', () => downloadAndDecrypt(currentPassword));
-        downloadManualBtn?.addEventListener('click', () => {
-            const password = passwordInput.value.trim().toLowerCase();
-            downloadAndDecrypt(password);
-        });
         downloadAgainBtn?.addEventListener('click', () => downloadAndDecrypt(currentPassword));
-        retryBtn?.addEventListener('click', resetToPasswordEntry);
-
-        passwordInput?.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') downloadManualBtn.click();
-        });
+        retryBtn?.addEventListener('click', () => loadFileMetadata(fileId));
 
         reportBtn?.addEventListener('click', () => { reportModal.classList.remove('hidden'); });
         reportCancel?.addEventListener('click', () => { reportModal.classList.add('hidden'); });
@@ -104,12 +94,10 @@
                 if (validation.valid) {
                     currentPassword = hashPassword;
                     autoDecryptSection.classList.remove('hidden');
-                    manualDecryptSection.classList.add('hidden');
-                } else {
-                    manualDecryptSection.classList.remove('hidden');
+                    if (noPasswordSection) noPasswordSection.classList.add('hidden');
                 }
             } else {
-                manualDecryptSection.classList.remove('hidden');
+                if (noPasswordSection) noPasswordSection.classList.remove('hidden');
             }
 
             loadingSection.classList.add('hidden');
@@ -138,9 +126,8 @@
         currentPassword = password;
 
         loadingSection.classList.add('hidden');
-        passwordSection.classList.remove('hidden');
+        passwordSection.classList.add('hidden');
         autoDecryptSection.classList.add('hidden');
-        manualDecryptSection.classList.add('hidden');
         progressSection.classList.remove('hidden');
         successSection.classList.add('hidden');
         errorSection.classList.add('hidden');
@@ -163,20 +150,25 @@
             updateProgress(95, 'Preparing download...');
             triggerDownload(decryptedData, fileMetadata.original_name);
 
-            updateProgress(100, 'Complete!');
+            showDownloadedState();
 
-            passwordSection.classList.add('hidden');
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+
+            resetDownloadBox();
             progressSection.classList.add('hidden');
-            successSection.classList.remove('hidden');
+            passwordSection.classList.remove('hidden');
+            if (currentPassword) {
+                autoDecryptSection.classList.remove('hidden');
+            }
         } catch (error) {
             console.error('Download/decrypt failed:', error);
             progressSection.classList.add('hidden');
 
             if (error.message.includes('Decryption failed')) {
-                showError('Decryption Failed', 'Invalid passcode. Please check and try again.');
+                showError('Something failed', 'Error Code 4x001');
                 retryBtn.classList.remove('hidden');
             } else {
-                showError('Download Failed', error.message);
+                showError('Something failed', 'Unexpected error occurred. Please try again.');
                 retryBtn.classList.remove('hidden');
             }
         }
@@ -263,7 +255,7 @@
                 showError('File Not Found', 'This file does not exist or has been removed.');
                 break;
             case 'FILE_EXPIRED':
-                showError('File Expired', 'This file has expired and is no longer available.');
+                showError('File Expired', 'This file has expired and is no longer available. Ask the sender to upload it again.');
                 break;
             case 'FILE_DELETED':
                 showError('File Removed', 'This file has been removed due to policy violations.');
@@ -283,18 +275,38 @@
         errorSection.classList.remove('hidden');
     }
 
-    function resetToPasswordEntry() {
-        errorSection.classList.add('hidden');
-        passwordSection.classList.remove('hidden');
-        autoDecryptSection.classList.add('hidden');
-        manualDecryptSection.classList.remove('hidden');
-        passwordInput.value = currentPassword || '';
-        passwordInput.focus();
+    function updateProgress(percent, text) {
+        if (progressText) progressText.textContent = `${Math.round(percent)}%`;
+        if (text && progressTitle) progressTitle.textContent = text;
     }
 
-    function updateProgress(percent, text) {
-        if (progressFill) progressFill.style.width = `${percent}%`;
-        if (text && progressText) progressText.textContent = text;
+    function showDownloadedState() {
+        if (progressTitle) progressTitle.textContent = 'Downloaded';
+        if (progressText) progressText.textContent = 'The download should start automatically';
+
+        const iconEl = document.getElementById('progress-icon');
+        if (iconEl) {
+            iconEl.innerHTML = '';
+            iconEl.className = '';
+            const icon = document.createElement('i');
+            icon.setAttribute('data-lucide', 'check-circle');
+            icon.style.cssText = 'width: 36px; height: 36px; color: #007AFF;';
+            iconEl.appendChild(icon);
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            }
+        }
+    }
+
+    function resetDownloadBox() {
+        if (progressTitle) progressTitle.textContent = 'Downloading...';
+        if (progressText) progressText.textContent = '0%';
+
+        const iconEl = document.getElementById('progress-icon');
+        if (iconEl) {
+            iconEl.innerHTML = '';
+            iconEl.className = 'downloading-spinner';
+        }
     }
 
     function showToast(message) {
@@ -336,7 +348,7 @@
         setupEventListeners();
 
         if (!fileId) {
-            showError('Invalid URL', 'No file ID provided');
+            showError('Something failed', 'Error code 4x000. Please check the link and try again.');
             return;
         }
 

@@ -737,8 +737,8 @@
         pendingEnrollmentSocket.onmessage = handlePendingEnrollmentSocketMessage;
         pendingEnrollmentSocket.onclose = () => {
             pendingEnrollmentSocket = null;
-            // If the handshake never succeeds (for example 401 before upgrade),
-            // rely on polling instead of hammering reconnect attempts.
+            
+            
             if (!pendingEnrollmentSocketEverOpened) {
                 return;
             }
@@ -1759,7 +1759,7 @@
             const dekBytes = new TextEncoder().encode(generatedPassword);
 
             if (!AUTHENTICATED && activeTunnel?.id) {
-                // Guest-to-guest tunnel uploads store a raw DEK envelope for automatic tunnel decryption.
+                
                 finalizeEnvelopePayload = {
                     wrapped_dek_b64: SecureCrypto.toBase64(dekBytes),
                     dek_wrap_alg: 'RAW-DEK-v1',
@@ -2483,19 +2483,6 @@
 
         const msg = document.getElementById('idle-copy-msg');
         if (msg) msg.remove();
-    }
-
-         
-        fileInput.value = '';
-        dropZone.classList.remove('hidden');
-        fileDetails.classList.add('hidden');
-        finalizeBtn.disabled = true;
-        statusText.textContent = 'Ready';
-        statusText.style.color = 'var(--accent)';
-        stageEntry.classList.remove('hidden');
-        stageProcessing.classList.add('hidden');
-        stagePending.classList.add('hidden');
-        stageOutput.classList.add('hidden');
     }
 
     function startPendingCountdown() {

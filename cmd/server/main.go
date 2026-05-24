@@ -165,7 +165,7 @@ func main() {
 			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 			me.DELETE("/tunnels/:id", tunnelHandler.End)
 
-			// ── Participant key exchange (E2E session password delivery) ──────────
+			
 			me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 			me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
 			me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
@@ -234,7 +234,7 @@ func main() {
 		c.Next()
 	}
 
-	// Existing OPTIONS routes
+	
 	router.OPTIONS("/desktop/auth/verify", desktopCORS)
 	router.OPTIONS("/desktop/auth/oauth/config", desktopCORS)
 	router.OPTIONS("/desktop/auth/oauth/verify", desktopCORS)
@@ -264,7 +264,7 @@ func main() {
 	router.OPTIONS("/desktop/me/devices/enrollments/pending", desktopCORS)
 	router.OPTIONS("/desktop/me/devices/enrollments/:id/approve", desktopCORS)
 	router.OPTIONS("/desktop/me/devices/enrollments/:id/reject", desktopCORS)
-	// New OPTIONS routes for participant key exchange
+	
 	router.OPTIONS("/desktop/me/tunnels/:id/participant-keys", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/envelopes", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/envelopes/:device_id", desktopCORS)
@@ -317,7 +317,7 @@ func main() {
 				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 				me.DELETE("/tunnels/:id", tunnelHandler.End)
 
-				// ── Participant key exchange (E2E session password delivery) ──────
+				
 				me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 				me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
 				me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)

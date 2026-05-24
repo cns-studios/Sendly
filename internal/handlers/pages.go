@@ -183,11 +183,35 @@ func (h *PageHandler) Link(c *gin.Context) {
 func (h *PageHandler) SharedFile(c *gin.Context) {
 	setCSRFTokenCookie(c)
 	fileID := c.Param("id")
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	if user != nil {
+		username = user.Username
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+	}
+	configData := map[string]interface{}{
+		"baseURL":     h.cfg.BaseURL,
+		"fileID":      fileID,
+		"tosVersion":  h.cfg.TOSVersion,
+	}
+	configJSON, err := json.Marshal(configData)
+	if err != nil {
+		configJSON = []byte("{}")
+	}
 
 	c.HTML(http.StatusOK, "shared.html", gin.H{
-		"title":   "Download File - ShareIt",
-		"baseURL": h.cfg.BaseURL,
-		"fileID":  fileID,
+		"title":        "Download File - ShareIt",
+		"baseURL":      h.cfg.BaseURL,
+		"fileID":       fileID,
+		"authenticated": authenticated,
+		"username":     username,
+		"authLoginURL": authLoginURL,
+		"tosVersion":   h.cfg.TOSVersion,
+		"configJSON":   template.JS(string(configJSON)),
 	})
 }
 

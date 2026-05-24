@@ -41,15 +41,24 @@
             <div class="header-left">
                 <a href="/" class="logo-text">ShareIt</a>
                 <nav class="quicklinks">
-                    <a href="/quickshare">Quick Share</a>
-                    <a href="/link">Link</a>
+                    <a href="/pricing">Pricing</a>
+                    <a href="/security">Security</a>
+                    <a href="/faq">FAQ</a>
                 </nav>
             </div>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="login-btn" style="background:#333;">
+                {{.username}}
+            </a>
+            {{else}}
+            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            {{end}}
         </header>
     </div>
 
     <div class="main-content">
         <div class="shared-content-wrapper">
+
             <div id="loading-section">
                 <div class="loading-box">
                     <div class="spinner"></div>
@@ -58,55 +67,31 @@
             </div>
 
             <div id="password-section" class="hidden">
+                <p class="shared-heading">You got sent a file</p>
+
                 <div class="file-info-box">
-                    <h2 style="display: flex; align-items: center; gap: 0.5rem;">
-                        <i data-lucide="file" style="width: 1.5rem; height: 1.5rem;"></i>
-                        <span id="file-name"></span>
-                    </h2>
-                    <div class="file-meta-grid">
-                        <div class="meta-item">
-                            <span class="meta-label">Size:</span>
-                            <span id="file-size" class="meta-value"></span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Uploaded:</span>
-                            <span id="file-created" class="meta-value"></span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-label">Expires:</span>
-                            <span id="file-expires" class="meta-value"></span>
-                        </div>
+                    <p class="file-name-text" id="file-name"></p>
+                    <p class="file-meta-text">
+                        <span id="file-size"></span> &middot; Uploaded <span id="file-created"></span>
+                        <span id="file-expires" style="display:none"></span>
+                    </p>
+                    <div id="auto-decrypt-section" class="hidden">
+                        <button id="download-auto-btn" class="download-btn">Download</button>
+                    </div>
+                    <div id="no-password-section" class="hidden">
+                        <div class="no-password-btn">Wrong Link. Please check if you copied it correctly and try again.</div>
                     </div>
                 </div>
 
-                <div id="auto-decrypt-section" class="hidden">
-                    <p class="info-text" style="color: var(--accent); text-transform: uppercase; font-size: 0.875rem; margin-bottom: 1.5rem;">Passcode detected in URL</p>
-                    <button id="download-auto-btn" class="btn btn-accent btn-large">
-                        <i data-lucide="download"></i> Download
-                    </button>
-                </div>
+                <p class="warning-text">Files could contain harmful or illegal content.</p>
+                <button id="report-btn" class="report-link">Report file</button>
+            </div>
 
-                <div id="manual-decrypt-section">
-                    <div class="password-box">
-                        <div class="input-group">
-                            <label for="password-input">Enter Passcode (5 words):</label>
-                            <input type="text" id="password-input" placeholder="e.g., apple-banana-cherry-date-elder" style="width: 100%; padding: 0.75rem; font-family: 'JetBrains Mono', monospace; background: #0d0d0d; border: 1px solid var(--border); color: var(--accent); border-radius: 2px;">
-                            <p class="hint">Words separated by hyphens</p>
-                        </div>
-                        <button id="download-manual-btn" class="btn btn-accent btn-large">
-                            <i data-lucide="download"></i> Download
-                        </button>
-                    </div>
-                </div>
-
-                <div id="progress-section" class="hidden">
-                    <div class="progress-container">
-                        <p class="progress-title">Downloading file...</p>
-                        <div class="progress-bar progress-bar-indeterminate">
-                            <div id="progress-fill" class="progress-fill"></div>
-                        </div>
-                        <p id="progress-text" class="progress-text">Downloading...</p>
-                    </div>
+            <div id="progress-section" class="hidden">
+                <div class="downloading-box">
+                    <p id="progress-title" class="downloading-title">Downloading...</p>
+                    <div id="progress-icon" class="downloading-spinner"></div>
+                    <p id="progress-text" class="downloading-percent">0%</p>
                 </div>
             </div>
 
@@ -141,38 +126,32 @@
                 </div>
             </div>
 
-            <div class="report-section">
-                <button id="report-btn" class="btn btn-secondary" style="font-size: 0.875rem;">
-                    <i data-lucide="flag"></i> Report this file
-                </button>
-            </div>
-
-            <div id="report-modal" class="modal hidden">
-                <div class="modal-content">
-                    <h3>Report File</h3>
-                    <p style="color: #555; margin-bottom: 1.5rem;">Are you sure you want to report this file for violating our terms of service?</p>
-                    <div style="display: flex; gap: 1rem; justify-content: center;">
-                        <button id="report-cancel" class="btn btn-secondary">Cancel</button>
-                        <button id="report-confirm" class="btn btn-accent">Report</button>
+            <div id="report-modal" class="tos-overlay hidden" aria-hidden="true">
+                <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title" aria-describedby="report-modal-description">
+                    <h2 id="report-modal-title">Report File</h2>
+                    <p id="report-modal-description" class="tos-modal-description">
+                        Are you sure you want to report this file for violating our terms of service?
+                    </p>
+                    <div class="tos-modal-actions">
+                        <button id="report-cancel" class="btn btn-secondary btn-large">Cancel</button>
+                        <button id="report-confirm" class="btn btn-accent btn-large">Report</button>
                     </div>
                 </div>
             </div>
+
         </div>
     </div>
 
-    <footer class="footer">
+    <footer class="footer page-shared-footer">
+        <a href="#">Limits</a>
         <a href="/tos">Terms of Service</a>
         <a href="/privacy">Privacy Policy</a>
-        <a href="#">Limits</a>
         <a href="#">Data Encryption</a>
         <a href="#">Help</a>
     </footer>
 
     <script>
-        window.CONFIG = {
-            baseURL: "{{.baseURL}}",
-            fileID: "{{.fileID}}"
-        };
+        window.CONFIG = {{.configJSON}};
     </script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script>

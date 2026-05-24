@@ -274,13 +274,12 @@
         const container = isHost ? peopleRow : queuePeopleRow;
         if (!container) return;
 
-        const myCurrentDeviceID = myDeviceId || (AUTHENTICATED ? authDeviceIdentity?.deviceId || '' : getOrCreateGuestDeviceId());
         const allParticipants = Array.isArray(items) ? items : [];
-        const otherPeers = allParticipants.filter(p => extractDeviceID(p) !== myCurrentDeviceID);
+        const myCurrentDeviceID = myDeviceId || (AUTHENTICATED ? authDeviceIdentity?.deviceId || '' : getOrCreateGuestDeviceId());
 
         container.innerHTML = '';
 
-        if (otherPeers.length === 0) {
+        if (allParticipants.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'recent-state';
             empty.textContent = 'Nobody joined yet';
@@ -290,16 +289,17 @@
             empty.style.padding = '1rem 0';
             container.appendChild(empty);
         } else {
-            otherPeers.forEach(p => {
+            allParticipants.forEach(p => {
                 const person = document.createElement('div');
                 person.className = 'person';
+                const isSelf = extractDeviceID(p) === myCurrentDeviceID;
                 person.innerHTML = `
                     <div class="person-circle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                         </svg>
                     </div>
-                    <span class="person-name">${getParticipantName(p)}</span>
+                    <span class="person-name">${getParticipantName(p)}${isSelf ? ' (you)' : ''}</span>
                 `;
                 container.appendChild(person);
             });

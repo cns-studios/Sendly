@@ -759,6 +759,254 @@ body.page-shared {
     background-color: #F5F5F7;
 }
 
+body.page-shared .header-wrapper {
+    padding-top: 27px;
+    padding-bottom: 5px;
+}
+
+body.page-shared .header {
+    width: 626px;
+    min-width: unset;
+    max-width: 90%;
+}
+
+body.page-shared .logo-text {
+    font-size: 24px;
+}
+
+body.page-shared .login-btn {
+    padding: 12px 32px;
+    border-radius: 34px;
+}
+
+body.page-shared .shared-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+}
+
+body.page-shared .shared-heading {
+    text-align: center;
+    color: black;
+    font-size: 24px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 590;
+    margin-bottom: 30px;
+}
+
+body.page-shared .file-info-box {
+    width: 415px;
+    max-width: 100%;
+    background: #D9D9D9;
+    border-radius: 21px;
+    padding: 23px 23px 20px;
+    margin-bottom: 12px;
+}
+
+body.page-shared .file-name-text {
+    color: black;
+    font-size: 24px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 510;
+    word-break: break-all;
+    margin-bottom: 2px;
+}
+
+body.page-shared .file-meta-text {
+    color: #595959;
+    font-size: 14px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    margin-bottom: 14px;
+}
+
+body.page-shared .download-btn {
+    display: block;
+    width: 100%;
+    background: #007AFF;
+    color: white;
+    font-size: 16px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 510;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 0;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+}
+
+body.page-shared .download-btn:hover {
+    opacity: 0.9;
+}
+
+body.page-shared #auto-decrypt-section {
+    margin-top: 8px;
+}
+
+body.page-shared #no-password-section {
+    margin-top: 8px;
+}
+
+body.page-shared .no-password-btn {
+    display: block;
+    width: 100%;
+    background: #D9D9D9;
+    color: #000;
+    font-size: 14px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 0;
+    text-align: center;
+}
+
+body.page-shared .password-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-top: 8px;
+}
+
+body.page-shared .password-input-row input {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: 'SF Pro', sans-serif;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    color: #000;
+    outline: none;
+}
+
+body.page-shared .password-input-row input:focus {
+    border-color: #007AFF;
+}
+
+body.page-shared .password-input-row .download-btn {
+    width: auto;
+    padding: 10px 24px;
+    white-space: nowrap;
+}
+
+body.page-shared .hint {
+    color: #8E8E8E;
+    font-size: 12px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    margin-top: 6px;
+}
+
+body.page-shared .warning-text {
+    text-align: center;
+    color: #8E8E8E;
+    font-size: 13px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    margin-bottom: 6px;
+}
+
+body.page-shared .report-link {
+    display: block;
+    margin: 0 auto;
+    background: none;
+    border: none;
+    text-align: center;
+    color: #8E8E8E;
+    font-size: 14px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+}
+
+body.page-shared .report-link:hover {
+    opacity: 0.7;
+}
+
+body.page-shared .success-box,
+body.page-shared .error-box {
+    width: 415px;
+    max-width: 100%;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 21px;
+    padding: 2rem;
+    text-align: center;
+}
+
+body.page-shared .loading-box {
+    background-color: #fff;
+    border-radius: 21px;
+    padding: 2rem;
+    text-align: center;
+}
+
+body.page-shared .loading-box p {
+    margin-top: 1rem;
+    color: #888;
+}
+
+body.page-shared .spinner {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border: 4px solid #E4E3E3;
+    border-top-color: #007AFF;
+    border-radius: 50%;
+    animation: spinner-rotate 1s linear infinite;
+}
+
+@keyframes spinner-rotate {
+    to { transform: rotate(360deg); }
+}
+
+body.page-shared .downloading-box {
+    width: 415px;
+    height: 188px;
+    max-width: 100%;
+    background: #D9D9D9;
+    border-radius: 21px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+}
+
+body.page-shared .downloading-title {
+    color: #000;
+    font-size: 24px;
+    font-weight: 510;
+}
+
+body.page-shared .downloading-spinner {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 3px solid #007AFF;
+    border-top-color: transparent;
+    animation: downloading-spin 0.8s linear infinite;
+}
+
+@keyframes downloading-spin {
+    to { transform: rotate(360deg); }
+}
+
+body.page-shared .downloading-percent {
+    color: #828282;
+    font-size: 16px;
+    font-weight: 400;
+}
+
+body.page-shared .page-shared-footer {
+    margin-top: auto;
+}
+
 /* ── TOS Overlay ── */
 .tos-overlay {
     position: fixed;
@@ -768,52 +1016,100 @@ body.page-shared {
     align-items: center;
     justify-content: center;
     padding: 1rem;
-    background: rgba(0, 0, 0, 0.78);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.5);
 }
 
 .tos-modal {
-    width: min(34rem, 100%);
-    border: 1px solid #2f2f2f;
-    border-top: 3px solid #007AFF;
-    border-radius: 8px;
-    background: #101010;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-    padding: 1.4rem;
-}
-
-.tos-modal-kicker {
-    font-family: 'SF Pro', sans-serif;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.22em;
-    color: #007AFF;
-    margin-bottom: 0.5rem;
+    width: min(451px, calc(100% - 2rem));
+    background: #F5F5F7;
+    border-radius: 20px;
+    padding: 24px 24px 28px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.15);
 }
 
 .tos-modal h2 {
-    margin: 0;
-    font-size: 1.3rem;
-    line-height: 1.25;
-    color: #fff;
+    margin: 0 0 16px 0;
+    font-size: 24px;
+    font-weight: 590;
+    color: #000;
 }
 
 .tos-modal-description {
-    margin-top: 0.9rem;
-    color: #d3d3d3;
-    line-height: 1.6;
+    margin: 0 0 28px 0;
+    font-size: 16px;
+    color: #000;
+    line-height: 1.5;
 }
 
 .tos-modal-description a {
-    color: #007AFF;
+    color: #000;
+    text-decoration: underline;
 }
 
 .tos-modal-actions {
-    margin-top: 1.2rem;
     display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+}
+
+.tos-modal-actions .btn {
+    width: 117px;
+    height: 38px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 400;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tos-modal-actions .btn-secondary {
+    background: #C7C7C7;
+    border: none;
+    color: #000;
+}
+
+.tos-modal-actions .btn-secondary:hover:not(:disabled) {
+    background: #b5b5b5;
+}
+
+.action-modal {
+    background: #101010;
+    border: 1px solid #2f2f2f;
+    border-top: 3px solid #007AFF;
+    border-radius: 8px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.action-modal h2 {
+    color: #fff;
+}
+
+.action-modal .tos-modal-description {
+    color: #d3d3d3;
+}
+
+.action-modal .tos-modal-description a {
+    color: #007AFF;
+    text-decoration: underline;
+}
+
+.action-modal .tos-modal-actions .btn {
+    width: auto;
+    height: auto;
+    padding: 1.25rem 1rem;
+    font-size: 0.875rem;
+}
+
+.action-modal .tos-modal-actions .btn-secondary {
+    background-color: #E4E3E3;
+    border: 1px solid #ccc;
+    color: #000;
+}
+
+.action-modal .tos-modal-actions .btn-secondary:hover:not(:disabled) {
+    background-color: #d4d3d3;
 }
 
 body.tos-gate-open {
@@ -1512,234 +1808,6 @@ body.page-link .progress-sub {
     letter-spacing: 0.05em;
 }
 
-/* ── Shared Page: Download Flow ── */
-
-body.page-shared .shared-content-wrapper {
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 40px 20px;
-}
-
-body.page-shared .file-info-box {
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-}
-
-body.page-shared .file-info-box h2 {
-    margin-bottom: 1rem;
-    word-break: break-all;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: #000;
-}
-
-body.page-shared .file-meta-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-}
-
-body.page-shared .meta-item {
-    display: flex;
-    flex-direction: column;
-}
-
-body.page-shared .meta-label {
-    font-size: 0.8rem;
-    color: #888;
-    margin-bottom: 0.25rem;
-    font-family: 'SF Pro', sans-serif;
-    text-transform: uppercase;
-}
-
-body.page-shared .meta-value {
-    font-weight: 500;
-    color: #000;
-}
-
-body.page-shared .password-box {
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-}
-
-body.page-shared .input-group {
-    margin-bottom: 1rem;
-}
-
-body.page-shared .input-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    font-size: 0.9rem;
-    color: #000;
-}
-
-body.page-shared .input-group input {
-    width: 100%;
-    padding: 0.75rem;
-    font-size: 1rem;
-    background-color: #fff;
-    color: #000;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    font-family: 'SF Pro', sans-serif;
-}
-
-body.page-shared .input-group input:focus {
-    outline: none;
-    border-color: #007AFF;
-    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
-}
-
-body.page-shared .hint {
-    font-size: 0.8rem;
-    color: #888;
-    margin-top: 0.5rem;
-    font-family: 'SF Pro', sans-serif;
-}
-
-body.page-shared .success-box,
-body.page-shared .error-box {
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    padding: 2rem;
-    text-align: center;
-}
-
-body.page-shared .success-box h2,
-body.page-shared .error-box h2 {
-    margin-bottom: 1.5rem;
-    color: #000;
-}
-
-body.page-shared .loading-box {
-    background-color: #fff;
-    border-radius: 12px;
-    padding: 2rem;
-    text-align: center;
-}
-
-body.page-shared .loading-box p {
-    margin-top: 1rem;
-    color: #888;
-}
-
-body.page-shared .spinner {
-    display: inline-block;
-    width: 40px;
-    height: 40px;
-    border: 4px solid #E4E3E3;
-    border-top-color: #007AFF;
-    border-radius: 50%;
-    animation: spinner-rotate 1s linear infinite;
-}
-
-@keyframes spinner-rotate {
-    to { transform: rotate(360deg); }
-}
-
-body.page-shared .progress-section {
-    margin-top: 1.5rem;
-}
-
-body.page-shared .progress-container {
-    background-color: #fff;
-    border-radius: 8px;
-    padding: 1.5rem;
-    border: 1px solid #ccc;
-}
-
-body.page-shared .progress-title {
-    text-align: center;
-    margin-bottom: 0.75rem;
-    font-size: 0.875rem;
-    color: #007AFF;
-    font-family: 'SF Pro', sans-serif;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-body.page-shared .progress-bar {
-    height: 8px;
-    background-color: #E4E3E3;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-body.page-shared .progress-bar-indeterminate {
-    position: relative;
-}
-
-body.page-shared .progress-fill {
-    display: block;
-    height: 100%;
-    width: 35%;
-    min-width: 72px;
-    background: linear-gradient(90deg, rgba(0, 122, 255, 0.12) 0%, #007AFF 45%, rgba(0, 122, 255, 0.12) 100%);
-    border-radius: 8px;
-    will-change: transform;
-}
-
-body.page-shared .progress-bar-indeterminate .progress-fill {
-    animation: progressIndeterminate 1.2s ease-in-out infinite;
-}
-
-@keyframes progressIndeterminate {
-    0% { transform: translateX(-120%); }
-    100% { transform: translateX(320%); }
-}
-
-body.page-shared .progress-text {
-    text-align: center;
-    margin-top: 0.75rem;
-    font-size: 0.9rem;
-    color: #888;
-}
-
-body.page-shared .report-section {
-    text-align: center;
-    margin-top: 2rem;
-    padding-top: 1rem;
-    border-top: 1px solid #ccc;
-}
-
-body.page-shared .modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-body.page-shared .modal-content {
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 12px;
-    padding: 2rem;
-    max-width: 400px;
-    width: 90%;
-    text-align: center;
-}
-
-body.page-shared .modal-content h3 {
-    color: #000;
-    margin-bottom: 1rem;
-}
-
 /* ── Quick Share: Session View ── */
 
 body.page-quickshare .session-left .file-list .file-entry {
@@ -2223,11 +2291,20 @@ body.page-quickshare #fileListEmpty {
 
 @media (max-width: 640px) {
     .tos-modal {
-        padding: 1rem;
+        padding: 20px 16px 24px;
+    }
+
+    .tos-modal h2 {
+        font-size: 20px;
+    }
+
+    .tos-modal-description {
+        margin-bottom: 20px;
     }
 
     .tos-modal-actions {
-        justify-content: stretch;
+        flex-direction: column;
+        gap: 12px;
     }
 
     .tos-modal-actions .btn {

@@ -45,8 +45,8 @@ type TunnelParticipant struct {
 	KeyVersion   sql.NullInt32   `db:"key_version"   json:"key_version,omitempty"`
 }
 
-// TunnelParticipantPublicKey is what the host sees when polling,
-// so it can wrap the session DEK for each guest.
+
+
 type TunnelParticipantPublicKey struct {
 	ParticipantID string          `json:"participant_id"`
 	DeviceID      string          `json:"device_id"`
@@ -54,7 +54,7 @@ type TunnelParticipantPublicKey struct {
 	PublicKeyJWK  json.RawMessage `json:"public_key_jwk"`
 	KeyAlgorithm  string          `json:"key_algorithm"`
 	KeyVersion    int             `json:"key_version"`
-	// Set once host has wrapped the DEK for this participant
+	
 	HasEnvelope bool `json:"has_envelope"`
 }
 
@@ -81,7 +81,7 @@ type TunnelConfirmRequest struct {
 	DeviceID string `json:"device_id"`
 }
 
-// TunnelPushEnvelopeRequest — host pushes a wrapped DEK for one participant.
+
 type TunnelPushEnvelopeRequest struct {
 	ParticipantDeviceID string `json:"participant_device_id" binding:"required"`
 	WrappedDEKB64       string `json:"wrapped_dek_b64"       binding:"required"`
@@ -90,7 +90,7 @@ type TunnelPushEnvelopeRequest struct {
 	DEKWrapVersion      int    `json:"dek_wrap_version"`
 }
 
-// TunnelGuestEnvelope — what a guest fetches to decrypt the session DEK.
+
 type TunnelGuestEnvelope struct {
 	WrappedDEKB64   string `json:"wrapped_dek_b64"`
 	DEKWrapAlg      string `json:"dek_wrap_alg"`
