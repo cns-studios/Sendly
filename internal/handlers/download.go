@@ -99,7 +99,7 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
+	_, err := h.db.GetFileByID(c.Request.Context(), fileID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			status := http.StatusNotFound
@@ -141,7 +141,6 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.enc\"", fileID))
 	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
-	c.Header("X-Original-Filename", file.OriginalName)
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	c.Status(http.StatusOK)

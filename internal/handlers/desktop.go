@@ -18,10 +18,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var wsUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
 
 type desktopHub struct {
 	mu      sync.Mutex
@@ -67,6 +63,15 @@ type DesktopHandler struct {
 	fs            *storage.Filesystem
 	uploadService *services.Upload
 	hub           *desktopHub
+}
+
+func (h *DesktopHandler) wsUpgrader() *websocket.Upgrader {
+	return &websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			return origin == "" || origin == h.cfg.BaseURL
+		},
+	}
 }
 
 func NewDesktopHandler(
@@ -603,7 +608,7 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 	if tokenQuery != "" {
 		user, err := middleware.ValidateCNSAccessToken(c.Request.Context(), h.cfg, tokenQuery)
 		if err == nil {
-			conn, upgradeErr := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+			conn, upgradeErr := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 			if upgradeErr != nil {
 				return
 			}
@@ -628,7 +633,7 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 			token := authHeader[len(bearerPrefix):]
 			user, err := middleware.ValidateCNSAccessToken(c.Request.Context(), h.cfg, token)
 			if err == nil {
-				conn, upgradeErr := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+				conn, upgradeErr := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 				if upgradeErr != nil {
 					return
 				}
@@ -654,7 +659,7 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 		return
 	}
 
-	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}

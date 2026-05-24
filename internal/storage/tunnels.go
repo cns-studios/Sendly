@@ -31,7 +31,8 @@ func (p *Postgres) CreateTunnel(ctx context.Context, tunnel *models.Tunnel) erro
 			confirmed_at,
 			ended_at,
 			ended_by_cns_user_id,
-			ended_by_device_id
+			ended_by_device_id,
+			host_token
 		)
 		VALUES (
 			gen_random_uuid(),
@@ -49,7 +50,8 @@ func (p *Postgres) CreateTunnel(ctx context.Context, tunnel *models.Tunnel) erro
 			NULL,
 			NULL,
 			NULL,
-			NULL
+			NULL,
+			$9
 		)
 		RETURNING id, created_at
 	`
@@ -65,6 +67,7 @@ func (p *Postgres) CreateTunnel(ctx context.Context, tunnel *models.Tunnel) erro
 		tunnel.InitiatorConfirmed,
 		tunnel.PeerConfirmed,
 		tunnel.ExpiresAt,
+		tunnel.HostToken,
 	).Scan(&tunnel.ID, &tunnel.CreatedAt)
 }
 

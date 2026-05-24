@@ -25,8 +25,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var androidWSUpgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-
 type androidHub struct {
 	mu              sync.Mutex
 	userConns       map[int64][]*websocket.Conn
@@ -114,6 +112,15 @@ type AndroidHandler struct {
 	fs            *storage.Filesystem
 	uploadService *services.Upload
 	hub           *androidHub
+}
+
+func (h *AndroidHandler) wsUpgrader() *websocket.Upgrader {
+	return &websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			return origin == "" || origin == h.cfg.BaseURL
+		},
+	}
 }
 
 func NewAndroidHandler(
@@ -835,7 +842,7 @@ func (h *AndroidHandler) DeviceNotificationsWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := androidWSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
@@ -850,7 +857,7 @@ func (h *AndroidHandler) PendingApprovalsWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := androidWSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}
@@ -879,7 +886,7 @@ func (h *AndroidHandler) WaitingForApprovalWS(c *gin.Context) {
 		return
 	}
 
-	conn, err := androidWSUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}

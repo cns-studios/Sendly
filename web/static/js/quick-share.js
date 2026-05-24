@@ -26,6 +26,7 @@
     let guestCounter = 0;
     let ephemeralKeyPair = null;
     let myDeviceId = '';
+    let hostToken = '';
     let joinCodeInput = '';
 
     const initialView = document.getElementById('initialView');
@@ -130,17 +131,12 @@
         const csrf = getCookieValue('csrf_token');
         if (csrf) headers['X-CSRF-Token'] = csrf;
         if (myDeviceId) headers['X-Device-ID'] = myDeviceId;
+        if (hostToken) headers['X-Host-Token'] = hostToken;
         return headers;
     }
 
     async function ensureEphemeralKeyPair() {
         if (ephemeralKeyPair) return ephemeralKeyPair;
-
-        const cached = sessionStorage.getItem('shareit_ephemeral_kp');
-        if (cached) {
-            ephemeralKeyPair = JSON.parse(cached);
-            return ephemeralKeyPair;
-        }
 
         const keyPair = await crypto.subtle.generateKey(
             {
@@ -149,15 +145,13 @@
                 publicExponent: new Uint8Array([1, 0, 1]),
                 hash: 'SHA-256'
             },
-            true,
+            false,
             ['encrypt', 'decrypt']
         );
 
         const publicKeyJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
-        const privateKeyJWK = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
 
-        ephemeralKeyPair = { publicKeyJWK, privateKeyJWK };
-        sessionStorage.setItem('shareit_ephemeral_kp', JSON.stringify(ephemeralKeyPair));
+        ephemeralKeyPair = { publicKeyJWK, privateKey: keyPair.privateKey };
         return ephemeralKeyPair;
     }
 
@@ -173,14 +167,7 @@
         return new Uint8Array(wrapped);
     }
 
-    async function unwrapWithPrivateKey(wrappedBytes, privateKeyJWK) {
-        const privateKey = await crypto.subtle.importKey(
-            'jwk',
-            privateKeyJWK,
-            { name: 'RSA-OAEP', hash: 'SHA-256' },
-            false,
-            ['decrypt']
-        );
+    async function unwrapWithPrivateKey(wrappedBytes, privateKey) {
         const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedBytes);
         return new Uint8Array(raw);
     }
@@ -381,7 +368,7 @@
                     const data = await res.json();
                     if (data.ready && data.envelope) {
                         const wrappedBytes = SecureCrypto.fromBase64(data.envelope.wrapped_dek_b64);
-                        const rawBytes = await unwrapWithPrivateKey(wrappedBytes, ephemeralKeyPair.privateKeyJWK);
+                        const rawBytes = await unwrapWithPrivateKey(wrappedBytes, ephemeralKeyPair.privateKey);
                         const pw = new TextDecoder().decode(rawBytes);
 
                         sessionPassword = pw;
@@ -538,6 +525,7 @@
 
             const payload = await response.json();
             activeTunnel = payload.tunnel;
+            hostToken = payload.host_token || '';
             participants = payload.participants || [];
             sessionPassword = null;
             isHost = true;
@@ -645,6 +633,8 @@
     async function handleLeaveTunnel() {
         if (!activeTunnel?.id) return;
 
+        const leavingTunnelId = activeTunnel.id;
+
         try {
             const response = await fetch(`/api/me/tunnels/${activeTunnel.id}`, {
                 method: 'DELETE',
@@ -662,7 +652,7 @@
             console.error('Leave tunnel failed:', error);
         }
 
-        clearTunnelState();
+        clearTunnelState(leavingTunnelId);
         setView('initial');
     }
 
@@ -676,7 +666,7 @@
 
             if (!response.ok) {
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
-                    clearTunnelState();
+                    clearTunnelState(activeTunnel?.id);
                     showErrorBanner('Quick share has ended.');
                     setView('initial');
                     return;
@@ -731,9 +721,13 @@
         }
     }
 
-    function clearTunnelState() {
+    function clearTunnelState(tunnelId) {
+        if (tunnelId) {
+            localStorage.removeItem(SESSION_PASSWORD_PREFIX + tunnelId);
+        }
         stopTunnelPolling();
         activeTunnel = null;
+        hostToken = '';
         sessionPassword = null;
         participants = [];
         isHost = false;

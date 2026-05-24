@@ -87,7 +87,7 @@ func (h *PageHandler) ToS(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	c.HTML(http.StatusOK, "tos.html", gin.H{
-		"title":         "Terms of Service - ShareIt",
+		"title":         "Terms of Service ➤ ShareIt",
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -108,7 +108,7 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	c.HTML(http.StatusOK, "privacy.html", gin.H{
-		"title":         "Privacy Policy - ShareIt",
+		"title":         "Privacy Policy ➤ ShareIt",
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -129,7 +129,7 @@ func (h *PageHandler) LimitsPage(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	c.HTML(http.StatusOK, "limits.html", gin.H{
-		"title":         "Limits - ShareIt",
+		"title":         "Limits ➤ ShareIt",
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -150,7 +150,7 @@ func (h *PageHandler) DataEncryption(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	c.HTML(http.StatusOK, "data-encryption.html", gin.H{
-		"title":         "Data Encryption - ShareIt",
+		"title":         "Data Encryption ➤ ShareIt",
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -171,7 +171,7 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	c.HTML(http.StatusOK, "help.html", gin.H{
-		"title":         "Help - ShareIt",
+		"title":         "Help ➤ ShareIt",
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -182,7 +182,7 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 func (h *PageHandler) SharedLookup(c *gin.Context) {
 	setCSRFTokenCookie(c)
 	c.HTML(http.StatusOK, "shared_lookup.html", gin.H{
-		"title":   "Retrieve File - ShareIt",
+		"title":   "Sent File ➤ ShareIt",
 		"baseURL": h.cfg.BaseURL,
 	})
 }
@@ -215,7 +215,7 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 		configJSON = []byte("{}")
 	}
 	c.HTML(http.StatusOK, "quickshare.html", gin.H{
-		"title":            "ShareIt - Quick Share",
+		"title":            "ShareIt ➤ Quick Share",
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -256,7 +256,7 @@ func (h *PageHandler) Link(c *gin.Context) {
 		configJSON = []byte("{}")
 	}
 	c.HTML(http.StatusOK, "link.html", gin.H{
-		"title":            "ShareIt - Link Share",
+		"title":            "ShareIt ➤ Link Share",
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -293,7 +293,7 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 	}
 
 	c.HTML(http.StatusOK, "shared.html", gin.H{
-		"title":        "Download File - ShareIt",
+		"title":        "Download File ➤ ShareIt",
 		"baseURL":      h.cfg.BaseURL,
 		"fileID":       fileID,
 		"authenticated": authenticated,

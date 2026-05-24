@@ -1,0 +1,1 @@
+ALTER TABLE tunnels ADD COLUMN host_token TEXT NULL;

@@ -33,6 +33,8 @@
     let pendingAutoCopyBanner = false;
     let pendingAutoCopyBound = false;
     let notificationTimer = null;
+    let finalizeEnvelopePayload = null;
+    let ephemeralKeyPair = null;
 
     const stageEntry = document.getElementById('stage-entry');
     const stageProcessing = document.getElementById('stage-processing');
@@ -569,6 +571,8 @@
                 throw new Error(errorPayload.error || 'Failed to approve device');
             }
 
+            isDeviceUntrusted = false;
+            setRecoveryActionVisible(false);
             await loadPendingEnrollments();
             await loadRecentUploads();
         } catch (error) {
@@ -1361,14 +1365,23 @@
             dekBytes = wrappedDEK;
         } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
             if (!AUTHENTICATED) {
-                throw new Error('Unsupported key envelope for guest decryption.');
-            }
-            try {
-                dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
-            } catch (error) {
-                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                lockedError.code = 'FILE_LOCKED';
-                throw lockedError;
+                if (!ephemeralKeyPair) {
+                    throw new Error('Ephemeral key not available for guest decryption.');
+                }
+                try {
+                    const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
+                    dekBytes = new Uint8Array(raw);
+                } catch (error) {
+                    throw new Error('Failed to decrypt file key with ephemeral key.');
+                }
+            } else {
+                try {
+                    dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
+                } catch (error) {
+                    const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
+                    lockedError.code = 'FILE_LOCKED';
+                    throw lockedError;
+                }
             }
         } else {
             if (!AUTHENTICATED) {
@@ -1725,9 +1738,31 @@
 
             if (!AUTHENTICATED && activeTunnel?.id) {
                 
+                if (!ephemeralKeyPair) {
+                    const keyPair = await crypto.subtle.generateKey(
+                        {
+                            name: 'RSA-OAEP',
+                            modulusLength: 2048,
+                            publicExponent: new Uint8Array([1, 0, 1]),
+                            hash: 'SHA-256'
+                        },
+                        false,
+                        ['encrypt', 'decrypt']
+                    );
+                    const publicKeyJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+                    ephemeralKeyPair = { publicKeyJWK, privateKey: keyPair.privateKey };
+                }
+                const publicKey = await crypto.subtle.importKey(
+                    'jwk',
+                    ephemeralKeyPair.publicKeyJWK,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' },
+                    false,
+                    ['encrypt']
+                );
+                const wrapped = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, dekBytes);
                 finalizeEnvelopePayload = {
-                    wrapped_dek_b64: SecureCrypto.toBase64(dekBytes),
-                    dek_wrap_alg: 'RAW-DEK-v1',
+                    wrapped_dek_b64: SecureCrypto.toBase64(new Uint8Array(wrapped)),
+                    dek_wrap_alg: 'RSA-OAEP-2048-v1',
                     dek_wrap_version: 1
                 };
             }

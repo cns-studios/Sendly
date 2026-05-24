@@ -47,6 +47,15 @@ func (h *deviceEnrollmentHub) broadcast(userID int64, payload any) {
 	h.conns[userID] = alive
 }
 
+func (h *RecentUploadsHandler) wsUpgrader() *websocket.Upgrader {
+	return &websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			return origin == "" || origin == h.cfg.BaseURL
+		},
+	}
+}
+
 func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, userID int64, eventType, enrollmentID, approverDeviceID string) {
 	enrollment, err := h.db.GetEnrollmentByID(ctx, userID, enrollmentID)
 	if err != nil {
@@ -86,7 +95,7 @@ func (h *RecentUploadsHandler) DeviceEvents(c *gin.Context) {
 		return
 	}
 
-	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	conn, err := h.wsUpgrader().Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		return
 	}

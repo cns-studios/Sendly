@@ -24,6 +24,7 @@ type Tunnel struct {
 	EndedAt            sql.NullTime   `db:"ended_at"             json:"ended_at"`
 	EndedByCNSUserID   sql.NullInt64  `db:"ended_by_cns_user_id" json:"ended_by_cns_user_id"`
 	EndedByDeviceID    sql.NullString `db:"ended_by_device_id"   json:"ended_by_device_id"`
+	HostToken          string         `db:"host_token"           json:"-"`
 }
 
 type TunnelFileListItem struct {
@@ -67,6 +68,7 @@ type TunnelStartResponse struct {
 	Tunnel       Tunnel              `json:"tunnel"`
 	QRPayload    string              `json:"qr_payload"`
 	Participants []TunnelParticipant `json:"participants,omitempty"`
+	HostToken    string              `json:"host_token,omitempty"`
 }
 
 type TunnelJoinRequest struct {

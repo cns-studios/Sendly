@@ -2,8 +2,11 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -60,6 +63,16 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 		DurationMinutes:    int(dur.Minutes()),
 		ExpiresAt:          time.Now().Add(dur),
 	}
+
+	var hostToken string
+	if initiatorUserID == 0 {
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err == nil {
+			hostToken = hex.EncodeToString(tokenBytes)
+			tunnel.HostToken = hostToken
+		}
+	}
+
 	if err := h.db.CreateTunnel(c.Request.Context(), tunnel); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to create tunnel", Code: "TUNNEL_CREATE_FAILED"})
 		return
@@ -73,6 +86,7 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 		Tunnel:       *tunnel,
 		QRPayload:    h.buildQRPayload(tunnel),
 		Participants: participants,
+		HostToken:    hostToken,
 	})
 }
 
@@ -557,12 +571,28 @@ func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool
 	if user != nil && int64(user.ID) == tunnel.InitiatorCNSUserID {
 		return true
 	}
-	
+
 	hostDeviceID := c.GetHeader("X-Device-ID")
 	if hostDeviceID != "" && tunnel.InitiatorDeviceID.Valid &&
 		strings.EqualFold(tunnel.InitiatorDeviceID.String, hostDeviceID) {
-		return true
+		// For guest tunnels (no authenticated user), also verify the host token
+		if tunnel.InitiatorCNSUserID != 0 || tunnel.HostToken == "" {
+			return true
+		}
+		hostToken := c.GetHeader("X-Host-Token")
+		if hostToken != "" && subtle.ConstantTimeCompare([]byte(tunnel.HostToken), []byte(hostToken)) == 1 {
+			return true
+		}
+		return false
 	}
+
+	if tunnel.InitiatorCNSUserID == 0 && tunnel.HostToken != "" {
+		hostToken := c.GetHeader("X-Host-Token")
+		if hostToken != "" && subtle.ConstantTimeCompare([]byte(tunnel.HostToken), []byte(hostToken)) == 1 {
+			return true
+		}
+	}
+
 	return false
 }
 

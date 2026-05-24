@@ -640,7 +640,7 @@ func (p *Postgres) GetTunnelFileWithEnvelope(ctx context.Context, tunnelID, file
 	envQuery := `
 		SELECT file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version, created_at
 		FROM file_key_envelopes
-		WHERE file_id = $1 AND owner_encrypted = FALSE
+		WHERE file_id = $1
 		LIMIT 1
 	`
 	if err := p.db.GetContext(ctx, env, envQuery, fileID); err != nil {

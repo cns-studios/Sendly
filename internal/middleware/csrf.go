@@ -10,7 +10,8 @@ import (
 
 func CSRFMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if c.Request.Method == http.MethodPost && strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		mutating := map[string]bool{"POST": true, "PUT": true, "PATCH": true, "DELETE": true}
+		if mutating[c.Request.Method] && strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			cookieToken, err := c.Cookie("csrf_token")
 			headerToken := c.GetHeader("X-CSRF-Token")
 			if err != nil || cookieToken == "" || headerToken == "" || subtle.ConstantTimeCompare([]byte(cookieToken), []byte(headerToken)) != 1 {
