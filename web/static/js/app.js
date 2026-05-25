@@ -183,16 +183,9 @@
         }
 
         if (AUTHENTICATED) {
-            const deviceReady = await ensureDeviceReady();
-            if (deviceReady) {
-                await loadRecentUploads();
-                await loadPendingEnrollments();
-            } else {
-                setRecentState('empty');
-                if (recentEmpty) {
-                    recentEmpty.textContent = 'Approve this device to access your files.';
-                }
-            }
+            ensureDeviceReady().catch(() => {});
+            loadRecentUploads().catch(() => {});
+            loadPendingEnrollments().catch(() => {});
         }
     }
 
