@@ -46,6 +46,12 @@
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
 
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const finalizeBtn = document.getElementById('finalize-btn');
+    const fileDetails = document.getElementById('file-details');
+    const statusText = document.getElementById('status-text');
+
     const outUrl = document.getElementById('out-url');
     const outPin = document.getElementById('out-pin');
     const outKey = document.getElementById('out-key');
@@ -1549,19 +1555,21 @@
     }
 
     function setupEventListeners() {
-         
+        if (!dropZone || !fileInput || !finalizeBtn) return;
+
         dropZone.addEventListener('click', () => fileInput.click());
         dropZone.addEventListener('dragover', handleDragOver);
         dropZone.addEventListener('dragleave', handleDragLeave);
         dropZone.addEventListener('drop', handleDrop);
         fileInput.addEventListener('change', handleFileSelect);
 
-         
-        resetVault.addEventListener('click', (e) => {
+        const resetVaultEl = document.getElementById('reset-vault');
+        resetVaultEl?.addEventListener('click', (e) => {
             e.stopPropagation();
             resetUpload();
         });
-        startOverBtn.addEventListener('click', () => resetUpload());
+        const startOverBtn = document.getElementById('start-over-btn');
+        startOverBtn?.addEventListener('click', () => resetUpload());
         finalizeBtn.addEventListener('click', handleFinalize);
 
          
