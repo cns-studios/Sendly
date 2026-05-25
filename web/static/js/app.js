@@ -1353,7 +1353,10 @@
         }
 
         if (!authDeviceIdentity) {
-            await ensureDeviceReady();
+            const ready = await ensureDeviceReady();
+            if (!ready && isDeviceUntrusted) {
+                throw new Error('Approve this device from a trusted device to access your files.');
+            }
         }
 
         let accessUrl = '';
@@ -1568,13 +1571,11 @@
     }
 
     function setupEventListeners() {
-        if (!dropZone || !fileInput || !finalizeBtn) return;
-
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', handleDragOver);
-        dropZone.addEventListener('dragleave', handleDragLeave);
-        dropZone.addEventListener('drop', handleDrop);
-        fileInput.addEventListener('change', handleFileSelect);
+        dropZone?.addEventListener('click', () => fileInput?.click());
+        dropZone?.addEventListener('dragover', handleDragOver);
+        dropZone?.addEventListener('dragleave', handleDragLeave);
+        dropZone?.addEventListener('drop', handleDrop);
+        fileInput?.addEventListener('change', handleFileSelect);
 
         const resetVaultEl = document.getElementById('reset-vault');
         resetVaultEl?.addEventListener('click', (e) => {
@@ -1583,7 +1584,7 @@
         });
         const startOverBtn = document.getElementById('start-over-btn');
         startOverBtn?.addEventListener('click', () => resetUpload());
-        finalizeBtn.addEventListener('click', handleFinalize);
+        finalizeBtn?.addEventListener('click', handleFinalize);
 
          
         document.querySelectorAll('.copy-trigger').forEach(btn => {
