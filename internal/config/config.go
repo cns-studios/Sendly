@@ -76,11 +76,11 @@ func Load() (*Config, error) {
 		CNSAuthServiceKey:              getEnv("CNS_AUTH_SERVICE_KEY", ""),
 		AuthMaxFileSize:                getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
 		MigrationsDir:                  getEnv("MIGRATIONS_DIR", "db/migrations"),
-		RateLimitMaxPerMinute:          getEnvInt64("RATE_LIMIT_MAX_PER_MINUTE", 2),
+		RateLimitMaxPerMinute:          getEnvInt64("RATE_LIMIT_MAX_PER_MINUTE", 30),
 		RateLimitWindowSeconds:         getEnvInt64("RATE_LIMIT_WINDOW_SECONDS", 60),
-		StrictRateLimitMaxPerMinute:    getEnvInt64("RATE_LIMIT_STRICT_MAX_PER_MINUTE", 1),
+		StrictRateLimitMaxPerMinute:    getEnvInt64("RATE_LIMIT_STRICT_MAX_PER_MINUTE", 15),
 		StrictRateLimitWindowSeconds:   getEnvInt64("RATE_LIMIT_STRICT_WINDOW_SECONDS", 60),
-		DownloadRateLimitMaxPerMinute:  getEnvInt64("RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE", 10),
+		DownloadRateLimitMaxPerMinute:  getEnvInt64("RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE", 60),
 		DownloadRateLimitWindowSeconds: getEnvInt64("RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", 60),
 	}
 
