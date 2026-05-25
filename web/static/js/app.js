@@ -36,6 +36,19 @@
     let finalizeEnvelopePayload = null;
     let ephemeralKeyPair = null;
 
+    let authDeviceIdentity = null;
+    let authUserKeyRaw = null;
+    let recentSearchQuery = '';
+    let recentCurrentPage = 1;
+    let recentTotalPages = 0;
+    let recentSearchOpen = false;
+    let recentSearchDebounceTimer = null;
+    let activeTunnel = null;
+    let tunnelPollTimer = null;
+    let lastShareUrl = '';
+    let idleCopyDone = false;
+    let idleCopyBannerShown = false;
+
     const stageEntry = document.getElementById('stage-entry');
     const stageProcessing = document.getElementById('stage-processing');
     const stagePending = document.getElementById('stage-pending');
