@@ -177,7 +177,7 @@ func main() {
 			{
 				devices.POST("/register", recentUploadsHandler.RegisterDevice)
 				devices.POST("/recover", recentUploadsHandler.RecoverDevice)
-				devices.GET("/ws", standardRateLimiter.Handler(), recentUploadsHandler.DeviceEvents)
+				devices.GET("/ws", recentUploadsHandler.DeviceEvents)
 				devices.POST("/enrollments", strictRateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
@@ -329,7 +329,7 @@ func main() {
 				{
 					devices.POST("/register", recentUploadsHandler.RegisterDevice)
 					devices.POST("/recover", recentUploadsHandler.RecoverDevice)
-					devices.GET("/ws", standardRateLimiter.Handler(), recentUploadsHandler.DeviceEvents)
+					devices.GET("/ws", recentUploadsHandler.DeviceEvents)
 					devices.POST("/enrollments", strictRateLimiter.Handler(), recentUploadsHandler.CreateEnrollment)
 					devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 					devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
