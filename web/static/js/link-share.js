@@ -411,6 +411,12 @@
         idleCopyDone = false;
         idleCopyBannerShown = false;
 
+        const scheduleListeners = () => {
+            document.addEventListener('mousemove', onMove, { once: true });
+            document.addEventListener('touchstart', onMove, { once: true });
+            document.addEventListener('keydown', onMove, { once: true });
+        };
+
         const onMove = () => {
             if (idleCopyDone) return;
             copyToClipboard(text, true).then(ok => {
@@ -422,17 +428,15 @@
                     setTimeout(() => {
                         idleCopyDone = false;
                         if (zoneSubtext) zoneSubtext.textContent = 'Link copied to clipboard';
-                        document.addEventListener('mousemove', onMove, { once: true });
-                        document.addEventListener('touchstart', onMove, { once: true });
-                        document.addEventListener('keydown', onMove, { once: true });
+                        scheduleListeners();
                     }, 4000);
+                } else {
+                    scheduleListeners();
                 }
             });
         };
 
-        document.addEventListener('mousemove', onMove, { once: true });
-        document.addEventListener('touchstart', onMove, { once: true });
-        document.addEventListener('keydown', onMove, { once: true });
+        scheduleListeners();
     }
 
     async function copyToClipboard(text, silent = false) {

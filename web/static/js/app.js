@@ -368,8 +368,8 @@
                 throw new Error('Failed to load recent uploads');
             }
             const payload = await response.json();
-            await prefetchRecentLockStates(payload?.items || []);
             renderRecentUploads(payload);
+            prefetchRecentLockStates(payload?.items || []).catch(() => {});
         } catch (error) {
             console.error(error);
             setRecentState('error');
