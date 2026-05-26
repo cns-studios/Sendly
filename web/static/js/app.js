@@ -1012,7 +1012,7 @@
 
         try {
             button.disabled = true;
-            await downloadOwnedFile(fileId, fileName, tunnelId);
+            await downloadOwnedFile(fileId, fileName, tunnelId, item);
         } catch (error) {
             console.error('Tunnel download failed:', error);
             showErrorBanner(error.message || 'Tunnel file download failed.');
@@ -1289,7 +1289,7 @@
         try {
             if (action === 'download') {
                 button.disabled = true;
-                await downloadOwnedFile(fileId, fileName);
+                await downloadOwnedFile(fileId, fileName, '', item);
             } else if (action === 'copy') {
                 const passphrase = await getOwnedFilePassphrase(fileId);
                 const copied = await copyToClipboard(`${shareUrl}#${passphrase}`, false, true);
@@ -1313,23 +1313,61 @@
         }
     }
 
-    async function downloadOwnedFile(fileId, fileName, tunnelId = '') {
+    async function downloadOwnedFile(fileId, fileName, tunnelId = '', cardEl = null) {
         const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
-        showDownloadActivityOverlay('loading');
+
+        let progressFill = null;
+        if (cardEl) {
+            const progressBar = document.createElement('div');
+            progressBar.className = 'file-download-progress';
+            progressFill = document.createElement('div');
+            progressFill.className = 'file-download-progress-bar';
+            progressBar.appendChild(progressFill);
+            cardEl.insertBefore(progressBar, cardEl.firstChild);
+        }
+
+        const updateProgress = (pct) => {
+            if (progressFill) {
+                progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+            }
+        };
+
         try {
             const response = await fetch(`/api/file/${fileId}/download`);
             if (!response.ok) {
                 throw new Error('Failed to download encrypted file');
             }
-            const encryptedBlob = await response.blob();
+
+            const contentLength = response.headers.get('Content-Length');
+            const total = parseInt(contentLength, 10);
+            const reader = response.body.getReader();
+            const chunks = [];
+            let received = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                if (total) {
+                    updateProgress((received / total) * 50);
+                }
+            }
+
+            const encryptedBlob = new Blob(chunks);
             let decrypted;
             try {
-                decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase);
+                decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase, (progress) => {
+                    updateProgress(50 + progress * 40);
+                });
             } catch (error) {
                 const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
                 lockedError.code = 'FILE_LOCKED';
                 throw lockedError;
             }
+
+            updateProgress(95);
+
             const blob = new Blob([decrypted], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1339,10 +1377,14 @@
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-            showDownloadActivityOverlay('complete');
-            await new Promise((resolve) => setTimeout(resolve, 1100));
+
+            updateProgress(100);
+            await new Promise((resolve) => setTimeout(resolve, 600));
         } finally {
-            showDownloadActivityOverlay(false);
+            if (progressFill && progressFill.parentNode) {
+                const bar = progressFill.parentNode;
+                if (bar.parentNode) bar.parentNode.removeChild(bar);
+            }
         }
     }
 

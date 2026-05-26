@@ -193,12 +193,33 @@ body {
 }
 
 .file-entry {
+    position: relative;
     background-color: #FFFFFF;
     border-radius: 8px;
     padding: 14px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+}
+
+.file-download-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: #E4E3E3;
+    border-radius: 8px 8px 0 0;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.file-download-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: #007AFF;
+    border-radius: 0;
+    transition: width 0.2s ease;
 }
 
 .file-entry-left {
@@ -1027,7 +1048,7 @@ body.page-shared .downloading-title {
     font-weight: 510;
 }
 
-body.page-shared .downloading-spinner {
+.downloading-spinner {
     width: 36px;
     height: 36px;
     border-radius: 50%;
@@ -1806,6 +1827,7 @@ body.page-quickshare #fileListEmpty {
 }
 
 .recent-item {
+    position: relative;
     border: 1px solid #ddd;
     background: #fff;
     padding: 0.75rem;

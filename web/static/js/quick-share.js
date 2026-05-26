@@ -326,7 +326,7 @@
                 </div>
             `;
             el.querySelector('.file-download-btn').addEventListener('click', () => {
-                downloadTunnelFile(item.file_id, item.filename);
+                downloadTunnelFile(item.file_id, item.filename, el);
             });
             fileList.appendChild(el);
         });
@@ -432,7 +432,23 @@
         return null;
     }
 
-    async function downloadTunnelFile(fileId, fileName) {
+    async function downloadTunnelFile(fileId, fileName, cardEl = null) {
+        let progressFill = null;
+        if (cardEl) {
+            const progressBar = document.createElement('div');
+            progressBar.className = 'file-download-progress';
+            progressFill = document.createElement('div');
+            progressFill.className = 'file-download-progress-bar';
+            progressBar.appendChild(progressFill);
+            cardEl.insertBefore(progressBar, cardEl.firstChild);
+        }
+
+        const updateProgress = (pct) => {
+            if (progressFill) {
+                progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+            }
+        };
+
         try {
             const password = await resolveSessionPassword(fileId);
             if (!password) {
@@ -453,8 +469,28 @@
                 throw new Error(`Download failed (${response.status})`);
             }
 
-            const encryptedBlob = await response.blob();
-            const decrypted = await SecureCrypto.decryptBlob(encryptedBlob, password);
+            const contentLength = response.headers.get('Content-Length');
+            const total = parseInt(contentLength, 10);
+            const reader = response.body.getReader();
+            const chunks = [];
+            let received = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+                if (total) {
+                    updateProgress((received / total) * 50);
+                }
+            }
+
+            const encryptedBlob = new Blob(chunks);
+            const decrypted = await SecureCrypto.decryptBlob(encryptedBlob, password, (progress) => {
+                updateProgress(50 + progress * 40);
+            });
+
+            updateProgress(95);
 
             const url = URL.createObjectURL(new Blob([decrypted]));
             const a = document.createElement('a');
@@ -464,9 +500,17 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+
+            updateProgress(100);
+            await new Promise((resolve) => setTimeout(resolve, 600));
         } catch (error) {
             console.error('Tunnel file download failed:', error);
             showErrorBanner('Download failed: ' + error.message);
+        } finally {
+            if (progressFill && progressFill.parentNode) {
+                const bar = progressFill.parentNode;
+                if (bar.parentNode) bar.parentNode.removeChild(bar);
+            }
         }
     }
 
@@ -838,6 +882,7 @@
 
             const concurrency = Math.max(1, Math.min(PARALLEL_CHUNK_UPLOADS, totalChunks));
             let nextChunkIndex = 0;
+            let uploadedChunks = 0;
 
             const worker = async () => {
                 while (true) {
@@ -873,6 +918,8 @@
                             }
 
                             lastError = null;
+                            uploadedChunks++;
+                            dropSubText.textContent = `Uploading... ${Math.floor((uploadedChunks / totalChunks) * 100)}%`;
                             break;
                         } catch (error) {
                             lastError = error;
