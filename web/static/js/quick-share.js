@@ -13,6 +13,37 @@
     const TUNNEL_POLL_INTERVAL = 2000;
     const SESSION_PASSWORD_PREFIX = 'shareit_tunnel_pw_';
 
+    function createProgressCircle(size) {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('viewBox', '0 0 36 36');
+        svg.setAttribute('width', size);
+        svg.setAttribute('height', size);
+        svg.classList.add('progress-circle');
+        const bg = document.createElementNS(svgNS, 'circle');
+        bg.setAttribute('cx', '18');
+        bg.setAttribute('cy', '18');
+        bg.setAttribute('r', '15');
+        bg.setAttribute('fill', 'none');
+        bg.setAttribute('stroke', '#E4E3E3');
+        bg.setAttribute('stroke-width', '3');
+        const fill = document.createElementNS(svgNS, 'circle');
+        fill.setAttribute('cx', '18');
+        fill.setAttribute('cy', '18');
+        fill.setAttribute('r', '15');
+        fill.setAttribute('fill', 'none');
+        fill.setAttribute('stroke', '#007AFF');
+        fill.setAttribute('stroke-width', '3');
+        fill.setAttribute('stroke-linecap', 'round');
+        fill.setAttribute('stroke-dasharray', '94.25');
+        fill.setAttribute('stroke-dashoffset', '94.25');
+        fill.setAttribute('transform', 'rotate(-90 18 18)');
+        fill.classList.add('progress-circle-fill');
+        svg.appendChild(bg);
+        svg.appendChild(fill);
+        return svg;
+    }
+
     let activeTunnel = null;
     let tunnelPollTimer = null;
     let authDeviceIdentity = null;
@@ -922,7 +953,20 @@
 
                             lastError = null;
                             uploadedChunks++;
-                            dropSubText.textContent = `Uploading... ${Math.floor((uploadedChunks / totalChunks) * 100)}%`;
+                            const pct = Math.floor((uploadedChunks / totalChunks) * 100);
+                            let svg = dropSubText.querySelector('.progress-circle');
+                            if (!svg) {
+                                dropSubText.innerHTML = '';
+                                svg = createProgressCircle(28);
+                                dropSubText.appendChild(svg);
+                                dropSubText.style.display = 'flex';
+                                dropSubText.style.justifyContent = 'center';
+                            }
+                            const fill = svg.querySelector('.progress-circle-fill');
+                            if (fill) {
+                                const circumference = 94.25;
+                                fill.setAttribute('stroke-dashoffset', circumference * (1 - (pct / 100)));
+                            }
                             break;
                         } catch (error) {
                             lastError = error;

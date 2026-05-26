@@ -119,19 +119,24 @@
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
         try {
-            updateProgress(0, 'Downloading file...');
+            const iconEl = document.getElementById('progress-icon');
+            if (iconEl) {
+                iconEl.innerHTML = '';
+                iconEl.appendChild(createProgressCircle(36));
+            }
+
+            updateProgress(0, 'Downloading...');
             encryptedBlob = await downloadEncryptedFile();
 
-            updateProgress(50, 'Decrypting file...');
+            updateProgress(80, 'Decrypting...');
             const decryptedData = await SecureCrypto.decryptBlob(
                 encryptedBlob,
                 password,
                 (progress, status) => {
-                    updateProgress(50 + (progress * 0.4), status);
+                    updateProgress(80 + (progress * 20), status);
                 }
             );
 
-            updateProgress(95, 'Preparing download...');
             triggerDownload(decryptedData, fileMetadata.original_name);
 
             showDownloadedState();
@@ -177,8 +182,8 @@
             received += value.length;
 
             if (total) {
-                const progress = (received / total) * 50;
-                updateProgress(progress, `Downloading... ${SecureCrypto.formatFileSize(received)} / ${SecureCrypto.formatFileSize(total)}`);
+                const progress = (received / total) * 80;
+                updateProgress(progress, 'Downloading...');
             }
         }
 
@@ -230,9 +235,46 @@
         }
     }
 
+    function createProgressCircle(size) {
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('viewBox', '0 0 36 36');
+        svg.setAttribute('width', size);
+        svg.setAttribute('height', size);
+        svg.classList.add('progress-circle');
+        const bg = document.createElementNS(svgNS, 'circle');
+        bg.setAttribute('cx', '18');
+        bg.setAttribute('cy', '18');
+        bg.setAttribute('r', '15');
+        bg.setAttribute('fill', 'none');
+        bg.setAttribute('stroke', '#E4E3E3');
+        bg.setAttribute('stroke-width', '3');
+        const fill = document.createElementNS(svgNS, 'circle');
+        fill.setAttribute('cx', '18');
+        fill.setAttribute('cy', '18');
+        fill.setAttribute('r', '15');
+        fill.setAttribute('fill', 'none');
+        fill.setAttribute('stroke', '#007AFF');
+        fill.setAttribute('stroke-width', '3');
+        fill.setAttribute('stroke-linecap', 'round');
+        fill.setAttribute('stroke-dasharray', '94.25');
+        fill.setAttribute('stroke-dashoffset', '94.25');
+        fill.setAttribute('transform', 'rotate(-90 18 18)');
+        fill.classList.add('progress-circle-fill');
+        svg.appendChild(bg);
+        svg.appendChild(fill);
+        return svg;
+    }
+
     function updateProgress(percent, text) {
         if (progressText) progressText.textContent = `${Math.round(percent)}%`;
         if (text && progressTitle) progressTitle.textContent = text;
+        const iconEl = document.getElementById('progress-icon');
+        const fill = iconEl?.querySelector('.progress-circle-fill');
+        if (fill) {
+            const circumference = 94.25;
+            fill.setAttribute('stroke-dashoffset', circumference * (1 - Math.min(1, Math.max(0, percent / 100))));
+        }
     }
 
     function showDownloadedState() {
@@ -260,7 +302,7 @@
         const iconEl = document.getElementById('progress-icon');
         if (iconEl) {
             iconEl.innerHTML = '';
-            iconEl.className = 'downloading-spinner';
+            iconEl.appendChild(createProgressCircle(36));
         }
     }
 

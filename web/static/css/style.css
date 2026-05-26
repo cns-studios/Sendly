@@ -223,6 +223,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
+}
+
+.progress-circle {
+    display: inline-block;
+    vertical-align: middle;
 }
 
 .file-download-progress {
@@ -518,7 +524,7 @@ body.page-index .file-section h2 {
 }
 
 body.page-index .file-entry {
-    background-color: #FFFFFF;
+    background-color: #f2f2f2;
 }
 
 body.page-index .file-entry:hover {
