@@ -853,7 +853,7 @@
                 <div class="file-entry${locked ? ' is-locked' : ''}" style="opacity: ${opacity};" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}">
                     <div class="file-entry-left">
                         <span class="file-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
-                        <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)} · Uploaded ${formatUploadDate(item.created_at)} · Expires ${formatExpiryDate(item.expires_at)}</span>
+                        <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)} · Expires ${formatExpiryDate(item.expires_at)}</span>
                     </div>
                     <div class="file-entry-right">
                         <button class="recent-action" data-action="copy" aria-label="Copy share link" title="Copy share link" ${locked ? 'disabled' : ''}>
@@ -1350,7 +1350,7 @@
                 chunks.push(value);
                 received += value.length;
                 if (total) {
-                    updateProgress((received / total) * 50);
+                    updateProgress((received / total) * 80);
                 }
             }
 
@@ -1358,15 +1358,13 @@
             let decrypted;
             try {
                 decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase, (progress) => {
-                    updateProgress(50 + progress * 40);
+                    updateProgress(80 + progress * 20);
                 });
             } catch (error) {
                 const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
                 lockedError.code = 'FILE_LOCKED';
                 throw lockedError;
             }
-
-            updateProgress(95);
 
             const blob = new Blob([decrypted], { type: 'application/octet-stream' });
             const url = URL.createObjectURL(blob);

@@ -102,9 +102,32 @@ body {
 
 .login-btn .user-dropdown {
     display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 6px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 8px;
+    overflow: hidden;
+    min-width: 120px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 .login-btn.active .user-dropdown {
     display: block;
+}
+.user-dropdown a {
+    display: block;
+    padding: 10px 20px;
+    color: #e0e0e0;
+    text-decoration: none;
+    font-size: 14px;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+.user-dropdown a:hover {
+    background: #3a3a3a;
+    color: #fff;
 }
 
 /* ── Footer ── */
@@ -496,6 +519,10 @@ body.page-index .file-section h2 {
 
 body.page-index .file-entry {
     background-color: #FFFFFF;
+}
+
+body.page-index .file-entry:hover {
+    opacity: 1 !important;
 }
 
 body.page-index .file-entry.is-locked {

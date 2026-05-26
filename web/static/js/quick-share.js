@@ -18,6 +18,7 @@
     let authDeviceIdentity = null;
     let authUserKeyRaw = null;
     let isUploading = false;
+    let isDownloadingFile = false;
     let sessionPassword = null;
     let participants = [];
     let isHost = false;
@@ -433,6 +434,7 @@
     }
 
     async function downloadTunnelFile(fileId, fileName, cardEl = null) {
+        isDownloadingFile = true;
         let progressFill = null;
         if (cardEl) {
             const progressBar = document.createElement('div');
@@ -481,16 +483,14 @@
                 chunks.push(value);
                 received += value.length;
                 if (total) {
-                    updateProgress((received / total) * 50);
+                    updateProgress((received / total) * 80);
                 }
             }
 
             const encryptedBlob = new Blob(chunks);
             const decrypted = await SecureCrypto.decryptBlob(encryptedBlob, password, (progress) => {
-                updateProgress(50 + progress * 40);
+                updateProgress(80 + progress * 20);
             });
-
-            updateProgress(95);
 
             const url = URL.createObjectURL(new Blob([decrypted]));
             const a = document.createElement('a');
@@ -507,6 +507,7 @@
             console.error('Tunnel file download failed:', error);
             showErrorBanner('Download failed: ' + error.message);
         } finally {
+            isDownloadingFile = false;
             if (progressFill && progressFill.parentNode) {
                 const bar = progressFill.parentNode;
                 if (bar.parentNode) bar.parentNode.removeChild(bar);
@@ -753,7 +754,9 @@
                 updateTunnelUI();
             }
 
-            renderTunnelFiles(payload?.files || []);
+            if (!isDownloadingFile) {
+                renderTunnelFiles(payload?.files || []);
+            }
         } catch (error) {
             console.error('Tunnel refresh failed:', error);
         }
