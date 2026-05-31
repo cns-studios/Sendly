@@ -97,6 +97,8 @@ func main() {
 	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService)
 	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, uploadService)
 	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db)
+	recentUploadsHandler.SetAndroidHub(androidHandler.Hub())
+	androidHandler.SetDeviceHub(recentUploadsHandler.Hub())
 	tunnelHandler := handlers.NewTunnelHandler(cfg, db, fs)
 
 	staticFS := http.StripPrefix("/static", http.FileServer(http.Dir("./web/static")))

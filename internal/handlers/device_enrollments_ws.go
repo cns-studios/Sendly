@@ -7,6 +7,7 @@ import (
 
 	"shareit/internal/middleware"
 	"shareit/internal/models"
+	"shareit/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -47,6 +48,35 @@ func (h *deviceEnrollmentHub) broadcast(userID int64, payload any) {
 	h.conns[userID] = alive
 }
 
+func gatherEnrollmentEventData(ctx context.Context, db *storage.Postgres, userID int64, enrollmentID string) (enrollment *models.DeviceEnrollment, requestDevice models.UserDevice, pendingCount int, ok bool) {
+	enrollment, err := db.GetEnrollmentByID(ctx, userID, enrollmentID)
+	if err != nil {
+		return nil, models.UserDevice{}, 0, false
+	}
+
+	devices, err := db.GetActiveDevicesByUser(ctx, userID)
+	requestDevice = models.UserDevice{ID: enrollment.RequestDeviceID}
+	if err == nil {
+		for _, device := range devices {
+			if device.ID == enrollment.RequestDeviceID {
+				requestDevice = normalizeDevicePublicKeyForResponse(device)
+				break
+			}
+		}
+	}
+
+	pendingItems, err := db.ListPendingEnrollments(ctx, userID)
+	if err == nil {
+		pendingCount = len(pendingItems)
+	}
+
+	return enrollment, requestDevice, pendingCount, true
+}
+
+func (h *RecentUploadsHandler) Hub() *deviceEnrollmentHub {
+	return h.hub
+}
+
 func (h *RecentUploadsHandler) wsUpgrader() *websocket.Upgrader {
 	return &websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -57,26 +87,9 @@ func (h *RecentUploadsHandler) wsUpgrader() *websocket.Upgrader {
 }
 
 func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, userID int64, eventType, enrollmentID, approverDeviceID string) {
-	enrollment, err := h.db.GetEnrollmentByID(ctx, userID, enrollmentID)
-	if err != nil {
+	enrollment, requestDevice, pendingCount, ok := gatherEnrollmentEventData(ctx, h.db, userID, enrollmentID)
+	if !ok {
 		return
-	}
-
-	devices, err := h.db.GetActiveDevicesByUser(ctx, userID)
-	requestDevice := models.UserDevice{ID: enrollment.RequestDeviceID}
-	if err == nil {
-		for _, device := range devices {
-			if device.ID == enrollment.RequestDeviceID {
-				requestDevice = normalizeDevicePublicKeyForResponse(device)
-				break
-			}
-		}
-	}
-
-	pendingItems, err := h.db.ListPendingEnrollments(ctx, userID)
-	pendingCount := 0
-	if err == nil {
-		pendingCount = len(pendingItems)
 	}
 
 	h.hub.broadcast(userID, gin.H{
@@ -86,6 +99,27 @@ func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, user
 		"approver_device_id": approverDeviceID,
 		"pending_count":      pendingCount,
 	})
+
+	if h.androidHub != nil {
+		h.androidHub.broadcastUser(userID, gin.H{
+			"type":               eventType,
+			"enrollment":         enrollment,
+			"request_device":     requestDevice,
+			"approver_device_id": approverDeviceID,
+			"pending_count":      pendingCount,
+		})
+		h.androidHub.broadcastPending(userID, gin.H{
+			"type":           "pending_approvals_updated",
+			"pending_count":  pendingCount,
+			"enrollment":     enrollment,
+			"request_device": requestDevice,
+		})
+		h.androidHub.broadcastEnrollment(enrollmentID, gin.H{
+			"type":               "enrollment_status",
+			"enrollment":         enrollment,
+			"approver_device_id": approverDeviceID,
+		})
+	}
 }
 
 func (h *RecentUploadsHandler) DeviceEvents(c *gin.Context) {

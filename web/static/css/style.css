@@ -1376,7 +1376,7 @@ body.page-link .drop-zone.active .drop-zone-icon {
     color: #000;
 }
 
-body.page-link .drop-zone h3 {
+body.page-link .drop-zone h3 { 
     font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 0.5rem;

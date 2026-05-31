@@ -19,13 +19,18 @@ import (
 )
 
 type RecentUploadsHandler struct {
-	cfg *config.Config
-	db  *storage.Postgres
-	hub *deviceEnrollmentHub
+	cfg        *config.Config
+	db         *storage.Postgres
+	hub        *deviceEnrollmentHub
+	androidHub *androidHub
 }
 
 func NewRecentUploadsHandler(cfg *config.Config, db *storage.Postgres) *RecentUploadsHandler {
 	return &RecentUploadsHandler{cfg: cfg, db: db, hub: newDeviceEnrollmentHub()}
+}
+
+func (h *RecentUploadsHandler) SetAndroidHub(ah *androidHub) {
+	h.androidHub = ah
 }
 
 func (h *RecentUploadsHandler) RecentUploads(c *gin.Context) {

@@ -112,6 +112,15 @@ type AndroidHandler struct {
 	fs            *storage.Filesystem
 	uploadService *services.Upload
 	hub           *androidHub
+	deviceHub     *deviceEnrollmentHub
+}
+
+func (h *AndroidHandler) Hub() *androidHub {
+	return h.hub
+}
+
+func (h *AndroidHandler) SetDeviceHub(dh *deviceEnrollmentHub) {
+	h.deviceHub = dh
 }
 
 func (h *AndroidHandler) wsUpgrader() *websocket.Upgrader {
@@ -902,26 +911,9 @@ func (h *AndroidHandler) WaitingForApprovalWS(c *gin.Context) {
 }
 
 func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int64, eventType, enrollmentID, approverDeviceID string) {
-	enrollment, err := h.db.GetEnrollmentByID(ctx, userID, enrollmentID)
-	if err != nil {
+	enrollment, requestDevice, pendingCount, ok := gatherEnrollmentEventData(ctx, h.db, userID, enrollmentID)
+	if !ok {
 		return
-	}
-
-	devices, err := h.db.GetActiveDevicesByUser(ctx, userID)
-	requestDevice := models.UserDevice{ID: enrollment.RequestDeviceID}
-	if err == nil {
-		for _, device := range devices {
-			if device.ID == enrollment.RequestDeviceID {
-				requestDevice = normalizeDevicePublicKeyForResponse(device)
-				break
-			}
-		}
-	}
-
-	pendingItems, err := h.db.ListPendingEnrollments(ctx, userID)
-	pendingCount := 0
-	if err == nil {
-		pendingCount = len(pendingItems)
 	}
 
 	payload := gin.H{
@@ -934,6 +926,10 @@ func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int
 	h.hub.broadcastUser(userID, payload)
 	h.hub.broadcastPending(userID, gin.H{"type": "pending_approvals_updated", "pending_count": pendingCount, "enrollment": enrollment, "request_device": requestDevice})
 	h.hub.broadcastEnrollment(enrollmentID, gin.H{"type": "enrollment_status", "enrollment": enrollment, "approver_device_id": approverDeviceID})
+
+	if h.deviceHub != nil {
+		h.deviceHub.broadcast(userID, payload)
+	}
 }
 
 func (h *AndroidHandler) userOwnsDevice(ctx context.Context, userID int64, deviceID string) (bool, error) {
