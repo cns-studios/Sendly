@@ -534,6 +534,27 @@ body.page-index .login-btn {
     margin-left: auto;
 }
 
+/* ── Star background decoration ── */
+body.page-index .star-bg {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60vh;
+    z-index: -1;
+    pointer-events: none;
+    overflow: hidden;
+    background: linear-gradient(to bottom, #00AE71 0%, #00827B 44%);
+}
+
+body.page-index .star-reveal {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
 /* ── Header: Recent files link ── */
 .recent-files-link {
     display: inline-flex;
