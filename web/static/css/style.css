@@ -9,6 +9,29 @@
     box-sizing: border-box;
 }
 
+::selection {
+    background: #79FFA1;
+    color: #009249;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #00827B #E0E0E0;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: #E0E0E0;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #00827B;
+    border-radius: 4px;
+}
+
 body {
     background-color: #F5F5F7;
     font-family: 'Arimo', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -682,7 +705,7 @@ body.page-index .card-btn {
 }
 
 body.page-index .card-btn-primary {
-    background: #007AFF;
+    background: #00827B;
     color: #FFFFFF;
     border: none;
 }
@@ -694,11 +717,11 @@ body.page-index .card-btn-primary:hover {
 body.page-index .card-btn-outline {
     background: transparent;
     color: #000000;
-    border: 3px solid #007AFF;
+    border: 3px solid #00827B;
 }
 
 body.page-index .card-btn-outline:hover {
-    background: rgba(0, 122, 255, 0.05);
+    background: rgba(0, 130, 123, 0.05);
 }
 
 body.page-index .file-section {
