@@ -205,6 +205,10 @@
             ensureDeviceReady().catch(() => {});
             loadRecentUploads().catch(() => {});
             loadPendingEnrollments().catch(() => {});
+
+            refreshRecentFilesCache();
+            if (recentFilesCacheTimer) clearInterval(recentFilesCacheTimer);
+            recentFilesCacheTimer = setInterval(refreshRecentFilesCache, 60000);
         }
     }
 
@@ -1617,18 +1621,11 @@
     const popupRecentList = document.getElementById('popup-recent-list');
     const popupClose = recentFilesOverlay?.querySelector('.popup-close');
 
-    async function openRecentFilesPopup() {
-        if (!AUTHENTICATED || !recentFilesOverlay || !recentFilesPopup) return;
+    let recentFilesCache = null;
+    let recentFilesCacheTimer = null;
 
-        recentFilesOverlay.classList.remove('hidden');
-        recentFilesPopup.classList.remove('closing');
-
-        if (window.lucide && lucide.createIcons) {
-            lucide.createIcons();
-        }
-
-        popupRecentList.innerHTML = '<p class="popup-empty">Loading...</p>';
-
+    async function refreshRecentFilesCache() {
+        if (!AUTHENTICATED) return;
         try {
             const params = new URLSearchParams({ page: '1', per_page: '10' });
             const response = await fetch(`/api/me/recent-uploads?${params.toString()}`, {
@@ -1636,20 +1633,45 @@
             });
             if (!response.ok) throw new Error('Failed to load uploads');
             const payload = await response.json();
-            renderPopupRecentFiles(payload.items || []);
+            recentFilesCache = payload.items || [];
         } catch (error) {
-            console.error(error);
-            popupRecentList.innerHTML = '<p class="popup-empty">Failed to load files.</p>';
+            console.error('Failed to refresh recent files cache:', error);
+        }
+    }
+
+    async function openRecentFilesPopup() {
+        if (!AUTHENTICATED || !recentFilesOverlay || !recentFilesPopup) return;
+
+        recentFilesOverlay.classList.remove('hidden');
+        recentFilesPopup.classList.remove('closing');
+        document.addEventListener('keydown', onEscKey);
+
+        if (window.lucide && lucide.createIcons) {
+            lucide.createIcons();
+        }
+
+        if (recentFilesCache) {
+            renderPopupRecentFiles(recentFilesCache);
+        } else {
+            popupRecentList.innerHTML = '<p class="popup-empty">Loading...</p>';
+            await refreshRecentFilesCache();
+            if (recentFilesCache) {
+                renderPopupRecentFiles(recentFilesCache);
+            } else {
+                popupRecentList.innerHTML = '<p class="popup-empty">Failed to load files.</p>';
+            }
         }
     }
 
     function closeRecentFilesPopup() {
         if (!recentFilesOverlay || !recentFilesPopup) return;
-        recentFilesPopup.classList.add('closing');
-        setTimeout(() => {
-            recentFilesOverlay.classList.add('hidden');
-            recentFilesPopup.classList.remove('closing');
-        }, 600);
+        recentFilesOverlay.classList.add('hidden');
+        recentFilesPopup.classList.remove('closing');
+        document.removeEventListener('keydown', onEscKey);
+    }
+
+    function onEscKey(e) {
+        if (e.key === 'Escape') closeRecentFilesPopup();
     }
 
     function renderPopupRecentFiles(items) {
