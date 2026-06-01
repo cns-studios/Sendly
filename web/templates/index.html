@@ -68,7 +68,7 @@
                 </nav>
             </div>
             {{if .authenticated}}
-            <a href="#recent-files" class="recent-files-link">Recent files</a>
+            <button class="recent-files-link">Recent files</button>
             {{end}}
             {{if .authenticated}}
             <div class="login-btn" style="background:#333;position:relative;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="event.stopPropagation();this.classList.toggle('active')">
@@ -119,6 +119,18 @@
         <a href="/data-encryption">Data Encryption</a>
         <a href="/help">Help</a>
     </footer>
+
+    <div id="recent-files-overlay" class="recent-files-overlay hidden">
+        <div class="recent-files-popup">
+            <div class="popup-header">
+                <h2>Uploaded files</h2>
+                <button class="popup-close" aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="popup-list" id="popup-recent-list"></div>
+        </div>
+    </div>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">

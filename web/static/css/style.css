@@ -54,6 +54,11 @@ body {
     to { opacity: 0; visibility: hidden; }
 }
 
+@keyframes blurHide {
+    from { opacity: 1; filter: blur(0); }
+    to { opacity: 0; filter: blur(6px); }
+}
+
 /* ── Header ── */
 .header-wrapper {
     position: sticky;
@@ -609,6 +614,8 @@ body.page-index .star-reveal {
     font-size: 16px;
     color: #000000;
     text-decoration: none;
+    background: none;
+    cursor: pointer;
 }
 
 .recent-files-link:hover {
@@ -2304,4 +2311,130 @@ body.page-quickshare #fileListEmpty {
         height: 50vh;
         bottom: -5vh;
     }
+}
+
+.recent-files-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.recent-files-overlay.hidden {
+    display: none;
+}
+
+.recent-files-popup {
+    width: 659px;
+    max-height: 90vh;
+    background: #FFFFFF;
+    border-radius: 33px;
+    overflow: hidden;
+    animation: blurReveal 1.2s cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+}
+
+.recent-files-popup.closing {
+    animation: blurHide 0.6s cubic-bezier(0.05, 0.7, 0.1, 1) forwards;
+}
+
+.popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 41px 38px 0;
+}
+
+.popup-header h2 {
+    font-family: 'Arimo', sans-serif;
+    font-weight: 700;
+    font-size: 32px;
+    color: #000;
+    margin: 0;
+}
+
+.popup-close {
+    width: 40px;
+    height: 40px;
+    background: #D9D9D9;
+    border: none;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #000;
+    flex-shrink: 0;
+}
+
+.popup-close:hover {
+    opacity: 0.7;
+}
+
+.popup-list {
+    padding: 32px 38px 38px;
+    overflow-y: auto;
+    max-height: calc(90vh - 100px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.popup-entry {
+    display: flex;
+    align-items: center;
+    height: 76px;
+    background: #D9D9D9;
+    border-radius: 16px;
+    padding: 0 16px 0 24px;
+    gap: 16px;
+}
+
+.popup-entry-filename {
+    font-family: 'Arimo', sans-serif;
+    font-weight: 510;
+    font-size: 24px;
+    color: #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex-shrink: 1;
+}
+
+.popup-entry-expires {
+    font-family: 'Arimo', sans-serif;
+    font-weight: 510;
+    font-size: 15px;
+    color: #595959;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.popup-entry-download {
+    margin-left: auto;
+    width: 49px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #000;
+    flex-shrink: 0;
+}
+
+.popup-entry-download:hover {
+    opacity: 0.7;
+}
+
+.popup-empty {
+    text-align: center;
+    color: #888;
+    padding: 2rem;
+    font-family: 'Arimo', sans-serif;
+    font-size: 16px;
 }

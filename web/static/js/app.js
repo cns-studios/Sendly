@@ -1610,6 +1610,90 @@
             .replace(/'/g, '&#39;');
     }
 
+     
+
+    const recentFilesOverlay = document.getElementById('recent-files-overlay');
+    const recentFilesPopup = recentFilesOverlay?.querySelector('.recent-files-popup');
+    const popupRecentList = document.getElementById('popup-recent-list');
+    const popupClose = recentFilesOverlay?.querySelector('.popup-close');
+
+    async function openRecentFilesPopup() {
+        if (!AUTHENTICATED || !recentFilesOverlay || !recentFilesPopup) return;
+
+        recentFilesOverlay.classList.remove('hidden');
+        recentFilesPopup.classList.remove('closing');
+
+         
+        recentFilesPopup.style.animation = 'none';
+        void recentFilesPopup.offsetHeight;
+        recentFilesPopup.style.animation = '';
+
+        if (window.lucide && lucide.createIcons) {
+            lucide.createIcons();
+        }
+
+        popupRecentList.innerHTML = '<p class="popup-empty">Loading...</p>';
+
+        try {
+            const params = new URLSearchParams({ page: '1', per_page: '10' });
+            const response = await fetch(`/api/me/recent-uploads?${params.toString()}`, {
+                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+            });
+            if (!response.ok) throw new Error('Failed to load uploads');
+            const payload = await response.json();
+            renderPopupRecentFiles(payload.items || []);
+        } catch (error) {
+            console.error(error);
+            popupRecentList.innerHTML = '<p class="popup-empty">Failed to load files.</p>';
+        }
+    }
+
+    function closeRecentFilesPopup() {
+        if (!recentFilesOverlay || !recentFilesPopup) return;
+        recentFilesPopup.classList.add('closing');
+        setTimeout(() => {
+            recentFilesOverlay.classList.add('hidden');
+            recentFilesPopup.classList.remove('closing');
+        }, 600);
+    }
+
+    function renderPopupRecentFiles(items) {
+        if (!items.length) {
+            popupRecentList.innerHTML = '<p class="popup-empty">No uploaded files yet.</p>';
+            return;
+        }
+
+        popupRecentList.innerHTML = items.map((item) => {
+            const expiresText = formatExpiryDate(item.expires_at);
+            return `
+                <div class="popup-entry" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${escapeHtml(item.share_url)}">
+                    <span class="popup-entry-filename" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
+                    <span class="popup-entry-expires">Expires ${expiresText}</span>
+                    <button class="popup-entry-download" aria-label="Download" title="Download">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        popupRecentList.querySelectorAll('.popup-entry-download').forEach((btn) => {
+            const entry = btn.closest('.popup-entry');
+            if (!entry) return;
+            btn.addEventListener('click', () => {
+                const fileId = entry.dataset.fileId;
+                const fileName = entry.dataset.fileName;
+                const shareUrl = entry.dataset.shareUrl;
+                if (fileId && fileName) {
+                    downloadOwnedFile(fileId, fileName, '', entry);
+                }
+            });
+        });
+    }
+
     function setupEventListeners() {
         dropZone?.addEventListener('click', () => fileInput?.click());
         dropZone?.addEventListener('dragover', handleDragOver);
@@ -1701,6 +1785,20 @@
                 await handleEndTunnel();
             } catch (error) {
                 showErrorBanner(error.message || 'Failed to end tunnel');
+            }
+        });
+
+         
+
+        const recentFilesLink = document.querySelector('.recent-files-link');
+        recentFilesLink?.addEventListener('click', (e) => {
+            e.preventDefault();
+            openRecentFilesPopup();
+        });
+        popupClose?.addEventListener('click', closeRecentFilesPopup);
+        recentFilesOverlay?.addEventListener('click', (e) => {
+            if (e.target === recentFilesOverlay) {
+                closeRecentFilesPopup();
             }
         });
     }
