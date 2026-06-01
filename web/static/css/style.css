@@ -734,7 +734,7 @@ body.page-index .file-entry.is-locked .recent-action {
 }
 
 body.page-index .footer {
-    margin-top: 100px;
+    margin-top: auto;
 }
 
 /* ═══════════════════════════════════════════
