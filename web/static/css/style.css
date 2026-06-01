@@ -40,7 +40,7 @@ body {
     flex-direction: column;
 }
 
-body {
+body.page-index {
     animation: blurReveal 1.2s cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
 }
 
@@ -2336,7 +2336,6 @@ body.page-quickshare #fileListEmpty {
     background: #FFFFFF;
     border-radius: 33px;
     overflow: hidden;
-    animation: blurReveal 1.2s cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
 }
 
 .recent-files-popup.closing {

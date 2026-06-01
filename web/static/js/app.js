@@ -1623,11 +1623,6 @@
         recentFilesOverlay.classList.remove('hidden');
         recentFilesPopup.classList.remove('closing');
 
-         
-        recentFilesPopup.style.animation = 'none';
-        void recentFilesPopup.offsetHeight;
-        recentFilesPopup.style.animation = '';
-
         if (window.lucide && lucide.createIcons) {
             lucide.createIcons();
         }
