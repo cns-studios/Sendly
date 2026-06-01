@@ -616,6 +616,7 @@ body.page-index .star-reveal {
     text-decoration: none;
     background: none;
     cursor: pointer;
+    transition: opacity 0.2s ease;
 }
 
 .recent-files-link:hover {
@@ -631,7 +632,7 @@ body.page-index .hero-section {
 
 body.page-index .hero-title {
     font-family: 'Arimo', sans-serif;
-    font-weight: 590;
+    font-weight: 650;
     font-size: 64px;
     color: #000000;
     margin-bottom: 16px;
@@ -709,6 +710,7 @@ body.page-index .card-btn {
     font-weight: 510;
     font-size: 20px;
     text-decoration: none;
+    transition: opacity 0.2s ease, background 0.2s ease;
 }
 
 body.page-index .card-btn-primary {
@@ -1402,6 +1404,7 @@ body.tos-gate-open {
     background-color: #E4E3E3;
     color: #000;
     border: 1px solid #ccc;
+    transition: background-color 0.2s ease;
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -2367,6 +2370,7 @@ body.page-quickshare #fileListEmpty {
     cursor: pointer;
     color: #000;
     flex-shrink: 0;
+    transition: opacity 0.2s ease;
 }
 
 .popup-close:hover {
