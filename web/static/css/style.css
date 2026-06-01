@@ -28,6 +28,20 @@ body {
     flex-direction: column;
 }
 
+body {
+    animation: blurReveal 1.2s cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+}
+
+@keyframes blurReveal {
+    from { opacity: 0; filter: blur(9px); }
+    to   { opacity: 1; filter: blur(0); }
+}
+
+@keyframes pageReveal {
+    from { opacity: 1; }
+    to { opacity: 0; visibility: hidden; }
+}
+
 /* ── Header ── */
 .header-wrapper {
     position: sticky;
@@ -555,7 +569,7 @@ body.page-index .star-reveal {
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(to bottom, #00AE71 0%, #00827B 44%);
+    background: linear-gradient(to bottom, #00AE71 15%, #00827B 44%);
     mask-image: url('/static/images/star-mask.svg');
     mask-size: cover;
     mask-repeat: no-repeat;
@@ -634,11 +648,6 @@ body.page-index .action-card {
     display: flex;
     flex-direction: column;
     box-shadow: 0px 0px 53.3px 1px rgba(0, 0, 0, 0.15);
-    transition: transform 0.2s ease;
-}
-
-body.page-index .action-card:hover {
-    transform: translateY(-4px);
 }
 
 body.page-index .card-tag {

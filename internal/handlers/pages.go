@@ -61,7 +61,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 		configJSON = []byte("{}")
 	}
 	c.HTML(http.StatusOK, "index.html", gin.H{
-		"title":            "ShareIt - End-to-End Encrypted File Sharing",
+		"title":            "ShareIt - Simple File Sharing",
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
