@@ -499,12 +499,172 @@ body {
    PAGE: index.html
    ═══════════════════════════════════════════ */
 
-body.page-index .main-content {
-    overflow: hidden;
+/* ── Index page: flat header (no pill bar) ── */
+body.page-index .header-wrapper {
+    position: static;
+    padding: 44px 76px 0;
+    justify-content: flex-start;
 }
 
-body.page-index .action-buttons {
-    margin-top: 60px;
+body.page-index .header {
+    background: none;
+    border-radius: 0;
+    width: 100%;
+    min-width: auto;
+    padding: 0;
+    backdrop-filter: none;
+    position: relative;
+}
+
+body.page-index .header-left {
+    gap: 32px;
+}
+
+body.page-index .logo-text {
+    font-size: 24px;
+}
+
+body.page-index .recent-files-link {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+body.page-index .login-btn {
+    margin-left: auto;
+}
+
+/* ── Header: Recent files link ── */
+.recent-files-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 48px;
+    padding: 0 28px;
+    border: 1px solid #595959;
+    border-radius: 34px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    font-size: 16px;
+    color: #000000;
+    text-decoration: none;
+}
+
+.recent-files-link:hover {
+    opacity: 0.7;
+}
+
+/* ── Hero Section ── */
+body.page-index .hero-section {
+    text-align: center;
+    padding-top: 80px;
+    padding-bottom: 40px;
+}
+
+body.page-index .hero-title {
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 590;
+    font-size: 64px;
+    color: #000000;
+    margin-bottom: 16px;
+    line-height: 1.1;
+}
+
+body.page-index .hero-highlight {
+    color: #00AE71;
+}
+
+body.page-index .hero-subtitle {
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 510;
+    font-size: 24px;
+    color: #000000;
+    max-width: 620px;
+    margin: 0 auto;
+    line-height: 1.4;
+}
+
+/* ── Action Cards ── */
+body.page-index .action-cards {
+    display: flex;
+    justify-content: center;
+    gap: 68px;
+    padding: 20px 40px;
+}
+
+body.page-index .action-card {
+    width: 385px;
+    background: #FFFFFF;
+    border-radius: 27px;
+    padding: 26px 30px 32px 30px;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0px 0px 53.3px 1px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease;
+}
+
+body.page-index .action-card:hover {
+    transform: translateY(-4px);
+}
+
+body.page-index .card-tag {
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    font-size: 16px;
+    color: #6B6B6B;
+    margin-bottom: 4px;
+}
+
+body.page-index .card-title {
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 700;
+    font-size: 24px;
+    color: #000000;
+    margin-bottom: 10px;
+    margin-top: 0;
+}
+
+body.page-index .card-desc {
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 400;
+    font-size: 16px;
+    color: #6E6E73;
+    line-height: 1.4;
+    margin-bottom: 24px;
+    flex: 1;
+}
+
+body.page-index .card-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 55px;
+    border-radius: 15px;
+    font-family: 'SF Pro', sans-serif;
+    font-weight: 510;
+    font-size: 20px;
+    text-decoration: none;
+}
+
+body.page-index .card-btn-primary {
+    background: #007AFF;
+    color: #FFFFFF;
+    border: none;
+}
+
+body.page-index .card-btn-primary:hover {
+    opacity: 0.9;
+}
+
+body.page-index .card-btn-outline {
+    background: transparent;
+    color: #000000;
+    border: 3px solid #007AFF;
+}
+
+body.page-index .card-btn-outline:hover {
+    background: rgba(0, 122, 255, 0.05);
 }
 
 body.page-index .file-section {
@@ -542,102 +702,6 @@ body.page-index .file-entry.is-locked .recent-action {
 
 body.page-index .footer {
     margin-top: 100px;
-}
-
-/* Floating shapes */
-body.page-index .shapes-container {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 50%;
-    pointer-events: none;
-    z-index: 0;
-}
-
-body.page-index .floating-shape {
-    position: absolute;
-}
-
-body.page-index .shape-pill {
-    right: 12%;
-    top: 60%;
-    animation: float1 6s ease-in-out infinite;
-}
-
-body.page-index .shape-star {
-    right: 40%;
-    top: 40%;
-    animation: float2 7s ease-in-out infinite;
-}
-
-body.page-index .shape-bun {
-    right: 55%;
-    top: 70%;
-    animation: float3 8s ease-in-out infinite;
-}
-
-body.page-index .shape-pill svg,
-body.page-index .shape-pill img {
-    width: 149px;
-    height: 191px;
-}
-
-body.page-index .shape-star svg,
-body.page-index .shape-star img {
-    width: 118px;
-    height: 118px;
-}
-
-body.page-index .shape-bun svg,
-body.page-index .shape-bun img {
-    width: 154px;
-    height: 136px;
-}
-
-body.page-index .shape-pill-inner {
-    position: relative;
-    width: 149px;
-    height: 191px;
-}
-
-body.page-index .shape-star-inner {
-    position: relative;
-    width: 118px;
-    height: 118px;
-}
-
-body.page-index .shape-bun-inner {
-    position: relative;
-    width: 154px;
-    height: 136px;
-}
-
-body.page-index .shape-pill-inner svg,
-body.page-index .shape-star-inner svg,
-body.page-index .shape-bun-inner svg {
-    width: 100%;
-    height: 100%;
-    display: block;
-}
-
-@keyframes float1 {
-    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-    33% { transform: translateY(-15px) translateX(5px) rotate(2deg); }
-    66% { transform: translateY(10px) translateX(-5px) rotate(-1deg); }
-}
-
-@keyframes float2 {
-    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-    25% { transform: translateY(12px) translateX(0px) rotate(-2deg); }
-    50% { transform: translateY(-8px) translateX(0px) rotate(1deg); }
-    75% { transform: translateY(6px) translateX(0px) rotate(-1deg); }
-}
-
-@keyframes float3 {
-    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-    40% { transform: translateY(-18px) translateX(12px) rotate(3deg); }
-    70% { transform: translateY(8px) translateX(-7px) rotate(-2deg); }
 }
 
 /* ═══════════════════════════════════════════
@@ -2062,6 +2126,66 @@ body.page-quickshare #fileListEmpty {
     .header {
         width: 90%;
         min-width: auto;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        padding: 10px 16px;
+        border-radius: 20px;
+    }
+
+    .header-left {
+        gap: 16px;
+    }
+
+    .quicklinks {
+        gap: 14px;
+    }
+
+    .recent-files-link {
+        display: none;
+    }
+
+    body.page-index .header-wrapper {
+        padding: 20px 20px 0;
+    }
+
+    body.page-index .header {
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    body.page-index .header-left {
+        gap: 16px;
+    }
+
+    body.page-index .login-btn {
+        margin-left: 0;
+    }
+
+    body.page-index .hero-section {
+        padding-top: 40px;
+        padding-bottom: 24px;
+    }
+
+    body.page-index .hero-title {
+        font-size: 36px;
+    }
+
+    body.page-index .hero-subtitle {
+        font-size: 18px;
+        padding: 0 20px;
+    }
+
+    body.page-index .action-cards {
+        flex-direction: column;
+        align-items: center;
+        gap: 32px;
+        padding: 20px;
+    }
+
+    body.page-index .action-card {
+        width: 100%;
+        max-width: 385px;
     }
 
     body.page-index .file-section {
@@ -2091,10 +2215,6 @@ body.page-quickshare #fileListEmpty {
 
     body.page-link .two-column-grid {
         grid-template-columns: 1fr;
-    }
-
-    .shapes-container {
-        display: none;
     }
 }
 

@@ -67,6 +67,7 @@
                     <a href="/help">FAQ</a>
                 </nav>
             </div>
+            <a href="#recent-files" class="recent-files-link">Recent files</a>
             {{if .authenticated}}
             <div class="login-btn" style="background:#333;position:relative;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="event.stopPropagation();this.classList.toggle('active')">
                 {{.username}}
@@ -83,86 +84,24 @@
 
     <div class="main-content">
 
-        <div class="action-buttons">
-            <div class="action-btn-group">
-                <a class="circle-btn" href="/quickshare" aria-label="Quick Share">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M8 3 4 7l4 4"/>
-                        <path d="M4 7h16"/>
-                        <path d="m16 21 4-4-4-4"/>
-                        <path d="M20 17H4"/>
-                    </svg>
-                </a>
-                <span class="action-label">Quick Share</span>
-            </div>
-            <div class="action-btn-group">
-                <a class="circle-btn" href="/link" aria-label="Link">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                    </svg>
-                </a>
-                <span class="action-label">Link</span>
-            </div>
+        <div class="hero-section">
+            <h1 class="hero-title">Fast. Easy. <span class="hero-highlight">ShareIt.</span></h1>
+            <p class="hero-subtitle">Get files to people or devices, fast and easy without annoying limits.</p>
         </div>
 
-        <section class="file-section">
-            <h2>Recent files</h2>
-            {{if .authenticated}}
-            <div id="recent-uploads-section">
-                <div class="file-list" id="recent-list"></div>
-                <p class="recent-state" id="recent-loading">Loading...</p>
-                <p class="recent-state hidden" id="recent-error">Failed to load recent files.</p>
-                <p class="recent-state hidden" id="recent-empty">No recently uploaded files.</p>
-                <div class="hidden" id="recent-pagination" style="display:flex;align-items:center;justify-content:center;gap:1rem;margin-top:1rem;">
-                    <button id="recent-prev" class="recent-action" style="font-size:0.8rem;padding:4px 12px;">Previous</button>
-                    <span id="recent-page-label" style="font-size:0.75rem;color:#888;"></span>
-                    <button id="recent-next" class="recent-action" style="font-size:0.8rem;padding:4px 12px;">Next</button>
-                </div>
-            </div>
-            {{else}}
-            <p class="recent-state">Log In to access your previous files</p>
-            {{end}}
-        </section>
-
-        <div class="shapes-container">
-            <div class="floating-shape shape-pill">
-                <div class="shape-pill-inner">
-                    <svg width="149" height="191" viewBox="0 0 149 191" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <pattern id="pillPattern" patternUnits="objectBoundingBox" width="1" height="1">
-                                <image href="/static/images/pill.png" x="0" y="0" width="149" height="210" preserveAspectRatio="xMidYMid slice"/>
-                            </pattern>
-                        </defs>
-                        <rect x="78.3611" y="-17.6997" width="100" height="202.971" rx="50" transform="rotate(28.2471 78.3611 -17.6997)" fill="url(#pillPattern)"/>
-                    </svg>
-                </div>
-            </div>
-            <div class="floating-shape shape-star">
-                <div class="shape-star-inner">
-                    <svg width="118" height="118" viewBox="0 0 118 118" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <pattern id="starPattern" patternUnits="objectBoundingBox" width="1" height="1">
-                                <image href="/static/images/star.png" x="0" y="0" width="118" height="118" preserveAspectRatio="xMidYMid slice"/>
-                            </pattern>
-                        </defs>
-                        <path d="M0.99492 36.4482C-4.69518 14.9444 14.9446 -4.69539 36.4484 0.99471L51.5303 4.98553C56.3922 6.27203 61.5051 6.27203 66.367 4.98553L81.449 0.994712C102.953 -4.69539 122.593 14.9444 116.902 36.4482L112.912 51.5301C111.625 56.392 111.625 61.5049 112.912 66.3668L116.902 81.4488C122.593 102.953 102.953 122.592 81.449 116.902L66.367 112.911C61.5051 111.625 56.3922 111.625 51.5303 112.911L36.4484 116.902C14.9446 122.592 -4.69518 102.953 0.994919 81.4488L4.98574 66.3668C6.27224 61.5049 6.27224 56.392 4.98574 51.5301L0.99492 36.4482Z" fill="url(#starPattern)"/>
-                    </svg>
-                </div>
-            </div>
-            <div class="floating-shape shape-bun">
-                <div class="shape-bun-inner">
-                    <svg width="154" height="136" viewBox="0 0 154 136" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <defs>
-                            <pattern id="bunPattern" patternUnits="userSpaceOnUse" width="154" height="136">
-                                <image href="/static/images/bun.png" x="0" y="0" width="154" height="136" preserveAspectRatio="xMidYMid slice"/>
-                            </pattern>
-                        </defs>
-                        <rect width="154" height="68" rx="34" fill="url(#bunPattern)"/>
-                        <rect y="68" width="154" height="68" rx="34" fill="url(#bunPattern)"/>
-                    </svg>
-                </div>
-            </div>
+        <div class="action-cards">
+            <a href="/link" class="action-card">
+                <span class="card-tag">Permanent</span>
+                <h2 class="card-title">Send a file</h2>
+                <p class="card-desc">Upload a file, get a Link and share it with anyone.</p>
+                <span class="card-btn card-btn-primary">Share a file</span>
+            </a>
+            <a href="/quickshare" class="action-card">
+                <span class="card-tag">Temporary</span>
+                <h2 class="card-title">Quickly Share now</h2>
+                <p class="card-desc">Share multiple files with a Group in real time. Like a shared folder, everyone can send and receive freely</p>
+                <span class="card-btn card-btn-outline">Share with a Group</span>
+            </a>
         </div>
 
     </div>
