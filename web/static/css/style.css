@@ -1,17 +1,6 @@
 /* ── Fonts ── */
-@font-face {
-    font-family: 'SF Pro';
-    src: url('fonts/sf-pro.ttf') format('truetype');
-    font-weight: 100 900;
-    font-style: normal;
-}
-
-@font-face {
-    font-family: 'TASA Orbiter';
-    src: url('fonts/tasa-orbiter-extrabold.ttf') format('truetype');
-    font-weight: 800;
-    font-style: normal;
-}
+@import url('https://fonts.googleapis.com/css2?family=TASA+Orbiter:wght@800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Arimo:wght@400;500;600;700&display=swap');
 
 /* ── Reset ── */
 * {
@@ -22,7 +11,7 @@
 
 body {
     background-color: #F5F5F7;
-    font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Arimo', -apple-system, BlinkMacSystemFont, sans-serif;
     min-height: 100vh;
     display: flex;
     flex-direction: column;
@@ -74,9 +63,12 @@ body {
 .logo-text {
     font-family: 'TASA Orbiter', sans-serif;
     font-weight: 800;
-    font-size: 20px;
+    font-size: 24px;
     color: #000000;
     text-decoration: none;
+    text-shadow:
+        0.75px 0 0 currentColor,
+        0 0.375px 0 currentColor;
 }
 
 .quicklinks {
@@ -86,7 +78,7 @@ body {
 }
 
 .quicklinks a {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #000000;
@@ -103,7 +95,7 @@ body {
     border: none;
     border-radius: 34px;
     padding: 12px 32px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     cursor: pointer;
@@ -155,7 +147,7 @@ body {
 }
 
 .footer a {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 14px;
     color: #000000;
@@ -218,7 +210,7 @@ body {
 }
 
 .action-label {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 20px;
     color: #000000;
@@ -275,7 +267,7 @@ body {
 }
 
 .file-name {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 700;
     font-size: 15px;
     color: #000000;
@@ -285,7 +277,7 @@ body {
 }
 
 .file-info {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 11px;
     color: #595959;
@@ -347,14 +339,14 @@ body {
 }
 
 .drop-zone-main-text {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 24px;
     color: #000000;
 }
 
 .drop-zone-sub-text {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #828282;
@@ -381,7 +373,7 @@ body {
     color: #FFFFFF;
     border: none;
     border-radius: 8px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     cursor: pointer;
@@ -416,7 +408,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 700;
     font-size: 36px;
     color: #000000;
@@ -424,7 +416,7 @@ body {
 
 /* ── People section (quickshare) ── */
 .people-heading {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 24px;
     color: #000000;
@@ -466,7 +458,7 @@ body {
 }
 
 .person-name {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #000000;
@@ -487,7 +479,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 700;
     font-size: 36px;
     color: #8E8E8E;
@@ -537,7 +529,7 @@ body.page-index .header-left {
 }
 
 body.page-index .logo-text {
-    font-size: 24px;
+    font-size: 28px;
 }
 
 body.page-index .recent-files-link {
@@ -589,7 +581,7 @@ body.page-index .star-reveal {
     padding: 0 28px;
     border: 1px solid #595959;
     border-radius: 34px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #000000;
@@ -608,7 +600,7 @@ body.page-index .hero-section {
 }
 
 body.page-index .hero-title {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 590;
     font-size: 64px;
     color: #000000;
@@ -621,7 +613,7 @@ body.page-index .hero-highlight {
 }
 
 body.page-index .hero-subtitle {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 510;
     font-size: 24px;
     color: #000000;
@@ -651,7 +643,7 @@ body.page-index .action-card {
 }
 
 body.page-index .card-tag {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #6B6B6B;
@@ -659,7 +651,7 @@ body.page-index .card-tag {
 }
 
 body.page-index .card-title {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 700;
     font-size: 24px;
     color: #000000;
@@ -668,7 +660,7 @@ body.page-index .card-title {
 }
 
 body.page-index .card-desc {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #6E6E73;
@@ -683,7 +675,7 @@ body.page-index .card-btn {
     justify-content: center;
     height: 55px;
     border-radius: 15px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 510;
     font-size: 20px;
     text-decoration: none;
@@ -717,7 +709,7 @@ body.page-index .file-section {
 }
 
 body.page-index .file-section h2 {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 24px;
     color: #000000;
@@ -785,7 +777,7 @@ body.page-quickshare .create-view.active {
 }
 
 body.page-quickshare .create-view h1 {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 32px;
     color: #000000;
@@ -793,7 +785,7 @@ body.page-quickshare .create-view h1 {
 }
 
 body.page-quickshare .create-view .subtitle {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 20px;
     color: #000000;
@@ -826,7 +818,7 @@ body.page-quickshare .session-left {
 }
 
 body.page-quickshare .session-left h2 {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 24px;
     color: #000000;
@@ -852,7 +844,7 @@ body.page-quickshare .session-bottom-row {
 }
 
 body.page-quickshare .connected-text {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 16px;
     color: #828282;
@@ -868,7 +860,7 @@ body.page-quickshare .join-view.active {
 }
 
 body.page-quickshare .join-view h1 {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 32px;
     color: #000000;
@@ -876,7 +868,7 @@ body.page-quickshare .join-view h1 {
 }
 
 body.page-quickshare .join-view .subtitle {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 20px;
     color: #000000;
@@ -904,7 +896,7 @@ body.page-quickshare .queue-view.active {
 }
 
 body.page-quickshare .queue-view h1 {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 32px;
     color: #000000;
@@ -912,7 +904,7 @@ body.page-quickshare .queue-view h1 {
 }
 
 body.page-quickshare .queue-view .subtitle {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 20px;
     color: #000000;
@@ -947,7 +939,7 @@ body.page-quickshare .footer {
 
 body.page-link,
 body.page-shared {
-    font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Arimo', -apple-system, BlinkMacSystemFont, sans-serif;
     background-color: #F5F5F7;
 }
 
@@ -963,7 +955,7 @@ body.page-shared .header {
 }
 
 body.page-shared .logo-text {
-    font-size: 24px;
+    font-size: 28px;
 }
 
 body.page-shared .login-btn {
@@ -982,7 +974,7 @@ body.page-shared .shared-heading {
     text-align: center;
     color: black;
     font-size: 24px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 590;
     margin-bottom: 30px;
 }
@@ -999,7 +991,7 @@ body.page-shared .file-info-box {
 body.page-shared .file-name-text {
     color: black;
     font-size: 24px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 510;
     word-break: break-all;
     margin-bottom: 2px;
@@ -1008,7 +1000,7 @@ body.page-shared .file-name-text {
 body.page-shared .file-meta-text {
     color: #595959;
     font-size: 14px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     margin-bottom: 14px;
 }
@@ -1019,7 +1011,7 @@ body.page-shared .download-btn {
     background: #007AFF;
     color: white;
     font-size: 16px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 510;
     border: none;
     border-radius: 10px;
@@ -1047,7 +1039,7 @@ body.page-shared .no-password-btn {
     background: #D9D9D9;
     color: #000;
     font-size: 14px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     border: none;
     border-radius: 10px;
@@ -1066,7 +1058,7 @@ body.page-shared .password-input-row input {
     flex: 1;
     padding: 10px 14px;
     font-size: 14px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     background: #fff;
     border: 1px solid #ccc;
     border-radius: 10px;
@@ -1087,7 +1079,7 @@ body.page-shared .password-input-row .download-btn {
 body.page-shared .hint {
     color: #8E8E8E;
     font-size: 12px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     margin-top: 6px;
 }
@@ -1096,7 +1088,7 @@ body.page-shared .warning-text {
     text-align: center;
     color: #8E8E8E;
     font-size: 13px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     margin-bottom: 6px;
 }
@@ -1109,7 +1101,7 @@ body.page-shared .report-link {
     text-align: center;
     color: #8E8E8E;
     font-size: 14px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     text-decoration: underline;
     cursor: pointer;
@@ -1329,7 +1321,7 @@ body.tos-gate-open {
 .notification-pill .notification-text {
     color: #000;
     font-size: 16px;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 400;
     white-space: nowrap;
     overflow: hidden;
@@ -1350,7 +1342,7 @@ body.tos-gate-open {
     cursor: pointer;
     transition: all 0.3s ease;
     text-decoration: none;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
 }
 
 .btn:disabled {
@@ -1558,7 +1550,7 @@ body.page-link .file-meta-container {
 }
 
 body.page-link .file-name {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-size: 0.75rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1579,7 +1571,7 @@ body.page-link .file-size {
 body.page-link .info-text {
     font-size: 0.625rem;
     color: #888;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     text-transform: uppercase;
     line-height: 1.6;
 }
@@ -1594,7 +1586,7 @@ body.page-link .success-badge {
     padding: 0.25rem 1rem;
     background-color: #007AFF;
     color: #fff;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-size: 0.625rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1610,7 +1602,7 @@ body.page-link .form-group {
 
 body.page-link .form-label {
     font-size: 0.625rem;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     color: #555;
     text-transform: uppercase;
 }
@@ -1628,7 +1620,7 @@ body.page-link .form-input {
     background: transparent;
     padding: 0.75rem 1rem;
     font-size: 0.75rem;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     color: #000;
     border: none;
     outline: none;
@@ -1653,7 +1645,7 @@ body.page-link .fancy-input {
     border: 1px solid #ccc;
     border-radius: 8px;
     color: #000;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     padding: 0.75rem 1rem;
     font-size: 0.75rem;
     text-align: center;
@@ -1683,7 +1675,7 @@ body.page-link .duration-option {
     border: 1px solid #ccc;
     padding: 0.75rem;
     background: #fff;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-size: 0.75rem;
     color: #333;
     cursor: pointer;
@@ -1758,7 +1750,7 @@ body.page-link .progress-text-container {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     color: #007AFF;
     font-size: 1.25rem;
     font-weight: 700;
@@ -1781,7 +1773,7 @@ body.page-link .progress-main {
 }
 
 body.page-link .progress-sub {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-size: 0.625rem;
     color: #888;
     text-transform: uppercase;
@@ -1795,7 +1787,7 @@ body.page-quickshare .session-left .file-list .file-entry {
 }
 
 body.page-quickshare .session-left h2 {
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 24px;
     color: #000000;
@@ -1911,7 +1903,7 @@ body.page-quickshare #fileListEmpty {
 
 .recent-count {
     color: #777;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-size: 0.7rem;
 }
 
@@ -1945,7 +1937,7 @@ body.page-quickshare #fileListEmpty {
     padding: 0.5rem 0.6rem;
     border-radius: 8px;
     font-size: 0.78rem;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
 }
 
 .recent-search-input:focus {
@@ -1989,7 +1981,7 @@ body.page-quickshare #fileListEmpty {
 
 .recent-name {
     font-size: 0.82rem;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     font-weight: 700;
     color: #000;
     overflow: hidden;
@@ -2049,7 +2041,7 @@ body.page-quickshare #fileListEmpty {
 .tunnel-control-label {
     font-size: 0.68rem;
     color: #868686;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     letter-spacing: 0.06em;
     text-transform: uppercase;
 }
@@ -2076,7 +2068,7 @@ body.page-quickshare #fileListEmpty {
 .tunnel-meta {
     font-size: 0.74rem;
     color: #878787;
-    font-family: 'SF Pro', sans-serif;
+    font-family: 'Arimo', sans-serif;
     line-height: 1.5;
     display: flex;
     align-items: center;
