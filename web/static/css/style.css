@@ -2307,13 +2307,6 @@ body.page-quickshare #fileListEmpty {
 
 }
 
-@media (max-height: 800px) {
-    body.page-index .star-bg {
-        height: 50vh;
-        bottom: -5vh;
-    }
-}
-
 .recent-files-overlay {
     position: fixed;
     inset: 0;
