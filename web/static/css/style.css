@@ -260,6 +260,9 @@ body.page-index {
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    height: 76px;
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .progress-circle {
@@ -757,7 +760,7 @@ body.page-index .file-entry:hover {
 
 body.page-index .file-entry.is-locked {
     background-color: #D9D9D9 !important;
-    border: 2px solid #FF0000 !important;
+    border: 2px dashed #FF7878 !important;
     cursor: not-allowed;
     opacity: 1 !important;
 }
@@ -2002,6 +2005,8 @@ body.page-quickshare #fileListEmpty {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    max-height: calc(100vh - 420px);
+    overflow-y: auto;
 }
 
 .recent-item {
@@ -2440,7 +2445,7 @@ body.page-quickshare #fileListEmpty {
 
 .popup-entry.is-locked {
     background-color: #D9D9D9 !important;
-    border: 2px solid #FF0000 !important;
+    border: 2px dashed #FF7878 !important;
     cursor: not-allowed;
     opacity: 1 !important;
 }
