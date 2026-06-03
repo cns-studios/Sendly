@@ -23,7 +23,9 @@ type AuthHandler struct {
 }
 
 type tokenExchangeResult struct {
-	AccessToken string `json:"access_token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
@@ -115,8 +117,18 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
 	c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 
+	maxAge := int(result.ExpiresIn)
+	if maxAge <= 0 {
+		maxAge = 86400
+	}
+	expiresAt := time.Now().Unix() + int64(maxAge)
+
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", result.AccessToken, 3600*24*7, "/", "", isSecure, true)
+	c.SetCookie("auth_token", result.AccessToken, maxAge, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), maxAge, "/", "", isSecure, true)
+	if result.RefreshToken != "" {
+		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", "", isSecure, true)
+	}
 
 	c.Redirect(http.StatusFound, "/")
 }
@@ -124,6 +136,8 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
 	c.Redirect(http.StatusFound, "/")
 }
 
