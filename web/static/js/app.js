@@ -127,6 +127,7 @@
     let pendingEnrollmentSocketEverOpened = false;
     let isDeviceUntrusted = false;
     const recentFileStates = new Map();
+    const activeDownloads = new Set();
     const LOCKED_FILE_INFO = 'This file was encrypted on a different trusted device. Because recovery happened after this files was uploaded, this client cannot unlock that older file key. Please re-upload this file again. To avoid this in the future, approve new devices from already trusted devices (this is a trusted device) so you can keep access to all your files across devices.';
     let actionModalResolver = null;
 
@@ -656,8 +657,7 @@
             description: 'This rotates trusted-device state and makes this browser your new trusted device. Previously protected files may remain unreadable until they are re-shared or re-uploaded.',
             confirmText: 'Recover device',
             cancelText: 'Cancel',
-            kicker: 'Important',
-            tone: 'warning'
+            kicker: 'Important'
         });
         if (!confirmed) {
             return;
@@ -853,11 +853,12 @@
         recentList.innerHTML = items.map((item, idx) => {
             const locked = recentFileStates.get(item.file_id)?.locked;
             const opacity = Math.max(0.05, 1.0 - idx * 0.19);
+            const expiresLabel = formatExpiryDate(item.expires_at);
             return `
-                <div class="file-entry${locked ? ' is-locked' : ''}" style="opacity: ${opacity};" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}">
+                <div class="file-entry${locked ? ' is-locked' : ''}" style="opacity: ${opacity};" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}" data-expires-at="${item.expires_at}"${locked ? ` title="${LOCKED_FILE_INFO}"` : ''}>
                     <div class="file-entry-left">
                         <span class="file-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
-                        <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)} · Expires ${formatExpiryDate(item.expires_at)}</span>
+                        <span class="file-info">${locked ? 'Expires ' + expiresLabel : SecureCrypto.formatFileSize(item.size_bytes) + ' · Expires ' + expiresLabel}</span>
                     </div>
                     <div class="file-entry-right">
                         <button class="recent-action" data-action="copy" aria-label="Copy share link" title="Copy share link" ${locked ? 'disabled' : ''}>
@@ -1318,16 +1319,28 @@
     }
 
     async function downloadOwnedFile(fileId, fileName, tunnelId = '', cardEl = null) {
+        if (activeDownloads.has(fileId)) return;
         const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
 
         let progressFill = null;
+        let downloadBtn = null;
+        let originalBtnHtml = '';
+
         if (cardEl) {
             const progressBar = document.createElement('div');
             progressBar.className = 'file-download-progress';
             progressFill = document.createElement('div');
             progressFill.className = 'file-download-progress-bar';
             progressBar.appendChild(progressFill);
-            cardEl.insertBefore(progressBar, cardEl.firstChild);
+            cardEl.appendChild(progressBar);
+
+            activeDownloads.add(fileId);
+            downloadBtn = cardEl.querySelector('.recent-action[data-action="download"]');
+            if (downloadBtn && !downloadBtn.disabled) {
+                originalBtnHtml = downloadBtn.innerHTML;
+                downloadBtn.innerHTML = '<div class="downloading-spinner" style="width:16px;height:16px;border-width:2px;"></div>';
+                downloadBtn.disabled = true;
+            }
         }
 
         const updateProgress = (pct) => {
@@ -1383,9 +1396,14 @@
             updateProgress(100);
             await new Promise((resolve) => setTimeout(resolve, 600));
         } finally {
+            activeDownloads.delete(fileId);
             if (progressFill && progressFill.parentNode) {
                 const bar = progressFill.parentNode;
                 if (bar.parentNode) bar.parentNode.removeChild(bar);
+            }
+            if (downloadBtn && originalBtnHtml) {
+                downloadBtn.innerHTML = originalBtnHtml;
+                downloadBtn.disabled = false;
             }
         }
     }
@@ -1569,9 +1587,16 @@
         if (!item) return;
 
         item.classList.add('is-locked');
+        item.setAttribute('title', LOCKED_FILE_INFO);
         item.querySelectorAll('.recent-action').forEach((btn) => {
             btn.disabled = true;
         });
+
+        const infoEl = item.querySelector('.file-info');
+        const expiresAt = item.dataset.expiresAt;
+        if (infoEl && expiresAt) {
+            infoEl.textContent = 'Expires ' + formatExpiryDate(expiresAt);
+        }
     }
 
     function formatUploadDate(dateStr) {
@@ -2748,6 +2773,12 @@
             actionModal.classList.add('action-tone-warning');
         }
 
+        const wasDeviceModalVisible = deviceApprovalModal && !deviceApprovalModal.classList.contains('hidden');
+        if (wasDeviceModalVisible) {
+            deviceApprovalModal.classList.add('hidden');
+            deviceApprovalModal.setAttribute('aria-hidden', 'true');
+        }
+
         actionModalTitle.textContent = title;
         actionModalDescription.textContent = description;
         actionModalConfirm.textContent = confirmText;
@@ -2765,6 +2796,12 @@
                 actionModalCancel.removeEventListener('click', onCancel);
                 actionModal.removeEventListener('click', onBackdrop);
                 actionModalResolver = null;
+
+                if (wasDeviceModalVisible) {
+                    deviceApprovalModal.classList.remove('hidden');
+                    deviceApprovalModal.setAttribute('aria-hidden', 'false');
+                }
+
                 resolve(value);
             };
 
