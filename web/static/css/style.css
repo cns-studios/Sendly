@@ -261,8 +261,10 @@ body.page-index {
     justify-content: space-between;
     gap: 16px;
     height: 76px;
+    min-height: 76px;
     flex-shrink: 0;
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 .progress-circle {
@@ -632,8 +634,8 @@ body.page-index .hero-section {
 }
 
 body.page-index .hero-title {
-    font-family: 'Arimo', sans-serif;
-    font-weight: 650;
+    font-family: 'TASA Orbiter', sans-serif;
+    font-weight: 800;
     font-size: 64px;
     color: #000000;
     margin-bottom: 16px;
@@ -665,21 +667,13 @@ body.page-index .action-cards {
 
 body.page-index .action-card {
     width: 385px;
+    height: 294px;
     background: #FFFFFF;
     border-radius: 27px;
-    padding: 26px 30px 32px 30px;
+    padding: 38px 38px 31px 38px;
     text-decoration: none;
     display: flex;
     flex-direction: column;
-    box-shadow: 0px 0px 53.3px 1px rgba(0, 0, 0, 0.15);
-}
-
-body.page-index .card-tag {
-    font-family: 'Arimo', sans-serif;
-    font-weight: 400;
-    font-size: 16px;
-    color: #6B6B6B;
-    margin-bottom: 4px;
 }
 
 body.page-index .card-title {
@@ -687,8 +681,7 @@ body.page-index .card-title {
     font-weight: 700;
     font-size: 24px;
     color: #000000;
-    margin-bottom: 10px;
-    margin-top: 0;
+    margin: 0 0 23px 0;
 }
 
 body.page-index .card-desc {
@@ -697,7 +690,7 @@ body.page-index .card-desc {
     font-size: 16px;
     color: #6E6E73;
     line-height: 1.4;
-    margin-bottom: 40px;
+    margin: 0;
     flex: 1;
 }
 
@@ -727,7 +720,7 @@ body.page-index .card-btn-primary:hover {
 body.page-index .card-btn-outline {
     background: transparent;
     color: #000000;
-    border: 3px solid #00827B;
+    border: 2px solid #00827B;
 }
 
 body.page-index .card-btn-outline:hover {
@@ -2444,7 +2437,7 @@ body.page-quickshare #fileListEmpty {
 }
 
 .popup-entry.is-locked {
-    background-color: #D9D9D9 !important;
+    background-color: #E5E5E5 !important;
     border: 2px dashed #FF7878 !important;
     cursor: not-allowed;
     opacity: 1 !important;
