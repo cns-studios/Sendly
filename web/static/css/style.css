@@ -2438,6 +2438,24 @@ body.page-quickshare #fileListEmpty {
     opacity: 0.7;
 }
 
+.popup-entry.is-locked {
+    background-color: #D9D9D9 !important;
+    border: 2px solid #FF0000 !important;
+    cursor: not-allowed;
+    opacity: 1 !important;
+}
+
+.popup-entry.is-locked .popup-entry-filename,
+.popup-entry.is-locked .popup-entry-expires {
+    pointer-events: none;
+}
+
+.popup-entry.is-locked .popup-entry-download {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .popup-empty {
     text-align: center;
     color: #888;
