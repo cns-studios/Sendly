@@ -158,8 +158,6 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	result, err := middleware.RefreshAccessToken(ctx, h.cfg, refreshToken)
 	if err != nil {
-		c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
-		c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh failed"})
 		return
 	}
