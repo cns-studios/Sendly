@@ -135,8 +135,8 @@ func setAuthCookies(c *gin.Context, cfg *config.Config, token, refreshToken stri
 	}
 	expiresAt := time.Now().Unix() + int64(maxAge)
 
-	c.SetCookie("auth_token", token, maxAge, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), maxAge, "/", "", isSecure, true)
+	c.SetCookie("auth_token", token, 3600*24*30, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
 	if refreshToken != "" {
 		c.SetCookie("refresh_token", refreshToken, 3600*24*30, "/", "", isSecure, true)
 	}

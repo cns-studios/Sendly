@@ -130,6 +130,7 @@ func main() {
 		auth.GET("/login", authHandler.Login)
 		auth.GET("/callback", authHandler.Callback)
 		auth.GET("/logout", authHandler.Logout)
+		auth.POST("/refresh", authHandler.Refresh)
 	}
 
 	api := router.Group("/api")

@@ -184,8 +184,29 @@
         return false;
     }
 
+    async function refreshSessionIfNeeded() {
+        const expiresAtRaw = getCookieValue('auth_expires_at');
+        const refreshToken = getCookieValue('refresh_token');
+
+        if (!refreshToken) return;
+
+        const expiresAt = expiresAtRaw ? parseInt(expiresAtRaw, 10) : 0;
+        const needsRefresh = !getCookieValue('auth_token') || (expiresAt > 0 && Date.now() / 1000 >= expiresAt - 300);
+
+        if (!needsRefresh) return;
+
+        try {
+            await fetch('/auth/refresh', { method: 'POST' });
+        } catch (e) {
+        }
+    }
+
     async function init() {
         setupTOSGate();
+
+        if (AUTHENTICATED || getCookieValue('refresh_token')) {
+            await refreshSessionIfNeeded();
+        }
 
          
         try {

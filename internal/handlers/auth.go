@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"shareit/internal/config"
+	"shareit/internal/middleware"
 	"strings"
 	"time"
 
@@ -124,8 +125,8 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	expiresAt := time.Now().Unix() + int64(maxAge)
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", result.AccessToken, maxAge, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), maxAge, "/", "", isSecure, true)
+	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
 	if result.RefreshToken != "" {
 		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", "", isSecure, true)
 	}
@@ -139,6 +140,41 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
 	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
 	c.Redirect(http.StatusFound, "/")
+}
+
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
+
+	refreshToken, err := c.Cookie("refresh_token")
+	if err != nil || refreshToken == "" {
+		c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
+		c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "no refresh token"})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+	defer cancel()
+
+	result, err := middleware.RefreshAccessToken(ctx, h.cfg, refreshToken)
+	if err != nil {
+		c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
+		c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh failed"})
+		return
+	}
+
+	maxAge := int(result.ExpiresIn)
+	if maxAge <= 0 {
+		maxAge = 86400
+	}
+	expiresAt := time.Now().Unix() + int64(maxAge)
+	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
+	if result.RefreshToken != "" {
+		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", "", isSecure, true)
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func generateRandomHex(n int) string {
