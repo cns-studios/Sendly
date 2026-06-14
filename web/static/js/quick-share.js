@@ -82,6 +82,8 @@
     const connectedText = document.getElementById('connectedText');
     const codeSquares = document.querySelectorAll('#codeSquares .code-square');
     const joinCodeSquares = document.querySelectorAll('#joinCodeSquares .join-code-square');
+    const joinCodeHiddenInput = document.getElementById('joinCodeHiddenInput');
+    const joinCodeSquaresContainer = document.getElementById('joinCodeSquares');
     const queueCodeSquares = document.querySelectorAll('#queueCodeSquares .code-square');
     const peopleRow = document.getElementById('peopleRow');
     const queuePeopleRow = document.getElementById('queuePeopleRow');
@@ -680,6 +682,7 @@
             showErrorBanner('Failed to join tunnel: ' + error.message);
             joinCodeInput = '';
             setCodeDisplay(joinCodeSquares, '');
+            if (joinCodeHiddenInput) joinCodeHiddenInput.value = '';
             joinSubmitBtn.disabled = true;
             joinSubmitBtn.classList.add('disabled');
         }
@@ -1039,7 +1042,10 @@
             setView('join');
             joinCodeInput = '';
             setCodeDisplay(joinCodeSquares, '');
-            joinCodeSquares[0]?.focus();
+            if (joinCodeHiddenInput) {
+                joinCodeHiddenInput.value = '';
+                joinCodeHiddenInput.focus();
+            }
         });
 
         startBtn?.addEventListener('click', handleStartTunnel);
@@ -1072,43 +1078,43 @@
             }
         });
 
-        joinCodeSquares.forEach((sq, index) => {
-            sq.addEventListener('click', () => {
-                joinCodeSquares.forEach(s => s.classList.remove('focused'));
-                sq.classList.add('focused');
-            });
+        joinCodeSquaresContainer?.addEventListener('click', () => {
+            joinCodeHiddenInput?.focus();
+        });
 
-            sq.addEventListener('keydown', (e) => {
-                if (e.key >= '0' && e.key <= '9') {
-                    e.preventDefault();
-                    const chars = joinCodeInput.split('');
-                    chars[index] = e.key;
-                    joinCodeInput = chars.join('').slice(0, 4);
-                    setCodeDisplay(joinCodeSquares, joinCodeInput);
-                    if (index < 3) joinCodeSquares[index + 1].focus();
-                } else if (e.key === 'Backspace') {
-                    e.preventDefault();
-                    const chars = joinCodeInput.split('');
-                    if (chars[index]) {
-                        chars[index] = '';
-                    } else if (index > 0) {
-                        chars[index - 1] = '';
-                        joinCodeSquares[index - 1].focus();
-                    }
-                    joinCodeInput = chars.join('').slice(0, 4);
-                    setCodeDisplay(joinCodeSquares, joinCodeInput);
-                } else if (e.key === 'ArrowLeft' && index > 0) {
-                    e.preventDefault();
-                    joinCodeSquares[index - 1].focus();
-                } else if (e.key === 'ArrowRight' && index < 3) {
-                    e.preventDefault();
-                    joinCodeSquares[index + 1].focus();
-                }
+        joinCodeHiddenInput?.addEventListener('input', () => {
+            const raw = joinCodeHiddenInput.value.replace(/[^0-9]/g, '').slice(0, 4);
+            joinCodeHiddenInput.value = raw;
+            joinCodeInput = raw;
+            setCodeDisplay(joinCodeSquares, joinCodeInput);
 
-                joinCodeInput = joinCodeInput.replace(/[^0-9]/g, '').slice(0, 4);
-                joinSubmitBtn.disabled = joinCodeInput.length !== 4;
-                joinSubmitBtn.classList.toggle('disabled', joinCodeInput.length !== 4);
-            });
+            joinSubmitBtn.disabled = joinCodeInput.length !== 4;
+            joinSubmitBtn.classList.toggle('disabled', joinCodeInput.length !== 4);
+        });
+
+        joinCodeHiddenInput?.addEventListener('focus', () => {
+            joinCodeSquaresContainer?.classList.add('focused');
+            const len = joinCodeInput.length;
+            if (len < 4) {
+                joinCodeSquares[len]?.classList.add('focused');
+            }
+        });
+
+        joinCodeHiddenInput?.addEventListener('blur', () => {
+            joinCodeSquaresContainer?.classList.remove('focused');
+            joinCodeSquares.forEach(sq => sq.classList.remove('focused'));
+        });
+
+        joinCodeHiddenInput?.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && joinCodeInput.length > 0) {
+                const newVal = joinCodeInput.slice(0, -1);
+                joinCodeHiddenInput.value = newVal;
+                joinCodeInput = newVal;
+                setCodeDisplay(joinCodeSquares, joinCodeInput);
+                joinSubmitBtn.disabled = true;
+                joinSubmitBtn.classList.add('disabled');
+                e.preventDefault();
+            }
         });
 
     }

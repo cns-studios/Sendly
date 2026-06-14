@@ -143,10 +143,11 @@
             <p class="subtitle">Enter the Room Code to join a Quick Share</p>
 
             <div class="join-code-squares" id="joinCodeSquares">
-                <div class="join-code-square" data-index="0" tabindex="0">–</div>
-                <div class="join-code-square" data-index="1" tabindex="0">–</div>
-                <div class="join-code-square" data-index="2" tabindex="0">–</div>
-                <div class="join-code-square" data-index="3" tabindex="0">–</div>
+                <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="joinCodeHiddenInput" class="join-code-hidden-input" autocomplete="one-time-code" value="">
+                <div class="join-code-square" data-index="0">–</div>
+                <div class="join-code-square" data-index="1">–</div>
+                <div class="join-code-square" data-index="2">–</div>
+                <div class="join-code-square" data-index="3">–</div>
             </div>
         </div>
 

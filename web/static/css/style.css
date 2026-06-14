@@ -502,6 +502,27 @@ body.page-index {
     display: flex;
     gap: 14px;
     margin-top: 36px;
+    position: relative;
+    cursor: text;
+}
+
+.join-code-hidden-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    pointer-events: none;
+    caret-color: transparent;
+    font-size: 36px;
+    letter-spacing: 53px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    z-index: 2;
 }
 
 .join-code-square {
@@ -516,18 +537,19 @@ body.page-index {
     font-weight: 700;
     font-size: 36px;
     color: #8E8E8E;
-    cursor: text;
-    outline: none;
+    user-select: none;
     border: 2px solid transparent;
     transition: border-color 0.2s;
-    caret-color: transparent;
+    pointer-events: none;
+    position: relative;
+    z-index: 1;
 }
 
 .join-code-square.filled {
     color: #000000;
 }
 
-.join-code-square.focused {
+.join-code-squares.focused .join-code-square.focused {
     border-color: #007AFF;
 }
 
