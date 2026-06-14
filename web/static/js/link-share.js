@@ -44,6 +44,10 @@
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
     const outExpiryLabel = document.getElementById('out-expiry-label');
+    const shareUrlModal = document.getElementById('share-url-modal');
+    const shareUrlText = document.getElementById('shareUrlText');
+    const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
+    const shareUrlDiscardBtn = document.getElementById('shareUrlDiscardBtn');
     let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
@@ -131,15 +135,26 @@
         dropZone.addEventListener('drop', handleDrop);
         fileInput.addEventListener('change', handleFileSelect);
         finalizeBtn.addEventListener('click', handleFinalize);
+
+        shareUrlModal?.addEventListener('click', (e) => {
+            if (e.target === shareUrlModal) hideShareUrlModal();
+        });
+
+        shareUrlCopyBtn?.addEventListener('click', async () => {
+            const url = shareUrlText?.textContent;
+            if (!url) return;
+            const ok = await copyToClipboard(url, true);
+            hideShareUrlModal();
+            if (ok) showToast('Link copied');
+        });
+
+        shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
     }
 
     function handleZoneClick(e) {
         if (dropZone.classList.contains('success')) {
             if (lastShareUrl) {
-                copyToClipboard(lastShareUrl, true);
-                showShareBanner();
-                const sub = dropZone.querySelector('p');
-                if (sub) sub.textContent = 'Link copied to clipboard';
+                showShareUrlModal(lastShareUrl);
             }
             return;
         }
@@ -438,18 +453,15 @@
         const zoneSubtext = dropZone.querySelector('p');
         zoneIcon.setAttribute('data-lucide', 'circle-check-big');
         zoneHeading.textContent = 'Uploaded';
-        zoneSubtext.textContent = 'Link copied to clipboard';
+        zoneSubtext.textContent = 'Click to get share link';
         if (window.lucide && lucide.createIcons) lucide.createIcons();
-
-        copyToClipboard(fullShareUrl, true);
-        showShareBanner();
-
-        setupIdleCopy(fullShareUrl);
 
         uploadSessionId = null;
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.add('hidden');
+
+        showShareUrlModal(fullShareUrl);
     }
 
     function setupIdleCopy(text) {
@@ -513,6 +525,24 @@
             return true;
         }
         return false;
+    }
+
+    function showShareUrlModal(url) {
+        if (!shareUrlModal || !shareUrlText) return;
+        shareUrlText.textContent = url;
+        shareUrlCopyBtn.textContent = 'Copy';
+        shareUrlCopyBtn.classList.remove('copied');
+        shareUrlModal.classList.remove('hidden');
+        shareUrlModal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('tos-gate-open');
+        shareUrlCopyBtn.focus();
+    }
+
+    function hideShareUrlModal() {
+        if (!shareUrlModal) return;
+        shareUrlModal.classList.add('hidden');
+        shareUrlModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('tos-gate-open');
     }
 
     function showNotification(message, type) {

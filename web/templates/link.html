@@ -161,6 +161,17 @@
         </div>
     </div>
 
+    <div id="share-url-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="share-url-card" role="dialog" aria-modal="true">
+            <h2 class="share-url-title">Your link to share</h2>
+            <p class="share-url-text" id="shareUrlText"></p>
+            <div class="share-url-actions">
+                <button id="shareUrlDiscardBtn" class="btn-share-discard">Discard</button>
+                <button id="shareUrlCopyBtn" class="btn-share-copy">Copy</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         window.CONFIG = {{.configJSON}};
     </script>

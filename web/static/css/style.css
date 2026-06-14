@@ -1344,9 +1344,108 @@ body.tos-gate-open {
 .action-tone-warning .tos-modal .btn-accent:hover:not(:disabled) {
     opacity: 0.9;
 }
-
 .tos-overlay.is-busy {
     opacity: 0.86;
+
+}
+
+/* ── Share URL card (link share) ── */
+.share-url-card {
+    width: min(870px, calc(100% - 2rem));
+    max-height: calc(100vh - 2rem);
+    background: #FFFFFF;
+    border-radius: 20px;
+    padding: 28px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.share-url-title {
+    margin: 0 0 8px 0;
+    font-size: 32px;
+    font-weight: 590;
+    color: #000;
+    line-height: 1.2;
+}
+
+.share-url-text {
+    margin: 0 0 28px 0;
+    font-size: 20px;
+    font-weight: 400;
+    color: #000;
+    line-height: 1.4;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.share-url-actions {
+    display: flex;
+    gap: 14px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.btn-share-discard,
+.btn-share-copy {
+    min-width: 117px;
+    height: 38px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 400;
+    font-family: inherit;
+    padding: 0 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    line-height: 1;
+}
+
+.btn-share-discard {
+    background: #C7C7C7;
+    color: #000;
+}
+
+.btn-share-discard:hover {
+    opacity: 0.8;
+}
+
+.btn-share-copy {
+    background: #007AFF;
+    color: #FFFFFF;
+}
+
+.btn-share-copy:hover {
+    opacity: 0.85;
+}
+
+@media (max-width: 640px) {
+    .share-url-card {
+        padding: 20px 16px;
+    }
+
+    .share-url-title {
+        font-size: 24px;
+    }
+
+    .share-url-text {
+        font-size: 16px;
+        margin-bottom: 20px;
+    }
+
+    .share-url-actions {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .btn-share-discard,
+    .btn-share-copy {
+        width: 100%;
+    }
 }
 
 /* ── Notification Pill ── */
