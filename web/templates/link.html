@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.locale}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,20 +14,20 @@
 
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
-            <h2 id="tos-modal-title">Accept to continue</h2>
+            <h2 id="tos-modal-title">{{.t.tos_accept_title}}</h2>
             <p id="tos-modal-description" class="tos-modal-description">
-                Please review and accept our <a href="/tos" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> to use our Service
+                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use}}
             </p>
             <div class="tos-modal-actions">
-                <button id="tos-decline-btn" class="btn btn-secondary btn-large">Decline</button>
-                <button id="tos-accept-btn" class="btn btn-accent btn-large">Accept</button>
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">{{.t.tos_accept}}</button>
             </div>
         </div>
     </div>
 
     <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
-        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 90 day retention.</span>
-        <button id="auth-nudge-close" aria-label="Close" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
+        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">{{.t.auth_nudge_login}}</a> {{.t.auth_nudge_link}}</span>
+        <button id="auth-nudge-close" aria-label="{{.t.auth_nudge_close_label}}" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
             <i data-lucide="x" style="width:14px;height:14px;"></i>
         </button>
     </div>
@@ -40,11 +40,12 @@
     <div class="header-wrapper">
         <header class="header">
             <div class="header-left">
-                <a href="/" class="logo-text">ShareIt</a>
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
                 <nav class="quicklinks">
-                    <a href="/limits">Pricing</a>
-                    <a href="/data-encryption">Security</a>
-                    <a href="/help">FAQ</a>
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
             {{if .authenticated}}
@@ -52,11 +53,11 @@
                 {{.username}}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 <div class="user-dropdown">
-                    <a href="/auth/logout" onclick="event.stopPropagation()">Logout</a>
+                    <a href="/auth/logout" onclick="event.stopPropagation()">{{.t.header_logout}}</a>
                 </div>
             </div>
             {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
             {{end}}
         </header>
     </div>
@@ -68,8 +69,8 @@
                 <div id="drop-zone" class="drop-zone">
                     <input type="file" id="file-input" class="hidden">
                     <i data-lucide="circle-fading-arrow-up" class="drop-zone-icon"></i>
-                    <h3>Upload File</h3>
-                    <p>Drag and Drop a file here or click to browse.</p>
+                    <h3>{{.t.link_drop_heading}}</h3>
+                    <p>{{.t.link_drop_subtext}}</p>
                 </div>
             </div>
 
@@ -85,44 +86,44 @@
                 </div>
                 <div class="progress-label">
                     <p id="process-sub" class="progress-sub"></p>
-                    <h4 class="progress-main" id="process-main">Uploading</h4>
+                    <h4 class="progress-main" id="process-main">{{.t.link_processing}}</h4>
                 </div>
             </div>
 
             <div id="stage-pending" class="hidden form-section">
                 <div class="output-header">
                     <div class="success-badge">
-                        Start your Upload
+                        {{.t.link_pending_badge}}
                     </div>
                 </div>
 
                 <p class="info-text">
-                    Select expiration to share this file.
+                    {{.t.link_pending_info}}
                 </p>
 
                 <div class="info-box" style="margin-top: 0;">
                     <p class="info-text">
-                        Upload your file, session expires in <span id="pending-countdown">10:00</span>.
+                        {{.t.link_pending_expires}} <span id="pending-countdown">10:00</span>.
                     </p>
                 </div>
 
                 <button id="finalize-btn" class="btn-accent btn-large">
-                    Upload
+                    {{.t.link_pending_upload_btn}}
                 </button>
             </div>
 
             <div id="stage-output" class="hidden form-section">
                 <div class="output-header">
                     <div class="success-badge">
-                        Success!
+                        {{.t.link_success_badge}}
                     </div>
                 </div>
 
                 <div class="info-box">
-                    <p id="out-expiry-label" class="info-text">Storage policy active.</p>
+                    <p id="out-expiry-label" class="info-text">{{.t.link_storage_policy}}</p>
                 </div>
                 <button onclick="location.reload()" class="btn btn-secondary btn-large" style="margin-top: auto;">
-                    Start over
+                    {{.t.link_start_over}}
                 </button>
             </div>
 
@@ -130,11 +131,11 @@
     </div>
 
     <footer class="footer">
-        <a href="/tos">Terms of Service</a>
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/limits">Limits</a>
-        <a href="/data-encryption">Data Encryption</a>
-        <a href="/help">Help</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
     </footer>
 
     <div id="download-activity-overlay" class="download-activity-overlay hidden" aria-hidden="true">
@@ -142,7 +143,7 @@
             <button id="download-activity-close" class="download-activity-x" aria-label="Close">
                 <i data-lucide="x" style="width:16px;height:16px;"></i>
             </button>
-            <p id="download-activity-title" class="download-activity-title">Downloading and decrypting your file...</p>
+            <p id="download-activity-title" class="download-activity-title">{{.t.link_downloading_title}}</p>
             <div id="download-activity-icon" class="download-activity-icon">
                 <div class="downloading-spinner"></div>
             </div>
@@ -152,22 +153,22 @@
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
-            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Confirm action</h2>
+            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.action_modal_title}}</h2>
             <p id="action-modal-description" class="tos-modal-description" style="margin-bottom:28px;"></p>
             <div class="tos-modal-actions">
-                <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
-                <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>
+                <button id="action-modal-cancel" class="btn btn-secondary btn-large">{{.t.action_modal_cancel}}</button>
+                <button id="action-modal-confirm" class="btn btn-accent btn-large">{{.t.action_modal_continue}}</button>
             </div>
         </div>
     </div>
 
     <div id="share-url-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="share-url-card" role="dialog" aria-modal="true">
-            <h2 class="share-url-title">Your link to share</h2>
+            <h2 class="share-url-title">{{.t.link_share_title}}</h2>
             <p class="share-url-text" id="shareUrlText"></p>
             <div class="share-url-actions">
-                <button id="shareUrlDiscardBtn" class="btn-share-discard">Discard</button>
-                <button id="shareUrlCopyBtn" class="btn-share-copy">Copy</button>
+                <button id="shareUrlDiscardBtn" class="btn-share-discard">{{.t.link_share_discard}}</button>
+                <button id="shareUrlCopyBtn" class="btn-share-copy">{{.t.link_share_copy}}</button>
             </div>
         </div>
     </div>

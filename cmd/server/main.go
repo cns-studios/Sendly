@@ -12,6 +12,7 @@ import (
 
 	"shareit/internal/config"
 	"shareit/internal/handlers"
+	"shareit/internal/i18n"
 	"shareit/internal/middleware"
 	"shareit/internal/services"
 	"shareit/internal/storage"
@@ -82,14 +83,17 @@ func main() {
 	templates := template.Must(template.ParseGlob("web/templates/*.html"))
 	router.SetHTMLTemplate(templates)
 
+	translator := i18n.NewTranslator()
+
 	ipMiddleware := middleware.NewIPMiddleware(cfg)
 	standardRateLimiter, strictRateLimiter, downloadRateLimiter := middleware.NewRateLimiterSet(cfg, rdb)
 	cnsAuth := middleware.CNSAuthMiddleware(cfg)
 
 	router.Use(ipMiddleware.Handler())
 	router.Use(cnsAuth)
+	router.Use(middleware.LocaleMiddleware())
 
-	pageHandler := handlers.NewPageHandler(cfg)
+	pageHandler := handlers.NewPageHandler(cfg, translator)
 	authHandler := handlers.NewAuthHandler(cfg)
 	uploadHandler := handlers.NewUploadHandler(cfg, db, rdb, fs, uploadService)
 	downloadHandler := handlers.NewDownloadHandler(cfg, db, fs)

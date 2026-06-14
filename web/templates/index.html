@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.locale}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,20 +14,20 @@
 
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
-            <h2 id="tos-modal-title">Accept to continue</h2>
+            <h2 id="tos-modal-title">{{.t.tos_accept_title}}</h2>
             <p id="tos-modal-description" class="tos-modal-description">
-                Please review and accept our <a href="/tos" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> to use our Service
+                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use}}
             </p>
             <div class="tos-modal-actions">
-                <button id="tos-decline-btn" class="btn btn-secondary btn-large">Decline</button>
-                <button id="tos-accept-btn" class="btn btn-accent btn-large">Accept</button>
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">{{.t.tos_accept}}</button>
             </div>
         </div>
     </div>
 
     <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
-        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock 1.5 GB uploads and 90 day until shared files are deleted.</span>
-        <button id="auth-nudge-close" aria-label="Close" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
+        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">{{.t.auth_nudge_login}}</a> {{.t.auth_nudge_index}}</span>
+        <button id="auth-nudge-close" aria-label="{{.t.auth_nudge_close_label}}" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
             <i data-lucide="x" style="width:14px;height:14px;"></i>
         </button>
     </div>
@@ -39,21 +39,21 @@
 
     <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
-            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Connect new device</h2>
+            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
             <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
-                A new device wants to view your files. If you did not ask for this, decline and change your CNS password.
+                {{.t.device_approval_desc}}
             </p>
             <div id="device-approval-meta" style="margin-bottom:28px;font-size:14px;color:#555;line-height:1.6;"></div>
             <div id="device-approval-waiting" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:20px;margin-bottom:28px;">
                 <div class="downloading-spinner" style="width:36px;height:36px;"></div>
                 <button id="device-approval-recover" type="button" style="background:none;border:none;color:#595959;font-size:15px;text-decoration:underline;cursor:pointer;padding:0;">
-                    Lost all devices? Wipe data and start fresh
+                    {{.t.device_approval_recover}}
                 </button>
             </div>
             <span id="device-approval-count" style="display:none;"></span>
             <div class="tos-modal-actions">
-                <button id="device-approval-decline" class="btn btn-secondary btn-large">Decline</button>
-                <button id="device-approval-approve" class="btn btn-accent btn-large">Approve</button>
+                <button id="device-approval-decline" class="btn btn-secondary btn-large">{{.t.device_approval_decline}}</button>
+                <button id="device-approval-approve" class="btn btn-accent btn-large">{{.t.device_approval_approve}}</button>
             </div>
         </div>
     </div>
@@ -61,26 +61,27 @@
     <div class="header-wrapper">
         <header class="header">
             <div class="header-left">
-                <a href="/" class="logo-text">ShareIt</a>
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
                 <nav class="quicklinks">
-                    <a href="/limits">Pricing</a>
-                    <a href="/data-encryption">Security</a>
-                    <a href="/help">FAQ</a>
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
             {{if .authenticated}}
-            <button class="recent-files-link">Recent files</button>
+            <button class="recent-files-link">{{.t.header_recent_files}}</button>
             {{end}}
             {{if .authenticated}}
             <div class="login-btn" style="background:#333;position:relative;display:inline-flex;align-items:center;gap:6px;cursor:pointer;" onclick="event.stopPropagation();this.classList.toggle('active')">
                 {{.username}}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 <div class="user-dropdown">
-                    <a href="/auth/logout" onclick="event.stopPropagation()">Logout</a>
+                    <a href="/auth/logout" onclick="event.stopPropagation()">{{.t.header_logout}}</a>
                 </div>
             </div>
             {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
             {{end}}
         </header>
     </div>
@@ -88,20 +89,20 @@
     <div class="main-content">
 
         <div class="hero-section">
-            <h1 class="hero-title">Get files moving with <span class="hero-highlight">ShareIt.</span></h1>
-            <p class="hero-subtitle">Send files to people or devices, fast and easy without annoying limits.</p>
+            <h1 class="hero-title">{{.t.hero_title}} <span class="hero-highlight">ShareIt.</span></h1>
+            <p class="hero-subtitle">{{.t.hero_subtitle}}</p>
         </div>
 
         <div class="action-cards">
             <a href="/link" class="action-card">
-                <h2 class="card-title">Send a file</h2>
-                <p class="card-desc">Upload a file, get a Link and share it with anyone.</p>
-                <span class="card-btn card-btn-primary">Share a file</span>
+                <h2 class="card-title">{{.t.card_send_title}}</h2>
+                <p class="card-desc">{{.t.card_send_desc}}</p>
+                <span class="card-btn card-btn-primary">{{.t.card_send_btn}}</span>
             </a>
             <a href="/quickshare" class="action-card">
-                <h2 class="card-title">Quickly Share now</h2>
-                <p class="card-desc">Share multiple files with a Group in real time. Like a shared folder, everyone can send and receive freely</p>
-                <span class="card-btn card-btn-outline">Share with a Group</span>
+                <h2 class="card-title">{{.t.card_quickshare_title}}</h2>
+                <p class="card-desc">{{.t.card_quickshare_desc}}</p>
+                <span class="card-btn card-btn-outline">{{.t.card_quickshare_btn}}</span>
             </a>
         </div>
 
@@ -127,18 +128,18 @@
     </div>
 
     <footer class="footer">
-        <a href="/tos">Terms of Service</a>
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/limits">Limits</a>
-        <a href="/data-encryption">Data Encryption</a>
-        <a href="/help">Help</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
     </footer>
 
     <div id="recent-files-overlay" class="recent-files-overlay hidden">
         <div class="recent-files-popup">
             <div class="popup-header">
-                <h2>Uploaded files</h2>
-                <button class="popup-close" aria-label="Close">
+                <h2>{{.t.recent_files_title}}</h2>
+                <button class="popup-close" aria-label="{{.t.recent_files_close}}">
                     <i data-lucide="x"></i>
                 </button>
             </div>
@@ -148,11 +149,11 @@
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
-            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Confirm action</h2>
+            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.action_modal_title}}</h2>
             <p id="action-modal-description" class="tos-modal-description" style="margin-bottom:28px;"></p>
             <div class="tos-modal-actions">
-                <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
-                <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>
+                <button id="action-modal-cancel" class="btn btn-secondary btn-large">{{.t.action_modal_cancel}}</button>
+                <button id="action-modal-confirm" class="btn btn-accent btn-large">{{.t.action_modal_continue}}</button>
             </div>
         </div>
     </div>

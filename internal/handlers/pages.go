@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"shareit/internal/config"
+	"shareit/internal/i18n"
 	"shareit/internal/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -15,12 +16,32 @@ import (
 
 type PageHandler struct {
 	cfg *config.Config
+	tr  *i18n.Translator
 }
 
-func NewPageHandler(cfg *config.Config) *PageHandler {
+func NewPageHandler(cfg *config.Config, tr *i18n.Translator) *PageHandler {
 	return &PageHandler{
 		cfg: cfg,
+		tr:  tr,
 	}
+}
+
+func (h *PageHandler) render(c *gin.Context, templateName string, data gin.H) {
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	if data == nil {
+		data = gin.H{}
+	}
+	data["t"] = translations
+	data["locale"] = locale
+	if locale == "de" {
+		data["otherLocale"] = "en"
+		data["otherLocaleLabel"] = translations["lang_en"]
+	} else {
+		data["otherLocale"] = "de"
+		data["otherLocaleLabel"] = translations["lang_de"]
+	}
+	c.HTML(http.StatusOK, templateName, data)
 }
 
 func setCSRFTokenCookie(c *gin.Context) {
@@ -60,8 +81,10 @@ func (h *PageHandler) Index(c *gin.Context) {
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	c.HTML(http.StatusOK, "index.html", gin.H{
-		"title":            "ShareIt ◈ Simply File Sharing",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "index.html", gin.H{
+		"title":            translations["title_index"],
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -86,8 +109,10 @@ func (h *PageHandler) ToS(c *gin.Context) {
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
 	}
-	c.HTML(http.StatusOK, "tos.html", gin.H{
-		"title":         "Terms of Service ➤ ShareIt",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "tos.html", gin.H{
+		"title":         translations["title_tos"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -107,8 +132,10 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
 	}
-	c.HTML(http.StatusOK, "privacy.html", gin.H{
-		"title":         "Privacy Policy ➤ ShareIt",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "privacy.html", gin.H{
+		"title":         translations["title_privacy"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -128,8 +155,10 @@ func (h *PageHandler) LimitsPage(c *gin.Context) {
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
 	}
-	c.HTML(http.StatusOK, "limits.html", gin.H{
-		"title":         "Limits ➤ ShareIt",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "limits.html", gin.H{
+		"title":         translations["title_limits"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -149,8 +178,10 @@ func (h *PageHandler) DataEncryption(c *gin.Context) {
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
 	}
-	c.HTML(http.StatusOK, "data-encryption.html", gin.H{
-		"title":         "Data Encryption ➤ ShareIt",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "data-encryption.html", gin.H{
+		"title":         translations["title_encryption"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -170,20 +201,14 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
 	}
-	c.HTML(http.StatusOK, "help.html", gin.H{
-		"title":         "Help ➤ ShareIt",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "help.html", gin.H{
+		"title":         translations["title_help"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
-	})
-}
-
-func (h *PageHandler) SharedLookup(c *gin.Context) {
-	setCSRFTokenCookie(c)
-	c.HTML(http.StatusOK, "shared_lookup.html", gin.H{
-		"title":   "Sent File ➤ ShareIt",
-		"baseURL": h.cfg.BaseURL,
 	})
 }
 
@@ -214,8 +239,10 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	c.HTML(http.StatusOK, "quickshare.html", gin.H{
-		"title":            "ShareIt ➤ Quick Share",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "quickshare.html", gin.H{
+		"title":            translations["title_quickshare"],
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -255,8 +282,10 @@ func (h *PageHandler) Link(c *gin.Context) {
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	c.HTML(http.StatusOK, "link.html", gin.H{
-		"title":            "ShareIt ➤ Link Share",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "link.html", gin.H{
+		"title":            translations["title_link"],
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -283,17 +312,18 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 		authLoginURL = "/auth/login"
 	}
 	configData := map[string]interface{}{
-		"baseURL":     h.cfg.BaseURL,
-		"fileID":      fileID,
-		"tosVersion":  h.cfg.TOSVersion,
+		"baseURL":    h.cfg.BaseURL,
+		"fileID":     fileID,
+		"tosVersion": h.cfg.TOSVersion,
 	}
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-
-	c.HTML(http.StatusOK, "shared.html", gin.H{
-		"title":        "Download File ➤ ShareIt",
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "shared.html", gin.H{
+		"title":        translations["title_shared"],
 		"baseURL":      h.cfg.BaseURL,
 		"fileID":       fileID,
 		"authenticated": authenticated,

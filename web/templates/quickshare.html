@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.locale}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,20 +14,20 @@
 
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
-            <h2 id="tos-modal-title">Accept to continue</h2>
+            <h2 id="tos-modal-title">{{.t.tos_accept_title}}</h2>
             <p id="tos-modal-description" class="tos-modal-description">
-                Please review and accept our <a href="/tos" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> to use our Service
+                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use}}
             </p>
             <div class="tos-modal-actions">
-                <button id="tos-decline-btn" class="btn btn-secondary btn-large">Decline</button>
-                <button id="tos-accept-btn" class="btn btn-accent btn-large">Accept</button>
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">{{.t.tos_accept}}</button>
             </div>
         </div>
     </div>
 
     <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
-        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">Log in</a> to unlock extended tunnel durations.</span>
-        <button id="auth-nudge-close" aria-label="Close" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
+        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">{{.t.auth_nudge_login}}</a> {{.t.auth_nudge_quickshare}}</span>
+        <button id="auth-nudge-close" aria-label="{{.t.auth_nudge_close_label}}" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
             <i data-lucide="x" style="width:14px;height:14px;"></i>
         </button>
     </div>
@@ -40,11 +40,12 @@
     <div class="header-wrapper">
         <header class="header">
             <div class="header-left">
-                <a href="/" class="logo-text">ShareIt</a>
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
                 <nav class="quicklinks">
-                    <a href="/limits">Pricing</a>
-                    <a href="/data-encryption">Security</a>
-                    <a href="/help">FAQ</a>
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
             {{if .authenticated}}
@@ -52,11 +53,11 @@
                 {{.username}}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 <div class="user-dropdown">
-                    <a href="/auth/logout" onclick="event.stopPropagation()">Logout</a>
+                    <a href="/auth/logout" onclick="event.stopPropagation()">{{.t.header_logout}}</a>
                 </div>
             </div>
             {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
             {{end}}
         </header>
     </div>
@@ -72,7 +73,7 @@
                         <line x1="5" y1="12" x2="19" y2="12"/>
                     </svg>
                 </button>
-                <span class="action-label">Create</span>
+                <span class="action-label">{{.t.quickshare_create}}</span>
             </div>
 
             <div class="action-btn-group">
@@ -83,13 +84,13 @@
                         <path d="M20 2 4 18"/>
                     </svg>
                 </button>
-                <span class="action-label">Join</span>
+                <span class="action-label">{{.t.quickshare_join}}</span>
             </div>
         </div>
 
         <div class="create-view" id="createView">
-            <h1>Invite others</h1>
-            <p class="subtitle">Share this code with the people you want to share files with. Once they join, they'll show up here.</p>
+            <h1>{{.t.quickshare_invite_title}}</h1>
+            <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
 
             <div class="code-squares" id="codeSquares">
                 <div class="code-square" id="code0">–</div>
@@ -98,7 +99,7 @@
                 <div class="code-square" id="code3">–</div>
             </div>
 
-            <h2 class="people-heading">People</h2>
+            <h2 class="people-heading">{{.t.quickshare_people}}</h2>
 
             <div class="people-row" id="peopleRow">
                 <div class="person">
@@ -109,38 +110,38 @@
                             <circle cx="12" cy="7" r="4"/>
                         </svg>
                     </div>
-                    <span class="person-name">You</span>
+                    <span class="person-name">{{.t.quickshare_you}}</span>
                 </div>
             </div>
         </div>
 
         <div class="bottom-bar" id="bottomBar" style="display:none;">
-            <button class="start-btn" id="startBtn">Start</button>
+            <button class="start-btn" id="startBtn">{{.t.quickshare_start}}</button>
         </div>
 
         <div class="session-view" id="sessionView">
             <div class="session-left">
-                <h2>Shared files in this session</h2>
+                <h2>{{.t.quickshare_session_title}}</h2>
                 <div class="file-list" id="fileList"></div>
-                <div id="fileListEmpty" class="recent-state">No files in this session yet.</div>
+                <div id="fileListEmpty" class="recent-state">{{.t.quickshare_no_files}}</div>
             </div>
 
             <div class="session-right">
                 <div class="drop-zone" id="dropZone">
-                    <span class="drop-zone-main-text" id="dropMainText">Place files here</span>
+                    <span class="drop-zone-main-text" id="dropMainText">{{.t.quickshare_drop_text}}</span>
                     <span class="drop-zone-sub-text" id="dropSubText"></span>
                     <input type="file" id="fileInput" multiple>
                 </div>
                 <div class="session-bottom-row">
                     <span class="connected-text" id="connectedText"></span>
-                    <button class="blue-btn" id="leaveBtn">Leave</button>
+                    <button class="blue-btn" id="leaveBtn">{{.t.quickshare_leave}}</button>
                 </div>
             </div>
         </div>
 
         <div class="join-view" id="joinView">
-            <h1>Join</h1>
-            <p class="subtitle">Enter the Room Code to join a Quick Share</p>
+            <h1>{{.t.quickshare_join_title}}</h1>
+            <p class="subtitle">{{.t.quickshare_join_desc}}</p>
 
             <div class="join-code-squares" id="joinCodeSquares">
                 <input type="text" inputmode="numeric" pattern="[0-9]*" maxlength="4" id="joinCodeHiddenInput" class="join-code-hidden-input" autocomplete="one-time-code" value="">
@@ -152,12 +153,12 @@
         </div>
 
         <div class="join-bottom-bar" id="joinBottomBar" style="display:none;">
-            <button class="blue-btn disabled" id="joinSubmitBtn" disabled>Join</button>
+            <button class="blue-btn disabled" id="joinSubmitBtn" disabled>{{.t.quickshare_join_submit}}</button>
         </div>
 
         <div class="queue-view" id="queueView">
-            <h1>Invite others</h1>
-            <p class="subtitle">Share this code with the people you want to share files with. Once they join, they'll show up here.</p>
+            <h1>{{.t.quickshare_invite_title}}</h1>
+            <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
 
             <div class="code-squares" id="queueCodeSquares">
                 <div class="code-square" id="queueCode0">–</div>
@@ -166,9 +167,9 @@
                 <div class="code-square" id="queueCode3">–</div>
             </div>
 
-            <h2 class="people-heading">People</h2>
+            <h2 class="people-heading">{{.t.quickshare_people}}</h2>
 
-            <div class="people-row" id="queuePeopleRow">
+            <div class="people-row" id="queue{{.t.quickshare_people}}Row">
                 <div class="person">
                     <div class="person-circle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
@@ -177,7 +178,7 @@
                             <circle cx="12" cy="7" r="4"/>
                         </svg>
                     </div>
-                    <span class="person-name">You</span>
+                    <span class="person-name">{{.t.quickshare_you}}</span>
                 </div>
             </div>
         </div>
@@ -185,20 +186,20 @@
     </div>
 
     <footer class="footer">
-        <a href="/tos">Terms of Service</a>
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/limits">Limits</a>
-        <a href="/data-encryption">Data Encryption</a>
-        <a href="/help">Help</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
     </footer>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
-            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">Confirm action</h2>
+            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.action_modal_title}}</h2>
             <p id="action-modal-description" class="tos-modal-description" style="margin-bottom:28px;"></p>
             <div class="tos-modal-actions">
-                <button id="action-modal-cancel" class="btn btn-secondary btn-large">Cancel</button>
-                <button id="action-modal-confirm" class="btn btn-accent btn-large">Continue</button>
+                <button id="action-modal-cancel" class="btn btn-secondary btn-large">{{.t.action_modal_cancel}}</button>
+                <button id="action-modal-confirm" class="btn btn-accent btn-large">{{.t.action_modal_continue}}</button>
             </div>
         </div>
     </div>

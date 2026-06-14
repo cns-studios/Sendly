@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.locale}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,14 +14,14 @@
 
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
-            <p class="tos-modal-kicker">Hold up, not so fast</p>
-            <h2 id="tos-modal-title">Terms of Service Approval Required</h2>
+            <p class="tos-modal-kicker">{{.t.tos_modal_kicker}}</p>
+            <h2 id="tos-modal-title">{{.t.tos_modal_title}}</h2>
             <p id="tos-modal-description" class="tos-modal-description">
-                Please review and accept our <a href="/tos" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a> to use ShareIt.
+                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use_shareit}}
             </p>
             <div class="tos-modal-actions">
-                <button id="tos-decline-btn" class="btn btn-secondary btn-large">Decline</button>
-                <button id="tos-accept-btn" class="btn btn-accent btn-large">Accept</button>
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">{{.t.tos_accept}}</button>
             </div>
         </div>
     </div>
@@ -34,11 +34,12 @@
     <div class="header-wrapper">
         <header class="header">
             <div class="header-left">
-                <a href="/" class="logo-text">ShareIt</a>
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
                 <nav class="quicklinks">
-                    <a href="/pricing">Pricing</a>
-                    <a href="/data-encryption">Security</a>
-                    <a href="/help">FAQ</a>
+                    <a href="/pricing">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
             {{if .authenticated}}
@@ -46,11 +47,11 @@
                 {{.username}}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 <div class="user-dropdown">
-                    <a href="/auth/logout" onclick="event.stopPropagation()">Logout</a>
+                    <a href="/auth/logout" onclick="event.stopPropagation()">{{.t.header_logout}}</a>
                 </div>
             </div>
             {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
             {{end}}
         </header>
     </div>
@@ -61,12 +62,12 @@
             <div id="loading-section">
                 <div class="loading-box">
                     <div class="spinner"></div>
-                    <p>Loading file information...</p>
+                    <p>{{.t.shared_loading}}</p>
                 </div>
             </div>
 
             <div id="password-section" class="hidden">
-                <p class="shared-heading">You got sent a file</p>
+                <p class="shared-heading">{{.t.shared_heading}}</p>
 
                 <div class="file-info-box">
                     <p class="file-name-text" id="file-name"></p>
@@ -75,20 +76,20 @@
                         <span id="file-expires" style="display:none"></span>
                     </p>
                     <div id="auto-decrypt-section" class="hidden">
-                        <button id="download-auto-btn" class="download-btn">Download</button>
+                        <button id="download-auto-btn" class="download-btn">{{.t.shared_download}}</button>
                     </div>
                     <div id="no-password-section" class="hidden">
-                        <div class="no-password-btn">Wrong Link. Please check if you copied it correctly and try again.</div>
+                        <div class="no-password-btn">{{.t.shared_wrong_link}}</div>
                     </div>
                 </div>
 
-                <p class="warning-text">Files could contain harmful or illegal content.</p>
-                <button id="report-btn" class="report-link">Report file</button>
+                <p class="warning-text">{{.t.shared_warning}}</p>
+                <button id="report-btn" class="report-link">{{.t.shared_report}}</button>
             </div>
 
             <div id="progress-section" class="hidden">
                 <div class="downloading-box">
-                    <p id="progress-title" class="downloading-title">Downloading...</p>
+                    <p id="progress-title" class="downloading-title">{{.t.shared_downloading}}</p>
                     <div id="progress-icon"></div>
                     <p id="progress-text" class="downloading-percent">0%</p>
                 </div>
@@ -102,13 +103,13 @@
 
             <div id="report-modal" class="tos-overlay hidden" aria-hidden="true">
                 <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="report-modal-title" aria-describedby="report-modal-description">
-                    <h2 id="report-modal-title">Report File</h2>
+                    <h2 id="report-modal-title">{{.t.shared_report_title}}</h2>
                     <p id="report-modal-description" class="tos-modal-description">
-                        Are you sure you want to report this file for violating our terms of service?
+                        {{.t.shared_report_desc}}
                     </p>
                     <div class="tos-modal-actions">
-                        <button id="report-cancel" class="btn btn-secondary btn-large">Cancel</button>
-                        <button id="report-confirm" class="btn btn-accent btn-large">Report</button>
+                        <button id="report-cancel" class="btn btn-secondary btn-large">{{.t.shared_report_cancel}}</button>
+                        <button id="report-confirm" class="btn btn-accent btn-large">{{.t.shared_report_confirm}}</button>
                     </div>
                 </div>
             </div>
@@ -117,11 +118,11 @@
     </div>
 
     <footer class="footer page-shared-footer">
-        <a href="/limits">Limits</a>
-        <a href="/tos">Terms of Service</a>
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/data-encryption">Data Encryption</a>
-        <a href="/help">Help</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
     </footer>
 
     <script>

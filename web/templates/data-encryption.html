@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.locale}}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,11 +14,12 @@
     <div class="header-wrapper">
         <header class="header">
             <div class="header-left">
-                <a href="/" class="logo-text">ShareIt</a>
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
                 <nav class="quicklinks">
-                    <a href="/limits">Pricing</a>
-                    <a href="/data-encryption">Security</a>
-                    <a href="/help">FAQ</a>
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
             {{if .authenticated}}
@@ -26,11 +27,11 @@
                 {{.username}}
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                 <div class="user-dropdown">
-                    <a href="/auth/logout" onclick="event.stopPropagation()">Logout</a>
+                    <a href="/auth/logout" onclick="event.stopPropagation()">{{.t.header_logout}}</a>
                 </div>
             </div>
             {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">Login</a>
+            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
             {{end}}
         </header>
     </div>
@@ -77,11 +78,11 @@
         </main>
 
     <footer class="footer">
-        <a href="/tos">Terms of Service</a>
-        <a href="/privacy">Privacy Policy</a>
-        <a href="/limits">Limits</a>
-        <a href="/data-encryption">Data Encryption</a>
-        <a href="/help">Help</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
     </footer>
     <script>
         document.addEventListener('click',function(){document.querySelectorAll('.login-btn.active').forEach(function(e){e.classList.remove('active')})});
