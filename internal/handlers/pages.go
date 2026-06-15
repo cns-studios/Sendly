@@ -77,12 +77,14 @@ func (h *PageHandler) Index(c *gin.Context) {
 		"allowedDurations": tier.AllowedDurations,
 		"tosVersion":       h.cfg.TOSVersion,
 	}
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	configData["t"] = translations
+	configData["parallelChunkUploads"] = 6
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	locale := middleware.GetLocale(c)
-	translations := h.tr.Get(locale)
 	h.render(c, "index.html", gin.H{
 		"title":            translations["title_index"],
 		"baseURL":          h.cfg.BaseURL,
@@ -235,11 +237,13 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 		"allowedDurations": tier.AllowedDurations,
 		"tosVersion":       h.cfg.TOSVersion,
 	}
+	locale := middleware.GetLocale(c)
+	configData["t"] = h.tr.Get(locale)
+	configData["parallelChunkUploads"] = 6
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
 	h.render(c, "quickshare.html", gin.H{
 		"title":            translations["title_quickshare"],
@@ -278,11 +282,13 @@ func (h *PageHandler) Link(c *gin.Context) {
 		"allowedDurations": tier.AllowedDurations,
 		"tosVersion":       h.cfg.TOSVersion,
 	}
+	locale := middleware.GetLocale(c)
+	configData["t"] = h.tr.Get(locale)
+	configData["parallelChunkUploads"] = 6
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
 	h.render(c, "link.html", gin.H{
 		"title":            translations["title_link"],
@@ -316,11 +322,13 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 		"fileID":     fileID,
 		"tosVersion": h.cfg.TOSVersion,
 	}
+	locale := middleware.GetLocale(c)
+	configData["t"] = h.tr.Get(locale)
+	configData["parallelChunkUploads"] = 6
 	configJSON, err := json.Marshal(configData)
 	if err != nil {
 		configJSON = []byte("{}")
 	}
-	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
 	h.render(c, "shared.html", gin.H{
 		"title":        translations["title_shared"],

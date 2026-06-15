@@ -1,6 +1,9 @@
 (function() {
     'use strict';
 
+    const t = (k, d) => window.CONFIG?.t?.[k] || d || k;
+    const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
+
     const CHUNK_SIZE = 5 * 1024 * 1024;
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
@@ -123,6 +126,14 @@
         });
     }
 
+    function randomUUID() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
     function getOrCreateGuestDeviceId() {
         if (myDeviceId && !AUTHENTICATED) return myDeviceId;
         const stored = localStorage.getItem('shareit_guest_device_id');
@@ -130,7 +141,7 @@
             if (!AUTHENTICATED) myDeviceId = stored;
             return stored;
         }
-        const created = crypto.randomUUID();
+        const created = randomUUID();
         localStorage.setItem('shareit_guest_device_id', created);
         if (!AUTHENTICATED) myDeviceId = created;
         return created;
@@ -221,7 +232,7 @@
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     device_id: authDeviceIdentity.deviceId,
-                    device_label: `${CNS_USERNAME || 'ShareIt User'} device`,
+                    device_label: `${CNS_USERNAME || t('user_default')} device`,
                     public_key_jwk: authDeviceIdentity.publicKeyJWK,
                     key_algorithm: authDeviceIdentity.keyAlgorithm,
                     key_version: authDeviceIdentity.keyVersion,
@@ -232,7 +243,7 @@
 
             const payload = await response.json();
             if (payload.needs_enrollment) {
-                showErrorBanner('Approve this device from a trusted device before using Quick Share.');
+                showErrorBanner(t('toast_device_quickshare_approve'));
                 return false;
             }
 
@@ -248,6 +259,7 @@
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
+            showErrorBanner(t('toast_device_prepare_failed'));
             return false;
         }
     }
@@ -275,18 +287,18 @@
 
     function getParticipantName(participant) {
         const userID = extractUserID(participant);
-        if (userID) return 'User';
+        if (userID) return t('user_default');
 
         const deviceID = extractDeviceID(participant);
         if (deviceID) {
             if (!guestNameMap.has(deviceID)) {
                 guestCounter++;
-                guestNameMap.set(deviceID, `Guest ${guestCounter}`);
+                guestNameMap.set(deviceID, `${t('guest_prefix')}${guestCounter}`);
             }
             return guestNameMap.get(deviceID);
         }
 
-        return 'Guest';
+        return t('guest_default');
     }
 
     function renderParticipants(items) {
@@ -301,7 +313,7 @@
         if (allParticipants.length === 0) {
             const empty = document.createElement('div');
             empty.className = 'recent-state';
-            empty.textContent = 'Nobody joined yet';
+            empty.textContent = t('nobody_joined');
             empty.style.color = '#888';
             empty.style.fontSize = '0.85rem';
             empty.style.textAlign = 'center';
@@ -318,14 +330,14 @@
                             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                         </svg>
                     </div>
-                    <span class="person-name">${getParticipantName(p)}${isSelf ? ' (you)' : ''}</span>
+                    <span class="person-name">${getParticipantName(p)}${isSelf ? t('label_you') : ''}</span>
                 `;
                 container.appendChild(person);
             });
         }
 
         if (connectedText) {
-            connectedText.textContent = `${allParticipants.length} connected`;
+            connectedText.textContent = `${allParticipants.length}${t('label_connected')}`;
         }
     }
 
@@ -354,7 +366,7 @@
                     <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)}</span>
                 </div>
                 <div class="file-entry-right">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-download-btn" title="Download">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-download-btn" title="${t('label_download')}">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                 </div>
@@ -487,7 +499,7 @@
         try {
             const password = await resolveSessionPassword(fileId);
             if (!password) {
-                showErrorBanner('No decryption key available yet. Try again in a moment.');
+                showErrorBanner(t('quickshare_no_decryption_key'));
                 return;
             }
 
@@ -538,7 +550,7 @@
             await new Promise((resolve) => setTimeout(resolve, 600));
         } catch (error) {
             console.error('Tunnel file download failed:', error);
-            showErrorBanner('Download failed: ' + error.message);
+            showErrorBanner(tpl('quickshare_download_failed', {msg: error.message}));
         } finally {
             isDownloadingFile = false;
             if (progressFill && progressFill.parentNode) {
@@ -589,17 +601,24 @@
     }
 
     async function handleCreateTunnel() {
-        if (AUTHENTICATED) {
-            const ready = await ensureDeviceReady();
-            if (!ready) return;
-            myDeviceId = authDeviceIdentity.deviceId;
-        } else {
-            myDeviceId = getOrCreateGuestDeviceId();
-        }
-
-        await ensureEphemeralKeyPair();
+        createBtn.disabled = true;
+        createBtn.style.opacity = '0.5';
 
         try {
+            if (AUTHENTICATED) {
+                const ready = await ensureDeviceReady();
+                if (!ready) {
+                    createBtn.disabled = false;
+                    createBtn.style.opacity = '';
+                    return;
+                }
+                myDeviceId = authDeviceIdentity.deviceId;
+            } else {
+                myDeviceId = getOrCreateGuestDeviceId();
+            }
+
+            await ensureEphemeralKeyPair();
+
             const response = await fetch('/api/me/tunnels/start', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
@@ -629,8 +648,11 @@
             startTunnelPolling();
         } catch (error) {
             console.error('Create tunnel failed:', error);
-            showErrorBanner('Failed to create tunnel: ' + error.message);
+            showErrorBanner(tpl('quickshare_create_failed', {msg: error.message}));
         }
+
+        createBtn.disabled = false;
+        createBtn.style.opacity = '';
     }
 
     async function handleJoinTunnel() {
@@ -679,7 +701,7 @@
             startTunnelPolling();
         } catch (error) {
             console.error('Join tunnel failed:', error);
-            showErrorBanner('Failed to join tunnel: ' + error.message);
+            showErrorBanner(tpl('quickshare_join_failed', {msg: error.message}));
             joinCodeInput = '';
             setCodeDisplay(joinCodeSquares, '');
             if (joinCodeHiddenInput) joinCodeHiddenInput.value = '';
@@ -718,7 +740,7 @@
             await refreshTunnelState();
         } catch (error) {
             console.error('Start tunnel failed:', error);
-            showErrorBanner('Failed to start session: ' + error.message);
+            showErrorBanner(tpl('quickshare_start_failed', {msg: error.message}));
         }
     }
 
@@ -737,7 +759,7 @@
             if (response.ok) {
                 const data = await response.json();
                 if (data.tunnel_ended) {
-                    showErrorBanner('Session ended — you were the last one here.');
+                    showErrorBanner(t('quickshare_last_here'));
                 }
             }
         } catch (error) {
@@ -759,7 +781,7 @@
             if (!response.ok) {
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState(activeTunnel?.id);
-                    showErrorBanner('Quick share has ended.');
+                    showErrorBanner(t('quickshare_ended'));
                     setView('initial');
                     return;
                 }
@@ -839,17 +861,17 @@
         if (isUploading || !activeTunnel?.id) return;
 
         if (file.size > TUNNEL_MAX_FILE_SIZE) {
-            showErrorBanner(`File too large. Maximum: ${SecureCrypto.formatFileSize(TUNNEL_MAX_FILE_SIZE)}`);
+            showErrorBanner(tpl('quickshare_file_too_large', {size: SecureCrypto.formatFileSize(TUNNEL_MAX_FILE_SIZE)}));
             return;
         }
 
         if (file.size === 0) {
-            showErrorBanner('Cannot upload empty file.');
+            showErrorBanner(t('quickshare_cannot_upload_empty'));
             return;
         }
 
         isUploading = true;
-        dropMainText.textContent = 'Uploading...';
+        dropMainText.textContent = t('status_uploading');
         dropSubText.textContent = file.name;
 
         try {
@@ -860,7 +882,7 @@
             }
 
             if (!isHost && !sessionPassword) {
-                dropSubText.textContent = 'Waiting for encryption key...';
+                dropSubText.textContent = t('state_waiting_key');
                 for (let attempt = 0; attempt < 10; attempt++) {
                     const resolved = await resolveSessionPassword(null);
                     if (resolved) break;
@@ -894,15 +916,14 @@
 
             dropSubText.textContent = file.name;
 
-            const encryptedBlob = await SecureCrypto.encryptFile(file, password, () => {});
-            const totalChunks = Math.ceil(encryptedBlob.size / CHUNK_SIZE);
+            const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
             const initRes = await fetch('/api/upload/init', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
                     file_name: file.name,
-                    file_size: encryptedBlob.size,
+                    file_size: file.size,
                     total_chunks: totalChunks,
                     chunk_size: CHUNK_SIZE,
                     tunnel_id: activeTunnel.id
@@ -917,31 +938,23 @@
             const initData = await initRes.json();
             const sessionId = initData.session_id;
 
-            const concurrency = Math.max(1, Math.min(PARALLEL_CHUNK_UPLOADS, totalChunks));
-            let nextChunkIndex = 0;
             let uploadedChunks = 0;
 
-            const worker = async () => {
-                while (true) {
-                    const chunkIndex = nextChunkIndex++;
-                    if (chunkIndex >= totalChunks) return;
-
-                    const start = chunkIndex * CHUNK_SIZE;
-                    const end = Math.min(start + CHUNK_SIZE, encryptedBlob.size);
-                    const chunk = encryptedBlob.slice(start, end);
-
+            await SecureCrypto.encryptFileChunked(
+                file,
+                password,
+                CHUNK_SIZE,
+                async (chunkIndex, chunkData) => {
                     let lastError = null;
-
                     for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
                         if (attempt > 0) {
                             await new Promise(r => setTimeout(r, 2000 * attempt));
                         }
-
                         try {
                             const formData = new FormData();
                             formData.append('session_id', sessionId);
                             formData.append('chunk_index', chunkIndex.toString());
-                            formData.append('chunk', chunk);
+                            formData.append('chunk', new Blob([chunkData]));
 
                             const res = await fetch('/api/upload/chunk', {
                                 method: 'POST',
@@ -975,12 +988,10 @@
                             lastError = error;
                         }
                     }
-
                     if (lastError) throw lastError;
-                }
-            };
-
-            await Promise.all(Array.from({ length: concurrency }, () => worker()));
+                },
+                { concurrency: PARALLEL_CHUNK_UPLOADS }
+            );
 
             await fetch('/api/upload/complete', {
                 method: 'POST',
@@ -1022,14 +1033,14 @@
                 SecureCrypto.cacheFileKey(finalizeData.file_id, password);
             }
 
-            dropMainText.textContent = 'Place files here';
+            dropMainText.textContent = t('quickshare_place_files');
             dropSubText.textContent = '';
             isUploading = false;
             await refreshTunnelState();
         } catch (error) {
             console.error('Tunnel file upload failed:', error);
-            showErrorBanner('Upload failed: ' + error.message);
-            dropMainText.textContent = 'Place files here';
+            showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
+            dropMainText.textContent = t('quickshare_place_files');
             dropSubText.textContent = '';
             isUploading = false;
         }

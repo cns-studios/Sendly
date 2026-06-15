@@ -1,6 +1,9 @@
 (function() {
     'use strict';
 
+    const t = (k, d) => window.CONFIG?.t?.[k] || d || k;
+    const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
+
      
     const CHUNK_SIZE = 5 * 1024 * 1024;  
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
@@ -20,7 +23,6 @@
     let uploadedChunks = 0;
 
     let selectedFile = null;
-    let encryptedBlob = null;
     let generatedPassword = null;
     let uploadSessionId = null;
     let pendingExpiresAt = null;
@@ -128,7 +130,7 @@
     let isDeviceUntrusted = false;
     const recentFileStates = new Map();
     const activeDownloads = new Set();
-    const LOCKED_FILE_INFO = 'This file was encrypted on a different trusted device. Because recovery happened after this files was uploaded, this client cannot unlock that older file key. Please re-upload this file again. To avoid this in the future, approve new devices from already trusted devices (this is a trusted device) so you can keep access to all your files across devices.';
+    const LOCKED_FILE_INFO = t('device_connect_locked_info');
     let actionModalResolver = null;
 
     function getCookieValue(name) {
@@ -270,7 +272,7 @@
                         },
                         request_device: {
                             id: authDeviceIdentity.deviceId,
-                            device_label: `${CNS_USERNAME || 'ShareIt User'} device`,
+                            device_label: `${CNS_USERNAME || t('user_default')} device`,
                             public_key_jwk: authDeviceIdentity.publicKeyJWK,
                             key_algorithm: authDeviceIdentity.keyAlgorithm,
                             key_version: authDeviceIdentity.keyVersion
@@ -279,7 +281,7 @@
                     return false;
                 }
 
-                showRecoveryBanner('Approve this browser from a trusted device before decrypting or finalizing authenticated uploads.');
+                showRecoveryBanner(t('toast_approval_connect'));
                 return false;
             }
 
@@ -288,7 +290,7 @@
             return true;
         } catch (error) {
             console.error('Failed to initialize authenticated device state:', error);
-            showErrorBanner('Authenticated key setup failed. Recent uploads may be unavailable on this device.');
+            showErrorBanner(t('toast_approval_key_setup_failed'));
             return false;
         }
     }
@@ -322,7 +324,7 @@
             },
             body: JSON.stringify({
                 device_id: authDeviceIdentity.deviceId,
-                device_label: `${CNS_USERNAME || 'ShareIt User'} device`,
+                device_label: `${CNS_USERNAME || t('user_default')} device`,
                 public_key_jwk: authDeviceIdentity.publicKeyJWK,
                 key_algorithm: authDeviceIdentity.keyAlgorithm,
                 key_version: authDeviceIdentity.keyVersion,
@@ -486,17 +488,17 @@
         const keyAlgorithm = device.key_algorithm || 'unknown';
         const requestedAt = enrollment.created_at ? formatUploadDate(enrollment.created_at) : 'just now';
 
-        deviceApprovalTitle.textContent = 'Connect new device';
-        deviceApprovalMessage.textContent = 'A new device wants to view your files. If you did not ask for this, decline and change your CNS password.';
+        deviceApprovalTitle.textContent = t('device_connect_title');
+        deviceApprovalMessage.textContent = t('device_connect_message');
         deviceApprovalMeta.innerHTML = [
-            `<span>Device: ${escapeHtml(deviceName)}</span>`,
-            `<span>Device ID: ${escapeHtml(deviceId)}</span>`,
-            `<span>Key: ${escapeHtml(keyAlgorithm)}</span>`,
-            `<span>Requested: ${escapeHtml(requestedAt)}</span>`
+            `<span>${t('device_connect_device')}${escapeHtml(deviceName)}</span>`,
+            `<span>${t('device_connect_device_id')}${escapeHtml(deviceId)}</span>`,
+            `<span>${t('device_connect_key')}${escapeHtml(keyAlgorithm)}</span>`,
+            `<span>${t('device_connect_requested')}${escapeHtml(requestedAt)}</span>`
         ].join('');
 
         if (deviceApprovalCount) {
-            deviceApprovalCount.textContent = count > 1 ? `${count} pending` : '1 pending';
+            deviceApprovalCount.textContent = count > 1 ? `${count}${t('device_connect_count')}` : t('device_connect_one');
         }
 
         if (deviceApprovalWaiting) {
@@ -529,16 +531,16 @@
         const deviceId = device.id || enrollment.request_device_id || 'unknown';
         const requestedAt = enrollment.created_at ? formatUploadDate(enrollment.created_at) : 'just now';
 
-        deviceApprovalTitle.textContent = 'Approval required';
-        deviceApprovalMessage.textContent = 'Keep this tab open. Approve this Browser from another logged-in device. If you lost all trusted devices, you can wipe all uploaded files and start fresh here';
+        deviceApprovalTitle.textContent = t('device_pending_title');
+        deviceApprovalMessage.textContent = t('device_pending_message');
         deviceApprovalMeta.innerHTML = [
-            `<span>Device: ${escapeHtml(deviceName)}</span>`,
-            `<span>Device ID: ${escapeHtml(deviceId)}</span>`,
-            `<span>Requested: ${escapeHtml(requestedAt)}</span>`
+            `<span>${t('device_connect_device')}${escapeHtml(deviceName)}</span>`,
+            `<span>${t('device_connect_device_id')}${escapeHtml(deviceId)}</span>`,
+            `<span>${t('device_connect_requested')}${escapeHtml(requestedAt)}</span>`
         ].join('');
 
         if (deviceApprovalCount) {
-            deviceApprovalCount.textContent = count > 1 ? `${count} pending` : 'Waiting';
+            deviceApprovalCount.textContent = count > 1 ? `${count}${t('device_connect_count')}` : t('device_pending_count');
         }
 
         deviceApprovalWaiting?.classList.remove('hidden');
@@ -620,7 +622,7 @@
             await loadRecentUploads();
         } catch (error) {
             console.error('Approve enrollment failed:', error);
-            showErrorBanner('Approval failed: ' + error.message);
+            showErrorBanner(tpl('toast_approval_failed', {msg: error.message}));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -661,7 +663,7 @@
             await loadPendingEnrollments();
         } catch (error) {
             console.error('Reject enrollment failed:', error);
-            showErrorBanner('Decline failed: ' + error.message);
+            showErrorBanner(tpl('toast_decline_failed', {msg: error.message}));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -674,11 +676,11 @@
         if (pendingEnrollmentBusy) return;
 
         const confirmed = await openActionModal({
-            title: 'Recover this browser?',
-            description: 'This rotates trusted-device state and makes this browser your new trusted device. Previously protected files may remain unreadable until they are re-shared or re-uploaded.',
-            confirmText: 'Recover device',
-            cancelText: 'Cancel',
-            kicker: 'Important'
+            title: t('toast_device_recover_title'),
+            description: t('toast_device_recover_desc'),
+            confirmText: t('toast_device_recover_confirm'),
+            cancelText: t('toast_device_recover_cancel'),
+            kicker: t('toast_device_recover_kicker')
         });
         if (!confirmed) {
             return;
@@ -702,11 +704,11 @@
             isDeviceUntrusted = false;
             setRecoveryActionVisible(false);
             hidePendingEnrollmentModal();
-            showInfoBanner('This browser is now the new trusted device. Previously protected files may need to be re-shared or re-uploaded.');
+            showInfoBanner(t('toast_device_recovered'));
             await loadRecentUploads();
         } catch (error) {
             console.error('Lost-device recovery failed:', error);
-            showErrorBanner('Recovery failed: ' + error.message);
+            showErrorBanner(tpl('toast_recovery_failed', {msg: error.message}));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -727,7 +729,7 @@
                 isDeviceUntrusted = true;
                 setRecoveryActionVisible(true);
                 hidePendingEnrollmentModal();
-                showErrorBanner('This approval request was declined or expired. Request a new approval from a trusted device.');
+                showErrorBanner(t('toast_approval_expired'));
                 return;
             }
 
@@ -737,7 +739,7 @@
             await loadRecentUploads();
         } catch (error) {
             console.error('Failed to finalize pending enrollment:', error);
-            showErrorBanner('Approval detected, but this browser could not finish setup.');
+            showErrorBanner(t('toast_approval_setup_failed'));
         }
     }
 
@@ -818,12 +820,12 @@
 
         if (eventType === 'device_enrollment_approved' && !isCurrentDevice && !isApproverDevice) {
             const approvedName = payload?.request_device?.device_label || payload?.enrollment?.request_device_id || 'requested device';
-            showInfoBanner(`Another trusted device approved ${approvedName}.`);
+            showInfoBanner(tpl('toast_approval_approved', {msg: approvedName}));
         }
 
         if (eventType === 'device_enrollment_rejected' && isCurrentDevice) {
             hidePendingEnrollmentModal();
-            showErrorBanner('This device approval request was declined. Request approval again from another trusted device.');
+            showErrorBanner(t('toast_approval_declined'));
             return;
         }
 
@@ -862,8 +864,8 @@
             setRecentState('empty');
             if (recentEmpty) {
                 recentEmpty.textContent = recentSearchQuery
-                    ? 'No uploads match this search.'
-                    : 'No recently uploaded files.';
+                    ? t('state_no_search_results')
+                    : t('state_no_uploads');
             }
             updateRecentPagination();
             return;
@@ -879,16 +881,16 @@
                 <div class="file-entry${locked ? ' is-locked' : ''}" style="opacity: ${opacity};" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}" data-expires-at="${item.expires_at}"${locked ? ` title="${LOCKED_FILE_INFO}"` : ''}>
                     <div class="file-entry-left">
                         <span class="file-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
-                        <span class="file-info">${locked ? 'Expires ' + expiresLabel : SecureCrypto.formatFileSize(item.size_bytes) + ' · Expires ' + expiresLabel}</span>
+                        <span class="file-info">${locked ? t('label_file_info_locked') + expiresLabel : SecureCrypto.formatFileSize(item.size_bytes) + t('label_expires_sep') + expiresLabel}</span>
                     </div>
                     <div class="file-entry-right">
-                        <button class="recent-action" data-action="copy" aria-label="Copy share link" title="Copy share link" ${locked ? 'disabled' : ''}>
+                        <button class="recent-action" data-action="copy" aria-label="${t('label_copy_share')}" title="${t('label_copy_share')}" ${locked ? 'disabled' : ''}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                                 <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                             </svg>
                         </button>
-                        <button class="recent-action" data-action="download" aria-label="Download file" title="Download file" ${locked ? 'disabled' : ''}>
+                        <button class="recent-action" data-action="download" aria-label="${t('label_download_file')}" title="${t('label_download_file')}" ${locked ? 'disabled' : ''}>
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                                 <polyline points="7 10 12 15 17 10"/>
@@ -933,7 +935,7 @@
             tunnelList.classList.add('hidden');
         }
         tunnelEmpty?.classList.add('hidden');
-        if (tunnelCount) tunnelCount.textContent = '0 files';
+        if (tunnelCount) tunnelCount.textContent = t('app_0_files');
         if (tunnelActiveMeta) {
             tunnelActiveMeta.classList.add('hidden');
             tunnelActiveMeta.textContent = '';
@@ -956,16 +958,16 @@
         tunnelControlsSection?.classList.remove('hidden');
         setTunnelEntryControlsHidden(true);
 
-        const expiresLabel = tunnel?.expires_at ? formatExpiryDate(tunnel.expires_at) : 'soon';
+        const expiresLabel = tunnel?.expires_at ? formatExpiryDate(tunnel.expires_at) : t('format_soon');
         if (tunnelActiveMeta) {
             tunnelActiveMeta.classList.remove('hidden');
             tunnelActiveMeta.innerHTML = `
-                <span class="tunnel-meta-label">Tunnel code</span>
+                <span class="tunnel-meta-label">${t('tunnel_code')}</span>
                 <span class="tunnel-code-pill">${escapeHtml(tunnel.code)}</span>
                 <span class="tunnel-meta-divider">·</span>
-                <span>Status ${escapeHtml(tunnel.status)}</span>
+                <span>${t('tunnel_status')}${escapeHtml(tunnel.status)}</span>
                 <span class="tunnel-meta-divider">·</span>
-                <span>Expires ${escapeHtml(expiresLabel)}</span>
+                <span>${t('label_expires')}${escapeHtml(expiresLabel)}</span>
             `;
         }
 
@@ -989,7 +991,7 @@
         if (!tunnelList || !tunnelEmpty || !tunnelCount) return;
 
         const files = Array.isArray(items) ? items : [];
-        tunnelCount.textContent = `${files.length} file${files.length === 1 ? '' : 's'}`;
+        tunnelCount.textContent = `${files.length} ${t(files.length === 1 ? 'label_file' : 'label_files')}`;
 
         if (!files.length) {
             tunnelList.classList.add('hidden');
@@ -1006,14 +1008,14 @@
                         <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
                     </div>
                     <div class="recent-actions">
-                        <button class="recent-action" data-action="download" aria-label="Download tunnel file" title="Download tunnel file">
+                        <button class="recent-action" data-action="download" aria-label="${t('label_download_tunnel')}" title="${t('label_download_tunnel')}">
                             <i data-lucide="download" style="width: 0.85rem; height: 0.85rem;"></i>
                         </button>
                     </div>
                 </div>
                 <div class="recent-meta">
                     <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
-                    <span>Uploaded ${formatUploadDate(item.created_at)}</span>
+                    <span>${t('label_uploaded')}${formatUploadDate(item.created_at)}</span>
                 </div>
             </article>
         `).join('');
@@ -1041,7 +1043,7 @@
             await downloadOwnedFile(fileId, fileName, tunnelId, item);
         } catch (error) {
             console.error('Tunnel download failed:', error);
-            showErrorBanner(error.message || 'Tunnel file download failed.');
+            showErrorBanner(error.message || t('toast_tunnel_download_failed'));
         } finally {
             button.disabled = false;
         }
@@ -1057,7 +1059,7 @@
             if (!response.ok) {
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState();
-                    showInfoBanner('Tunnel session has ended.');
+                    showInfoBanner(t('toast_tunnel_session_ended'));
                     return;
                 }
                 throw new Error('Failed to refresh tunnel state');
@@ -1087,7 +1089,7 @@
             try {
                 authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
             } catch (error) {
-                showErrorBanner('Could not initialize device identity: ' + error.message);
+                showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
                 return;
             }
         }
@@ -1112,7 +1114,7 @@
 
         const payload = await response.json();
         applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        showTunnelInfo('Tunnel created. Share the code or QR code to someone.');
+        showTunnelInfo(t('toast_tunnel_created'));
         startTunnelPolling();
 
         await fetch(`/api/me/tunnels/${encodeURIComponent(payload.tunnel.id)}/confirm`, {
@@ -1132,14 +1134,14 @@
             try {
                 authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
             } catch (error) {
-                showErrorBanner('Could not initialize device identity: ' + error.message);
+                showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
                 return;
             }
         }
 
         const code = (tunnelJoinCode?.value || '').trim();
         if (!code) {
-            showErrorBanner('Enter a tunnel code first.');
+            showErrorBanner(t('toast_tunnel_enter_code'));
             return;
         }
 
@@ -1162,7 +1164,7 @@
 
         const payload = await response.json();
         applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        showTunnelInfo('Joined tunnel. Confirm connection to activate syncing.');
+        showTunnelInfo(t('toast_tunnel_joined'));
         startTunnelPolling();
         await refreshTunnelState();
     }
@@ -1188,18 +1190,18 @@
         if (payload?.tunnel) {
             applyTunnelUI(payload.tunnel);
         }
-        showTunnelInfo('Connection confirmed. Files dropped now sync to Tunnel.');
+        showTunnelInfo(t('toast_tunnel_confirmed'));
     }
 
     async function handleEndTunnel() {
         if (!activeTunnel?.id) return;
 
         const confirmed = await openActionModal({
-            title: 'End tunnel session?',
-            description: 'Ending this tunnel deletes all shared tunnel files on both clients immediately.',
-            confirmText: 'End session',
-            cancelText: 'Cancel',
-            kicker: 'Warning',
+            title: t('toast_tunnel_end_title'),
+            description: t('toast_tunnel_end_desc'),
+            confirmText: t('toast_tunnel_end_confirm'),
+            cancelText: t('toast_tunnel_end_cancel'),
+            kicker: t('toast_tunnel_end_kicker'),
             tone: 'warning'
         });
         if (!confirmed) return;
@@ -1219,7 +1221,7 @@
         }
 
         clearTunnelState();
-        showInfoBanner('Tunnel ended. Shared tunnel files were deleted.');
+        showInfoBanner(t('toast_tunnel_ended'));
     }
 
     async function prefetchRecentLockStates(items) {
@@ -1320,7 +1322,7 @@
                 const passphrase = await getOwnedFilePassphrase(fileId);
                 const copied = await copyToClipboard(`${shareUrl}#${passphrase}`, false, true);
                 if (!copied) {
-                    showToast('Copy failed. Please use Ctrl+C to copy the link.');
+                    showToast(t('toast_copy_failed'));
                 }
             }
         } catch (error) {
@@ -1331,7 +1333,7 @@
                 showErrorBanner(error.message);
                 return;
             }
-            showErrorBanner(`Action failed: ${error.message}`);
+            showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
         } finally {
             if (!keepDisabled) {
                 button.disabled = false;
@@ -1622,7 +1624,7 @@
                 const infoEl = item.querySelector('.file-info');
                 const expiresAt = item.dataset.expiresAt;
                 if (infoEl && expiresAt) {
-                    infoEl.textContent = 'Expires ' + formatExpiryDate(expiresAt);
+                    infoEl.textContent = t('label_file_info_locked') + formatExpiryDate(expiresAt);
                 }
             } else if (item.classList.contains('popup-entry')) {
                 const downloadBtn = item.querySelector('.popup-entry-download');
@@ -1647,7 +1649,7 @@
     function formatExpiryDate(dateStr) {
         const date = new Date(dateStr);
         const now = new Date();
-        if (date <= now) return 'Expired';
+        if (date <= now) return t('format_expired');
 
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -1657,7 +1659,7 @@
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
         if (dayDiff === 1) {
-            return 'Tomorrow';
+            return t('format_tomorrow');
         }
         return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
     }
@@ -1710,12 +1712,12 @@
         if (recentFilesCache) {
             renderPopupRecentFiles(recentFilesCache);
         } else {
-            popupRecentList.innerHTML = '<p class="popup-empty">Loading...</p>';
+            popupRecentList.innerHTML = '<p class="popup-empty">' + t('state_loading') + '</p>';
             await refreshRecentFilesCache();
             if (recentFilesCache) {
                 renderPopupRecentFiles(recentFilesCache);
             } else {
-                popupRecentList.innerHTML = '<p class="popup-empty">Failed to load files.</p>';
+                popupRecentList.innerHTML = '<p class="popup-empty">' + t('state_failed_load') + '</p>';
             }
         }
 
@@ -1735,7 +1737,7 @@
 
     function renderPopupRecentFiles(items) {
         if (!items.length) {
-            popupRecentList.innerHTML = '<p class="popup-empty">No uploaded files yet.</p>';
+            popupRecentList.innerHTML = '<p class="popup-empty">' + t('state_no_files_yet') + '</p>';
             return;
         }
 
@@ -1745,8 +1747,8 @@
             return `
                 <div class="popup-entry${locked ? ' is-locked' : ''}" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${escapeHtml(item.share_url)}" data-expires-at="${item.expires_at}"${locked ? ` title="${LOCKED_FILE_INFO}"` : ''}>
                     <span class="popup-entry-filename" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
-                    <span class="popup-entry-expires">Expires ${expiresText}</span>
-                    <button class="popup-entry-download" aria-label="Download" title="Download" ${locked ? 'disabled' : ''}>
+                    <span class="popup-entry-expires">${t('label_expires')}${expiresText}</span>
+                    <button class="popup-entry-download" aria-label="${t('label_download')}" title="${t('label_download')}" ${locked ? 'disabled' : ''}>
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                             <polyline points="7 10 12 15 17 10"/>
@@ -1794,7 +1796,7 @@
                 const input = this.parentElement.querySelector('input');
                 const copied = await copyToClipboard(input.value);
                 if (!copied) {
-                    showToast('Copy failed. Please use Ctrl+C to copy the link.');
+                    showToast(t('toast_copy_failed'));
                     return;
                 }
                 const original = this.innerHTML;
@@ -1840,14 +1842,14 @@
             try {
                 await handleStartTunnel();
             } catch (error) {
-                showErrorBanner(error.message || 'Failed to start tunnel');
+                showErrorBanner(error.message || t('toast_tunnel_failed_start'));
             }
         });
         tunnelJoinBtn?.addEventListener('click', async () => {
             try {
                 await handleJoinTunnel();
             } catch (error) {
-                showErrorBanner(error.message || 'Failed to join tunnel');
+                showErrorBanner(error.message || t('toast_tunnel_failed_join'));
             }
         });
         tunnelConfirmBtn?.addEventListener('click', async () => {
@@ -1855,14 +1857,14 @@
                 await handleConfirmTunnel();
                 await refreshTunnelState();
             } catch (error) {
-                showErrorBanner(error.message || 'Failed to confirm tunnel');
+                showErrorBanner(error.message || t('toast_tunnel_failed_confirm'));
             }
         });
         tunnelEndBtn?.addEventListener('click', async () => {
             try {
                 await handleEndTunnel();
             } catch (error) {
-                showErrorBanner(error.message || 'Failed to end tunnel');
+                showErrorBanner(error.message || t('toast_tunnel_failed_end'));
             }
         });
 
@@ -1923,7 +1925,7 @@
             return;
         }
         if (file.size === 0) {
-            showErrorBanner('Cannot upload empty file or directory.');
+            showErrorBanner(t('app_cannot_upload_empty'));
             return;
         }
 
@@ -1937,8 +1939,8 @@
         stageProcessing.classList.remove('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.add('hidden');
-        statusText.textContent = 'Uploading';
-        processMain.textContent = 'Uploading';
+        statusText.textContent = t('status_uploading_short');
+        processMain.textContent = t('status_uploading_short');
         processSub.textContent = '';
 
         runProtocolInBackground();
@@ -1948,7 +1950,7 @@
         const sub = dropZone.querySelector('p');
         if (sub) {
             const original = sub.textContent;
-            sub.textContent = `File too large. Maximum: ${SecureCrypto.formatFileSize(MAX_FILE_SIZE)}`;
+            sub.textContent = tpl('app_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
             sub.style.color = '#ff4444';
             setTimeout(() => { sub.textContent = original; sub.style.color = ''; }, 3000);
         }
@@ -1961,7 +1963,7 @@
         updateFinalizeButtonState();
         stagePending.classList.add('hidden');
         stageProcessing.classList.remove('hidden');
-        statusText.textContent = 'Uploading...';
+        statusText.textContent = t('status_uploading');
 
         if (uploadComplete) {
             finalizeUpload();
@@ -1970,7 +1972,7 @@
             updateFinalizeButtonState();
             stageProcessing.classList.add('hidden');
             stagePending.classList.remove('hidden');
-            showErrorBanner('Upload failed: ' + uploadError);
+            showErrorBanner(tpl('toast_upload_failed', {msg: uploadError}));
         } else {
             const poll = setInterval(() => {
                 if (uploadComplete) {
@@ -1982,9 +1984,9 @@
                     updateFinalizeButtonState();
                     stageProcessing.classList.add('hidden');
                     stagePending.classList.remove('hidden');
-                    statusText.textContent = 'Ready';
+                    statusText.textContent = t('status_ready');
                     statusText.style.color = 'var(--accent)';
-                    showErrorBanner('Upload failed: ' + uploadError);
+                    showErrorBanner(tpl('toast_upload_failed', {msg: uploadError}));
                 }
             }, 500);
         }
@@ -1994,7 +1996,7 @@
         finalizeBtn.disabled = isFinalizing;
     }
     function updateUploadProgress() {
-        processMain.textContent = 'Uploading';
+        processMain.textContent = t('status_uploading_short');
         processSub.textContent = '';
     }
 
@@ -2067,8 +2069,29 @@
                     }
                 }
             }
-            encryptedBlob = await SecureCrypto.encryptFile(selectedFile, generatedPassword, () => {});
-            await startUploadInBackground();
+            const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+            const initResponse = await initUpload(selectedFile.size, totalChunks);
+            uploadSessionId = initResponse.session_id;
+            uploadedChunks = 0;
+
+            await SecureCrypto.encryptFileChunked(
+                selectedFile,
+                generatedPassword,
+                CHUNK_SIZE,
+                async (chunkIndex, chunkData) => {
+                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
+                    uploadedChunks++;
+                },
+                { concurrency: PARALLEL_CHUNK_UPLOADS }
+            );
+
+            const completeResponse = await completeUpload();
+            await waitForAssembly(uploadSessionId);
+            pendingExpiresAt = completeResponse.pending_expires_at
+                ? new Date(completeResponse.pending_expires_at).getTime()
+                : null;
+            startPendingCountdown();
+
             uploadComplete = true;
             isUploading = false;
             updateFinalizeButtonState();
@@ -2084,9 +2107,9 @@
             updateFinalizeButtonState();
             stageProcessing.classList.add('hidden');
             stageEntry.classList.remove('hidden');
-            statusText.textContent = 'Ready';
+            statusText.textContent = t('status_ready');
             statusText.style.color = 'var(--accent)';
-            showErrorBanner('Upload failed: ' + error.message);
+            showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
         }
     }
 
@@ -2098,7 +2121,7 @@
             const { status } = await res.json();
             if (status === 'done') return;
             if (status.startsWith('error:')) throw new Error(status.slice(6));
-            statusText.textContent = 'Finalizing...';
+            statusText.textContent = t('status_finalizing');
             await new Promise(r => setTimeout(r, intervalMs));
         }
         throw new Error('Assembly timed out');
@@ -2109,103 +2132,47 @@
         stagePending.classList.add('hidden');
         stageOutput.classList.add('hidden');
         stageProcessing.classList.remove('hidden');
-        statusText.textContent = 'Uploading...';
+        statusText.textContent = t('status_uploading');
         
         try {
-             
             generatedPassword = await SecureCrypto.generatePassword();
-            updateProgress(0, 'Scrambling data', 'Uploading...');
+            updateProgress(0, t('status_scrambling'), t('status_uploading'));
 
-             
-            encryptedBlob = await SecureCrypto.encryptFile(
+            const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+            const initResponse = await initUpload(selectedFile.size, totalChunks);
+            uploadSessionId = initResponse.session_id;
+            let uploadedCount = 0;
+
+            await SecureCrypto.encryptFileChunked(
                 selectedFile,
                 generatedPassword,
-                (progress, status) => {
-                    updateProgress(progress * 0.5, status, 'Uploading...');
-                }
+                CHUNK_SIZE,
+                async (chunkIndex, chunkData) => {
+                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
+                    uploadedCount++;
+                    updateProgress(
+                        50 + (uploadedCount / totalChunks) * 45,
+                        t('status_to_clouds'),
+                        t('status_uploading')
+                    );
+                },
+                { concurrency: PARALLEL_CHUNK_UPLOADS }
             );
 
-            updateProgress(50, 'Up to the clouds', 'Uploading...');
-
-             
-            await startUpload();
-            
+            const completeResponse = await completeUpload();
+            await waitForAssembly(uploadSessionId);
+            pendingExpiresAt = completeResponse.pending_expires_at
+                ? new Date(completeResponse.pending_expires_at).getTime()
+                : null;
+            startPendingCountdown();
+            showPendingUI();
         } catch (error) {
             console.error('Something failed:', error);
-            showErrorBanner('Something failed: ' + error.message);
+            showErrorBanner(tpl('toast_something_failed', {msg: error.message}));
         }
     }
 
-    async function startUploadInBackground() {
-        if (!encryptedBlob) return;
-
-        const initResponse = await initUpload();
-        uploadSessionId = initResponse.session_id;
-        totalChunks = initResponse.total_chunks;
-        uploadedChunks = 0;
-
-        await uploadChunksInBackground(initResponse);
-        const completeResponse = await completeUpload();
-        await waitForAssembly(uploadSessionId);
-
-        pendingExpiresAt = completeResponse.pending_expires_at
-            ? new Date(completeResponse.pending_expires_at).getTime()
-            : null;
-        startPendingCountdown();
-    }
-
-    async function startUpload() {
-        if (isUploading || !encryptedBlob) return;
-
-        isUploading = true;
-
-        try {
-             
-            const initResponse = await initUpload();
-            uploadSessionId = initResponse.session_id;
-
-             
-            await uploadChunks(initResponse);
-
-             
-            const completeResponse = await completeUpload();
-            showPending(completeResponse);
-            
-        } catch (error) {
-            console.error('Upload failed:', error);
-            
-             
-            if (uploadSessionId) {
-                try {
-                    await cancelUpload();
-                } catch (e) {
-                    console.error('Failed to cancel upload:', e);
-                }
-            }
-
-            showErrorBanner('Upload failed: ' + error.message);
-            resetUpload();
-        }
-
-        isUploading = false;
-    }
-
-    async function uploadChunksInBackground(initResponse) {
-        uploadedChunks = 0;
-        await uploadChunksParallel(initResponse, () => {
-            uploadedChunks++;
-            updateUploadProgress();
-        });
-    }
-
-    function getChunkBlob(chunkIndex) {
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, encryptedBlob.size);
-        return encryptedBlob.slice(start, end);
-    }
-
-    async function uploadChunkWithRetry(sessionId, chunkIndex) {
-        const chunk = getChunkBlob(chunkIndex);
+    async function uploadOneChunk(sessionId, chunkIndex, chunkData) {
         let lastError;
 
         for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
@@ -2217,7 +2184,7 @@
                 const formData = new FormData();
                 formData.append('session_id', sessionId);
                 formData.append('chunk_index', chunkIndex.toString());
-                formData.append('chunk', chunk);
+                formData.append('chunk', new Blob([chunkData]));
 
                 const response = await fetch('/api/upload/chunk', {
                     method: 'POST',
@@ -2242,34 +2209,7 @@
         throw lastError;
     }
 
-    async function uploadChunksParallel(initResponse, onChunkUploaded) {
-        const totalChunks = initResponse.total_chunks;
-        const concurrency = Math.max(1, Math.min(PARALLEL_CHUNK_UPLOADS, totalChunks));
-        let nextChunkIndex = 0;
-
-        const worker = async () => {
-            while (true) {
-                const chunkIndex = nextChunkIndex;
-                nextChunkIndex++;
-
-                if (chunkIndex >= totalChunks) {
-                    return;
-                }
-
-                await uploadChunkWithRetry(initResponse.session_id, chunkIndex);
-                if (onChunkUploaded) {
-                    onChunkUploaded(chunkIndex, totalChunks);
-                }
-            }
-        };
-
-        const workers = Array.from({ length: concurrency }, () => worker());
-        await Promise.all(workers);
-    }
-
-    async function initUpload() {
-        const totalChunks = Math.ceil(encryptedBlob.size / CHUNK_SIZE);
-
+    async function initUpload(fileSize, totalChunks) {
         const response = await fetch('/api/upload/init', {
             method: 'POST',
             headers: {
@@ -2278,7 +2218,7 @@
             },
             body: JSON.stringify({
                 file_name: selectedFile.name,
-                file_size: encryptedBlob.size,
+                file_size: fileSize,
                 total_chunks: totalChunks,
                 chunk_size: CHUNK_SIZE
             })
@@ -2292,19 +2232,8 @@
         return response.json();
     }
 
-    async function uploadChunks(initResponse) {
-        const totalChunks = initResponse.total_chunks;
-        let uploadedCount = 0;
-
-        await uploadChunksParallel(initResponse, () => {
-            uploadedCount++;
-            const progress = 50 + (uploadedCount / totalChunks) * 45;
-            updateProgress(progress, `Sending it high to the clouds`, 'Uploading...');
-        });
-    }
-
     async function completeUpload() {
-        updateProgress(95, 'Making sure everything arrived', 'Finalizing...');
+        updateProgress(95, t('status_everything_arrived'), t('status_finalizing'));
 
         const response = await fetch('/api/upload/complete', {
             method: 'POST',
@@ -2323,7 +2252,7 @@
             throw new Error(error.error || 'Failed to complete upload');
         }
 
-        updateProgress(100, 'Yippe', 'Complete!');
+        updateProgress(100, t('app_yippe'), t('status_complete'));
         return response.json();
     }
 
@@ -2333,7 +2262,7 @@
         stageProcessing.classList.add('hidden');
         stagePending.classList.remove('hidden');
         stageOutput.classList.add('hidden');
-        statusText.textContent = uploadError ? 'Upload Failed' : 'Pending Finalization';
+        statusText.textContent = uploadError ? t('status_upload_failed') : t('status_pending');
         statusText.style.color = uploadError ? '#f44336' : 'var(--accent)';
         updateFinalizeButtonState();
     }
@@ -2354,7 +2283,7 @@
     }
 
     async function finalizeUpload() {
-        statusText.textContent = 'Finalizing...';
+        statusText.textContent = t('status_finalizing');
 
         try {
             const finalizePayload = {
@@ -2403,9 +2332,9 @@
             updateFinalizeButtonState();
             stageProcessing.classList.add('hidden');
             stagePending.classList.remove('hidden');
-            statusText.textContent = 'Ready';
+            statusText.textContent = t('status_ready');
             statusText.style.color = 'var(--accent)';
-            showErrorBanner('Finalize failed: ' + error.message);
+            showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
         }
     }
 
@@ -2437,14 +2366,14 @@
         outUrl.value = fullShareUrl;
         outPin.value = response.numeric_code;
         outKey.value = generatedPassword;
-        outExpiryLabel.textContent = `Expiry: ${RETENTION_LABEL} retention.`;
+        outExpiryLabel.textContent = t('label_expiry_prefix') + RETENTION_LABEL + t('label_retention');
         uploadSessionId = null;
         lastShareUrl = fullShareUrl;
 
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.remove('hidden');
-        statusText.textContent = 'Secure';
+        statusText.textContent = t('status_secure');
         statusText.style.color = 'var(--accent)';
 
         setupIdleCopy(fullShareUrl);
@@ -2522,7 +2451,7 @@
                 if (showBanner) {
                     showShareBanner();
                 } else {
-                    showToast('Copied to clipboard!');
+                    showToast(t('toast_copied'));
                 }
             }
             return true;
@@ -2545,7 +2474,7 @@
                 if (showBanner) {
                     showShareBanner();
                 } else {
-                    showToast('Copied to clipboard!');
+                    showToast(t('toast_copied'));
                 }
             }
             return true;
@@ -2559,7 +2488,7 @@
             return;
         }
 
-        showToast('Tap anywhere to retry copying the sharing link.');
+        showToast(t('toast_copy_retry'));
         queueAutoCopyOnNextInteraction(text, true);
     }
 
@@ -2591,7 +2520,7 @@
             if (shouldShowBanner) {
                 showShareBanner();
             } else {
-                showToast('Copied to clipboard!');
+                showToast(t('toast_copied'));
             }
             pendingAutoCopyText = null;
             pendingAutoCopyBanner = false;
@@ -2611,8 +2540,7 @@
     }
 
     function showShareBanner() {
-        showNotification('Link Copied!', 'info');
-    }
+        showToast(t('toast_link_copied_notification'));    }
 
     function setupIdleCopy(text) {
         idleCopyDone = false;
@@ -2622,7 +2550,7 @@
             const idleMsg = document.createElement('p');
             idleMsg.className = 'info-text';
             idleMsg.id = 'idle-copy-msg';
-            idleMsg.textContent = 'Move your mouse to copy link';
+            idleMsg.textContent = t('toast_copy_move_mouse');
             idleMsg.style.cursor = 'pointer';
             idleMsg.style.color = 'var(--accent)';
             infoBox.parentNode.insertBefore(idleMsg, infoBox);
@@ -2634,12 +2562,12 @@
                 if (ok) {
                     idleCopyDone = true;
                     const msg = document.getElementById('idle-copy-msg');
-                    if (msg) msg.textContent = 'Link copied to clipboard';
+                    if (msg) msg.textContent = t('toast_link_copied_idle');
                     showShareBanner();
                     setTimeout(() => {
                         idleCopyDone = false;
                         const msg2 = document.getElementById('idle-copy-msg');
-                        if (msg2) msg2.textContent = 'Move your mouse to copy link';
+                        if (msg2) msg2.textContent = t('toast_copy_move_mouse');
                         document.addEventListener('mousemove', onMove, { once: true });
                         document.addEventListener('touchstart', onMove, { once: true });
                         document.addEventListener('keydown', onMove, { once: true });
@@ -2664,7 +2592,6 @@
         clearPendingAutoCopyListeners();
         hideErrorBanner();
         selectedFile = null;
-        encryptedBlob = null;
         generatedPassword = null;
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null;
@@ -2693,7 +2620,7 @@
         dropZone.classList.remove('hidden');
         fileDetails.classList.add('hidden');
         finalizeBtn.disabled = true;
-        statusText.textContent = 'Ready';
+        statusText.textContent = t('status_ready');
         statusText.style.color = 'var(--accent)';
         stageEntry.classList.remove('hidden');
         stageProcessing.classList.add('hidden');
@@ -2707,7 +2634,7 @@
     function startPendingCountdown() {
         clearPendingCountdown();
         if (!pendingExpiresAt) {
-            pendingCountdown.textContent = '10:00';
+            pendingCountdown.textContent = t('state_upload_pending');
             return;
         }
 
@@ -2715,13 +2642,13 @@
             const remainingMs = pendingExpiresAt - Date.now();
             if (remainingMs <= 0) {
                 clearPendingCountdown();
-                pendingCountdown.textContent = '00:00';
+                pendingCountdown.textContent = t('state_upload_expired');
                 openActionModal({
-                    title: 'Upload session expired',
-                    description: 'Your upload session timed out. Please select the file again to continue.',
-                    confirmText: 'Okay',
+                    title: t('toast_session_expired_title'),
+                    description: t('toast_session_expired_desc'),
+                    confirmText: t('toast_session_expired_confirm'),
                     hideCancel: true,
-                    kicker: 'Session'
+                    kicker: t('toast_session_expired_kicker')
                 });
                 resetUpload();
                 return;
@@ -2767,17 +2694,17 @@
         const percentEl = document.getElementById('download-activity-percent');
 
         if (isComplete) {
-            if (titleEl) titleEl.textContent = 'Downloaded';
+            if (titleEl) titleEl.textContent = t('status_complete');
             if (iconEl) {
                 iconEl.innerHTML = '<i data-lucide="check-circle" style="width:36px;height:36px;color:#007AFF;"></i>';
             }
-            if (percentEl) percentEl.textContent = 'The download should start automatically';
+            if (percentEl) percentEl.textContent = t('state_download_automatically');
         } else {
-            if (titleEl) titleEl.textContent = 'Downloading and decrypting your file...';
+            if (titleEl) titleEl.textContent = t('status_downloading');
             if (iconEl) {
                 iconEl.innerHTML = '<div class="downloading-spinner"></div>';
             }
-            if (percentEl) percentEl.textContent = '0%';
+            if (percentEl) percentEl.textContent = t('app_0_pct');
         }
 
         if (window.lucide?.createIcons) {
@@ -2796,10 +2723,10 @@
         }
 
         const {
-            title = 'Confirm action',
+            title = t('action_modal_title'),
             description = '',
-            confirmText = 'Continue',
-            cancelText = 'Cancel',
+            confirmText = t('action_modal_continue'),
+            cancelText = t('action_modal_cancel'),
             hideCancel = false,
             tone = 'default'
         } = options || {};

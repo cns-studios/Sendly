@@ -180,7 +180,6 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
-		// Proactive refresh: check if token is about to expire (within 60 seconds)
 		if expiresAtStr, cookieErr := c.Cookie("auth_expires_at"); cookieErr == nil {
 			if expiresAt, parseErr := strconv.ParseInt(expiresAtStr, 10, 64); parseErr == nil {
 				if time.Now().Unix() >= expiresAt-60 {

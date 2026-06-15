@@ -466,7 +466,7 @@ func createDesktopKey(ctx context.Context, db *storage.Postgres, ownerName strin
 	fmt.Printf("Key:       %s\n", record.KeyValue)
 	fmt.Printf("ID:        %s\n", record.ID)
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Println("Store this key securely — it will not be shown again.")
+	fmt.Println("Store this key securely - it will not be shown again.")
 }
 
 func revokeDesktopKey(ctx context.Context, db *storage.Postgres, keyOrID string) {

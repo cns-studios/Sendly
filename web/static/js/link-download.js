@@ -1,6 +1,9 @@
 (function() {
     'use strict';
 
+    const t = (k, d) => window.CONFIG?.t?.[k] || d || k;
+    const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
+
     const fileId = window.CONFIG?.fileID;
     let fileMetadata = null;
     let encryptedBlob = null;
@@ -91,7 +94,7 @@
             passwordSection.classList.remove('hidden');
         } catch (error) {
             console.error('Failed to load file metadata:', error);
-            showFileError('cloud-alert', 'Connection error', 'Failed to connect to server. Please try again.');
+            showFileError('cloud-alert', t('error_connection_title'), t('error_connection_desc'));
         }
     }
 
@@ -125,13 +128,14 @@
                 iconEl.appendChild(createProgressCircle(36));
             }
 
-            updateProgress(0, 'Downloading...');
+            updateProgress(0, t('status_downloading'));
             encryptedBlob = await downloadEncryptedFile();
 
-            updateProgress(80, 'Decrypting...');
-            const decryptedData = await SecureCrypto.decryptBlob(
+            updateProgress(80, t('status_decrypting'));
+            const decryptedData = await SecureCrypto.decryptFileChunked(
                 encryptedBlob,
                 password,
+                fileMetadata.size_bytes,
                 (progress, status) => {
                     updateProgress(80 + (progress * 20), status);
                 }
@@ -153,7 +157,7 @@
             console.error('Download/decrypt failed:', error);
             progressSection.classList.add('hidden');
 
-            showNotification('Download failed. Please try again.', 'error');
+            showNotification(t('toast_download_failed'), 'error');
             passwordSection.classList.remove('hidden');
             if (currentPassword) {
                 autoDecryptSection.classList.remove('hidden');
@@ -165,7 +169,7 @@
         const response = await fetch(`/api/file/${fileMetadata.id}/download`);
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to download file');
+            throw new Error(error.error || t('toast_download_failed'));
         }
 
         const contentLength = response.headers.get('Content-Length');
@@ -183,7 +187,7 @@
 
             if (total) {
                 const progress = (received / total) * 80;
-                updateProgress(progress, 'Downloading...');
+                updateProgress(progress, t('status_downloading'));
             }
         }
 
@@ -207,8 +211,7 @@
 
     async function submitReport() {
         reportConfirm.disabled = true;
-        reportConfirm.textContent = 'Reporting...';
-
+        reportConfirm.textContent = t('report_btn_loading');
         try {
             const response = await fetch(`/api/file/${fileMetadata.id}/report`, {
                 method: 'POST',
@@ -222,16 +225,16 @@
 
             if (response.ok) {
                 reportModal.classList.add('hidden');
-                showNotification('Report submitted. Thank you for helping keep our platform safe.', 'info');
+                showNotification(t('toast_report_submitted'), 'info');
             } else {
-                showNotification(result.error || 'Failed to submit report', 'error');
+                showNotification(result.error || t('toast_report_failed'), 'error');
             }
         } catch (error) {
             console.error('Report failed:', error);
-            showNotification('Failed to submit report. Please try again.', 'error');
+            showNotification(t('toast_report_failed_retry'), 'error');
         } finally {
             reportConfirm.disabled = false;
-            reportConfirm.textContent = 'Report';
+            reportConfirm.textContent = t('report_btn');
         }
     }
 
@@ -278,8 +281,8 @@
     }
 
     function showDownloadedState() {
-        if (progressTitle) progressTitle.textContent = 'Downloaded';
-        if (progressText) progressText.textContent = 'The download should start automatically';
+        if (progressTitle) progressTitle.textContent = t('status_complete');
+        if (progressText) progressText.textContent = t('state_download_automatically');
 
         const iconEl = document.getElementById('progress-icon');
         if (iconEl) {
@@ -296,8 +299,8 @@
     }
 
     function resetDownloadBox() {
-        if (progressTitle) progressTitle.textContent = 'Downloading...';
-        if (progressText) progressText.textContent = '0%';
+        if (progressTitle) progressTitle.textContent = t('status_downloading');
+        if (progressText) progressText.textContent = t('app_0_pct');
 
         const iconEl = document.getElementById('progress-icon');
         if (iconEl) {
@@ -337,20 +340,21 @@
         switch (code) {
             case 'INVALID_FILE_ID':
             case 'MISSING_FILE_ID':
-                showFileError('cloud-alert', 'Invalid link', 'The link is invalid or the file ID format is incorrect. Please check the link and try again.');
+                showFileError('cloud-alert', t('error_invalid_link_title'), t('error_invalid_link_desc'));
+
                 break;
             case 'FILE_NOT_FOUND':
             case 'FILE_NOT_ON_DISK':
-                showFileError('file-question-mark', 'File not found', 'This file does not exist or has been moved');
+                showFileError('file-question-mark', t('error_file_not_found_title'), t('error_file_not_found_desc'));
                 break;
             case 'FILE_DELETED':
-                showFileError('shredder', 'File removed', 'This file has been removed');
+                showFileError('shredder', t('error_file_removed_title'), t('error_file_removed_desc'));
                 break;
             case 'FILE_EXPIRED':
-                showFileError('file-question-mark', 'File expired', 'This file has expired and is no longer available. Ask the sender to upload it again.');
+                showFileError('file-question-mark', t('error_file_expired_title'), t('error_file_expired_desc'));
                 break;
             default:
-                showNotification(error.error || 'An unexpected error occurred.', 'error');
+                showNotification(error.error || t('toast_unexpected_error'), 'error');
         }
     }
 
@@ -399,7 +403,7 @@
         setupEventListeners();
 
         if (!fileId) {
-            showFileError('cloud-alert', 'Invalid link', 'No file ID provided. Please check the link and try again.');
+            showFileError('cloud-alert', t('error_invalid_link_title'), t('error_no_file_id'));
             return;
         }
 

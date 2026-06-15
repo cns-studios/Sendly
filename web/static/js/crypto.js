@@ -1,6 +1,9 @@
 const SecureCrypto = (function() {
     'use strict';
 
+    const t = (k, d) => window.CONFIG?.t?.[k] || d || k;
+    const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
+
      
     const CONFIG = {
         algorithm: 'AES-GCM',
@@ -124,7 +127,7 @@ const SecureCrypto = (function() {
         const publicJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
         const privateJWK = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
         const identity = {
-            deviceId: crypto.randomUUID(),
+            deviceId: crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }),
             keyAlgorithm: 'RSA-OAEP-2048',
             keyVersion: 1,
             publicKeyJWK: publicJWK,
@@ -271,8 +274,133 @@ const SecureCrypto = (function() {
 
             return new Uint8Array(decrypted);
         } catch (error) {
-            throw new Error('Decryption failed. Invalid password or corrupted data.');
+            throw new Error(t('error_decryption'));
         }
+    }
+
+    const FORMAT_MAGIC = new Uint8Array([0x53, 0x48, 0x43, 0x4B]);
+
+    function readFileSlice(file, start, end) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(new Uint8Array(reader.result));
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsArrayBuffer(file.slice(start, end));
+        });
+    }
+
+    function blobToUint8Array(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(new Uint8Array(reader.result));
+            reader.onerror = () => reject(new Error('Failed to read blob'));
+            reader.readAsArrayBuffer(blob);
+        });
+    }
+
+    async function encryptFileChunked(file, password, chunkSize, onChunk, { concurrency = 1 } = {}) {
+        const salt = generateRandomBytes(CONFIG.saltLength);
+        const key = await deriveKey(password, salt);
+        const totalChunks = Math.ceil(file.size / chunkSize);
+
+        const inflight = new Set();
+        const errors = [];
+
+        const startUpload = (i, chunkData) => {
+            const p = onChunk(i, chunkData);
+            const cleanup = () => { inflight.delete(p); };
+            const wrapped = p.then(cleanup, (err) => { cleanup(); errors.push(err); });
+            inflight.add(wrapped);
+            return wrapped;
+        };
+
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * chunkSize;
+            const end = Math.min(start + chunkSize, file.size);
+            const plaintext = await readFileSlice(file, start, end);
+
+            const iv = generateRandomBytes(CONFIG.ivLength);
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: CONFIG.algorithm, iv },
+                key,
+                plaintext
+            );
+
+            const isFirstChunk = i === 0;
+            const chunkData = new Uint8Array(
+                (isFirstChunk ? FORMAT_MAGIC.length + salt.length : 0) +
+                iv.length + ciphertext.byteLength
+            );
+            let offset = 0;
+            if (isFirstChunk) {
+                chunkData.set(FORMAT_MAGIC, offset); offset += FORMAT_MAGIC.length;
+                chunkData.set(salt, offset); offset += salt.length;
+            }
+            chunkData.set(iv, offset); offset += iv.length;
+            chunkData.set(new Uint8Array(ciphertext), offset);
+
+            if (inflight.size >= concurrency) {
+                await Promise.race(inflight);
+            }
+            startUpload(i, chunkData);
+        }
+
+        await Promise.all(inflight);
+        if (errors.length) throw errors[0];
+    }
+
+    async function decryptFileChunked(encryptedBlob, password, originalFileSize, onProgress) {
+        const data = await blobToUint8Array(encryptedBlob);
+        const hasMagic =
+            data.length >= 4 &&
+            data[0] === FORMAT_MAGIC[0] && data[1] === FORMAT_MAGIC[1] &&
+            data[2] === FORMAT_MAGIC[2] && data[3] === FORMAT_MAGIC[3];
+
+        if (!hasMagic) {
+            if (onProgress) onProgress(0, t('status_decrypting'));
+            const result = await decrypt(data, password);
+            if (onProgress) onProgress(100, t('status_decryption_complete'));
+            return result;
+        }
+
+        const salt = data.slice(FORMAT_MAGIC.length, FORMAT_MAGIC.length + CONFIG.saltLength);
+        const key = await deriveKey(password, salt);
+        const CHUNK_SIZE = 5 * 1024 * 1024;
+        const totalChunks = Math.ceil(originalFileSize / CHUNK_SIZE);
+        const resultParts = [];
+        let offset = FORMAT_MAGIC.length + CONFIG.saltLength;
+
+        for (let i = 0; i < totalChunks; i++) {
+            const plaintextSize = Math.min(CHUNK_SIZE, originalFileSize - i * CHUNK_SIZE);
+            const encryptedChunkSize = CONFIG.ivLength + plaintextSize + 16;
+
+            const iv = data.slice(offset, offset + CONFIG.ivLength);
+            const ciphertext = data.slice(offset + CONFIG.ivLength, offset + encryptedChunkSize);
+
+            let decrypted;
+            try {
+                decrypted = await crypto.subtle.decrypt(
+                    { name: CONFIG.algorithm, iv }, key, ciphertext
+                );
+            } catch (e) {
+                throw new Error(t('error_decryption'));
+            }
+            resultParts.push(new Uint8Array(decrypted));
+
+            offset += encryptedChunkSize;
+            if (onProgress) {
+                onProgress(Math.round(((i + 1) / totalChunks) * 100), t('status_decrypting'));
+            }
+        }
+
+        const totalSize = resultParts.reduce((sum, p) => sum + p.length, 0);
+        const result = new Uint8Array(totalSize);
+        let pos = 0;
+        for (const part of resultParts) {
+            result.set(part, pos);
+            pos += part.length;
+        }
+        return result;
     }
 
     async function encryptFile(file, password, onProgress) {
@@ -281,12 +409,12 @@ const SecureCrypto = (function() {
 
             reader.onload = async function(e) {
                 try {
-                    if (onProgress) onProgress(0, 'Encrypting...');
+                    if (onProgress) onProgress(0, t('status_encrypting'));
                     
                     const data = new Uint8Array(e.target.result);
                     const encrypted = await encrypt(data, password);
                     
-                    if (onProgress) onProgress(100, 'Encryption complete');
+                    if (onProgress) onProgress(100, t('status_encryption_complete'));
                     
                     resolve(new Blob([encrypted], { type: 'application/octet-stream' }));
                 } catch (error) {
@@ -295,7 +423,7 @@ const SecureCrypto = (function() {
             };
 
             reader.onerror = function() {
-                reject(new Error('Failed to read file'));
+reject(new Error(t('error_failed_read_file')));
             };
 
             reader.readAsArrayBuffer(file);
@@ -308,12 +436,12 @@ const SecureCrypto = (function() {
 
             reader.onload = async function(e) {
                 try {
-                    if (onProgress) onProgress(0, 'Decrypting...');
+                    if (onProgress) onProgress(0, t('status_decrypting'));
                     
                     const data = new Uint8Array(e.target.result);
                     const decrypted = await decrypt(data, password);
                     
-                    if (onProgress) onProgress(100, 'Decryption complete');
+                    if (onProgress) onProgress(100, t('status_decryption_complete'));
                     
                     resolve(decrypted);
                 } catch (error) {
@@ -322,7 +450,7 @@ const SecureCrypto = (function() {
             };
 
             reader.onerror = function() {
-                reject(new Error('Failed to read encrypted data'));
+                reject(new Error(t('error_failed_read_encrypted')));
             };
 
             reader.readAsArrayBuffer(blob);
@@ -331,7 +459,7 @@ const SecureCrypto = (function() {
 
     function validatePassword(password) {
         if (!password || typeof password !== 'string') {
-            return { valid: false, error: 'Password is required' };
+            return { valid: false, error: t('crypto_password_required') };
         }
 
         const words = password.toLowerCase().trim().split('-');
@@ -339,7 +467,7 @@ const SecureCrypto = (function() {
         if (words.length !== CONFIG.wordCount) {
             return { 
                 valid: false, 
-                error: `Password must contain exactly ${CONFIG.wordCount} words separated by hyphens` 
+                error: tpl('crypto_password_words', {count: CONFIG.wordCount}) 
             };
         }
 
@@ -347,13 +475,13 @@ const SecureCrypto = (function() {
             if (!/^[a-z]+$/.test(word)) {
                 return { 
                     valid: false, 
-                    error: 'Password words must contain only letters' 
+                    error: t('crypto_password_letters') 
                 };
             }
             if (word.length < 2) {
                 return { 
                     valid: false, 
-                    error: 'Each word must be at least 2 characters' 
+                    error: t('crypto_password_length') 
                 };
             }
         }
@@ -370,10 +498,10 @@ const SecureCrypto = (function() {
     }
 
     function formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
+        if (bytes === 0) return t('format_bytes');
         
         const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const sizes = [t('format_bytes_label'), t('format_kb_label'), t('format_mb_label'), t('format_gb_label')];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
@@ -390,7 +518,7 @@ const SecureCrypto = (function() {
         const diff = expires - now;
 
         if (diff <= 0) {
-            return 'Expired';
+            return t('format_expired');
         }
 
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
@@ -398,11 +526,11 @@ const SecureCrypto = (function() {
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
         if (days > 0) {
-            return `${days}d ${hours}h remaining`;
+            return tpl('format_time_remaining_days', {days, hours});
         } else if (hours > 0) {
-            return `${hours}h ${minutes}m remaining`;
+            return tpl('format_time_remaining_hours', {hours, minutes});
         } else {
-            return `${minutes}m remaining`;
+            return tpl('format_time_remaining_minutes', {minutes});
         }
     }
 
@@ -411,6 +539,8 @@ const SecureCrypto = (function() {
         generatePassword,
         encryptFile,
         decryptBlob,
+        encryptFileChunked,
+        decryptFileChunked,
         validatePassword,
         getPasswordFromHash,
         formatFileSize,

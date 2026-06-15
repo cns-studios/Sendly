@@ -1,6 +1,9 @@
 (function() {
     'use strict';
 
+    const t = (k, d) => window.CONFIG?.t?.[k] || d || k;
+    const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
+
     const CHUNK_SIZE = 5 * 1024 * 1024;
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
@@ -16,7 +19,6 @@
     let totalChunks = 0;
     let uploadedChunks = 0;
     let selectedFile = null;
-    let encryptedBlob = null;
     let generatedPassword = null;
     let uploadSessionId = null;
     let pendingExpiresAt = null;
@@ -104,7 +106,7 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
                 body: JSON.stringify({
                     device_id: authDeviceIdentity.deviceId,
-                    device_label: `${CNS_USERNAME || 'ShareIt User'} device`,
+                    device_label: `${CNS_USERNAME || t('user_default')} device`,
                     public_key_jwk: authDeviceIdentity.publicKeyJWK,
                     key_algorithm: authDeviceIdentity.keyAlgorithm,
                     key_version: authDeviceIdentity.keyVersion,
@@ -113,7 +115,7 @@
             if (!response.ok) throw new Error('Device registration failed');
             const payload = await response.json();
             if (payload.needs_enrollment) {
-                showErrorBanner('Approve this device from a trusted device before uploading.');
+                showErrorBanner(t('toast_device_approve'));
                 return false;
             }
             if (payload.user_key_envelope?.wrapped_uk_b64 && !authUserKeyRaw) {
@@ -145,7 +147,7 @@
             if (!url) return;
             const ok = await copyToClipboard(url, true);
             hideShareUrlModal();
-            if (ok) showToast('Link copied');
+            if (ok) showToast(t('toast_link_copied'));
         });
 
         shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
@@ -173,7 +175,7 @@
             showFileSizeWarning();
             return;
         }
-        if (file.size === 0) { showErrorBanner('Cannot upload empty file.'); return; }
+        if (file.size === 0) { showErrorBanner(t('link_cannot_upload_empty')); return; }
 
         selectedFile = file;
 
@@ -181,7 +183,7 @@
         const zoneSubtext = dropZone.querySelector('p');
         dropZone.classList.add('uploading');
         zoneHeading.textContent = selectedFile.name;
-        zoneSubtext.textContent = 'Processing...';
+        zoneSubtext.textContent = t('status_processing');
 
         runProtocolInBackground();
     }
@@ -190,7 +192,7 @@
         const sub = dropZone.querySelector('p');
         if (sub) {
             const original = sub.textContent;
-            sub.textContent = `File too large. Maximum: ${SecureCrypto.formatFileSize(MAX_FILE_SIZE)}`;
+            sub.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
             sub.style.color = '#ff4444';
             setTimeout(() => { sub.textContent = original; sub.style.color = ''; }, 3000);
         }
@@ -202,21 +204,21 @@
         updateFinalizeButtonState();
         stagePending.classList.add('hidden');
         stageProcessing.classList.remove('hidden');
-        processMain.textContent = 'Uploading...';
-        processSub.textContent = '0%';
+        processMain.textContent = t('status_uploading');
+        processSub.textContent = t('app_0_pct');
 
         if (uploadComplete) { finalizeUpload(); }
         else if (uploadError) {
             isFinalizing = false; updateFinalizeButtonState();
             stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
-            showErrorBanner('Upload failed: ' + uploadError);
+            showErrorBanner(tpl('link_upload_failed', {msg: uploadError}));
         } else {
             const poll = setInterval(() => {
                 if (uploadComplete) { clearInterval(poll); finalizeUpload(); }
                 else if (uploadError) {
                     clearInterval(poll); isFinalizing = false; updateFinalizeButtonState();
                     stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
-                    showErrorBanner('Upload failed: ' + uploadError);
+                    showErrorBanner(tpl('link_upload_failed', {msg: uploadError}));
                 }
             }, 500);
         }
@@ -258,7 +260,7 @@
     function updateUploadProgress() {
         if (totalChunks === 0) return;
         const pct = Math.floor((uploadedChunks / totalChunks) * 100);
-        processMain.textContent = 'Uploading...';
+        processMain.textContent = t('status_uploading');
         processSub.textContent = `${pct}%`;
         if (progressVal) progressVal.textContent = `${pct}%`;
         const zoneSubtext = dropZone.querySelector('p');
@@ -304,9 +306,30 @@
                 }
             }
 
-            zoneSubtext.textContent = 'Uploading...';
-            encryptedBlob = await SecureCrypto.encryptFile(selectedFile, generatedPassword, () => {});
-            await startUploadInBackground();
+            zoneSubtext.textContent = t('status_uploading');
+            const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+            const initResponse = await initUpload(selectedFile.size, totalChunks);
+            uploadSessionId = initResponse.session_id;
+            uploadedChunks = 0;
+
+            await SecureCrypto.encryptFileChunked(
+                selectedFile,
+                generatedPassword,
+                CHUNK_SIZE,
+                async (chunkIndex, chunkData) => {
+                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
+                    uploadedChunks++;
+                },
+                { concurrency: PARALLEL_CHUNK_UPLOADS }
+            );
+
+            const completeResponse = await completeUpload();
+            await waitForAssembly(uploadSessionId);
+            pendingExpiresAt = completeResponse.pending_expires_at
+                ? new Date(completeResponse.pending_expires_at).getTime()
+                : null;
+            startPendingCountdown();
+
             uploadComplete = true;
             isUploading = false;
             updateFinalizeButtonState();
@@ -319,38 +342,13 @@
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
             const zoneHeading = dropZone.querySelector('h3');
-            zoneHeading.textContent = 'Upload failed';
+            zoneHeading.textContent = t('status_upload_failed');
             zoneSubtext.textContent = error.message;
-            showErrorBanner('Upload failed: ' + error.message);
+            showErrorBanner(tpl('link_upload_failed', {msg: error.message}));
         }
     }
 
-    async function startUploadInBackground() {
-        if (!encryptedBlob) return;
-        const initResponse = await initUpload();
-        uploadSessionId = initResponse.session_id;
-        totalChunks = initResponse.total_chunks;
-        uploadedChunks = 0;
-        await uploadChunksInBackground(initResponse);
-        const completeResponse = await completeUpload();
-        await waitForAssembly(uploadSessionId);
-        pendingExpiresAt = completeResponse.pending_expires_at ? new Date(completeResponse.pending_expires_at).getTime() : null;
-        startPendingCountdown();
-    }
-
-    async function uploadChunksInBackground(initResponse) {
-        uploadedChunks = 0;
-        await uploadChunksParallel(initResponse, () => { uploadedChunks++; updateUploadProgress(); });
-    }
-
-    function getChunkBlob(chunkIndex) {
-        const start = chunkIndex * CHUNK_SIZE;
-        const end = Math.min(start + CHUNK_SIZE, encryptedBlob.size);
-        return encryptedBlob.slice(start, end);
-    }
-
-    async function uploadChunkWithRetry(sessionId, chunkIndex) {
-        const chunk = getChunkBlob(chunkIndex);
+    async function uploadOneChunk(sessionId, chunkIndex, chunkData) {
         let lastError;
         for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
             if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
@@ -358,7 +356,7 @@
                 const formData = new FormData();
                 formData.append('session_id', sessionId);
                 formData.append('chunk_index', chunkIndex.toString());
-                formData.append('chunk', chunk);
+                formData.append('chunk', new Blob([chunkData]));
                 const response = await fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
                 if (!response.ok) { const error = await response.json(); throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`); }
                 return;
@@ -367,27 +365,11 @@
         throw lastError;
     }
 
-    async function uploadChunksParallel(initResponse, onChunkUploaded) {
-        const totalChunks = initResponse.total_chunks;
-        const concurrency = Math.max(1, Math.min(PARALLEL_CHUNK_UPLOADS, totalChunks));
-        let nextChunkIndex = 0;
-        const worker = async () => {
-            while (true) {
-                const chunkIndex = nextChunkIndex++;
-                if (chunkIndex >= totalChunks) return;
-                await uploadChunkWithRetry(initResponse.session_id, chunkIndex);
-                if (onChunkUploaded) onChunkUploaded(chunkIndex, totalChunks);
-            }
-        };
-        await Promise.all(Array.from({ length: concurrency }, () => worker()));
-    }
-
-    async function initUpload() {
-        const totalChunks = Math.ceil(encryptedBlob.size / CHUNK_SIZE);
+    async function initUpload(fileSize, totalChunks) {
         const response = await fetch('/api/upload/init', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-            body: JSON.stringify({ file_name: selectedFile.name, file_size: encryptedBlob.size, total_chunks: totalChunks, chunk_size: CHUNK_SIZE })
+            body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE })
         });
         if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to initialize'); }
         return response.json();
@@ -433,9 +415,9 @@
             dropZone.classList.remove('uploading');
             const zoneHeading = dropZone.querySelector('h3');
             const zoneSubtext = dropZone.querySelector('p');
-            zoneHeading.textContent = 'Upload failed';
+            zoneHeading.textContent = t('status_upload_failed');
             zoneSubtext.textContent = error.message;
-            showErrorBanner('Finalize failed: ' + error.message);
+            showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
         }
     }
 
@@ -452,8 +434,8 @@
         const zoneHeading = dropZone.querySelector('h3');
         const zoneSubtext = dropZone.querySelector('p');
         zoneIcon.setAttribute('data-lucide', 'circle-check-big');
-        zoneHeading.textContent = 'Uploaded';
-        zoneSubtext.textContent = 'Click to get share link';
+        zoneHeading.textContent = t('status_complete');
+        zoneSubtext.textContent = t('state_click_share_link');
         if (window.lucide && lucide.createIcons) lucide.createIcons();
 
         uploadSessionId = null;
@@ -474,7 +456,7 @@
                 if (ok) {
                     idleCopyDone = true;
                     const zoneSubtext = dropZone.querySelector('p');
-                    if (zoneSubtext) zoneSubtext.textContent = 'Link copied to clipboard';
+                    if (zoneSubtext) zoneSubtext.textContent = t('toast_link_copied_idle');
                     showShareBanner();
                     setTimeout(() => {
                         idleCopyDone = false;
@@ -496,7 +478,7 @@
         try {
             if (navigator.clipboard?.writeText) {
                 await navigator.clipboard.writeText(text);
-                if (!silent) showToast('Copied to clipboard!');
+                if (!silent) showToast(t('toast_copied'));
                 return true;
             }
         } catch (error) {
@@ -521,7 +503,7 @@
         }
         document.body.removeChild(textarea);
         if (ok) {
-            if (!silent) showToast('Copied to clipboard!');
+            if (!silent) showToast(t('toast_copied'));
             return true;
         }
         return false;
@@ -530,7 +512,7 @@
     function showShareUrlModal(url) {
         if (!shareUrlModal || !shareUrlText) return;
         shareUrlText.textContent = url;
-        shareUrlCopyBtn.textContent = 'Copy';
+        shareUrlCopyBtn.textContent = t('link_share_copy');
         shareUrlCopyBtn.classList.remove('copied');
         shareUrlModal.classList.remove('hidden');
         shareUrlModal.setAttribute('aria-hidden', 'false');
@@ -585,7 +567,7 @@
     }
 
     function showShareBanner() {
-        showNotification('Link Copied!', 'info');
+        showNotification(t('toast_link_copied_notification'), 'info');
     }
 
     function showToast(message) {
@@ -594,7 +576,7 @@
 
     function resetUpload() {
         clearPendingCountdown();
-        selectedFile = null; encryptedBlob = null; generatedPassword = null;
+        selectedFile = null; generatedPassword = null;
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;
@@ -607,8 +589,8 @@
         const zoneHeading = dropZone.querySelector('h3');
         const zoneSubtext = dropZone.querySelector('p');
         zoneIcon.setAttribute('data-lucide', 'circle-fading-arrow-up');
-        zoneHeading.textContent = 'Upload File';
-        zoneSubtext.textContent = 'Drag and Drop a file here or click to browse.';
+        zoneHeading.textContent = t('drop_heading');
+        zoneSubtext.textContent = t('drop_subtext');
         if (window.lucide && lucide.createIcons) lucide.createIcons();
 
         stageEntry.classList.remove('hidden');
@@ -621,10 +603,10 @@
 
     function startPendingCountdown() {
         clearPendingCountdown();
-        if (!pendingExpiresAt) { pendingCountdown.textContent = '10:00'; return; }
+        if (!pendingExpiresAt) { pendingCountdown.textContent = t('state_upload_pending'); return; }
         const tick = () => {
             const remaining = pendingExpiresAt - Date.now();
-            if (remaining <= 0) { clearPendingCountdown(); pendingCountdown.textContent = '00:00'; resetUpload(); return; }
+            if (remaining <= 0) { clearPendingCountdown(); pendingCountdown.textContent = t('state_upload_expired'); resetUpload(); return; }
             const s = Math.floor(remaining / 1000);
             pendingCountdown.textContent = `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
         };

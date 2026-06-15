@@ -575,7 +575,6 @@ func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool
 	hostDeviceID := c.GetHeader("X-Device-ID")
 	if hostDeviceID != "" && tunnel.InitiatorDeviceID.Valid &&
 		strings.EqualFold(tunnel.InitiatorDeviceID.String, hostDeviceID) {
-		// For guest tunnels (no authenticated user), also verify the host token
 		if tunnel.InitiatorCNSUserID != 0 || tunnel.HostToken == "" {
 			return true
 		}
