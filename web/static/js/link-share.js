@@ -319,6 +319,7 @@
                 async (chunkIndex, chunkData) => {
                     await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
                     uploadedChunks++;
+                    updateUploadProgress();
                 },
                 { concurrency: PARALLEL_CHUNK_UPLOADS }
             );
