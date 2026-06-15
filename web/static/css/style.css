@@ -1473,6 +1473,17 @@ body.tos-gate-open {
     }
 }
 
+/* ── Browser Old Nudge ── */
+.browser-old-nudge {
+    background: #681111;
+    color: #fff;
+    text-align: center;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-family: 'Arimo', sans-serif;
+    line-height: 1.5;
+}
+
 /* ── Notification Pill ── */
 .notification-pill {
     position: fixed;

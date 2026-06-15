@@ -11,6 +11,7 @@
 <link rel="icon" type="image/png" href="/static/favicon.png">
 </head>
 <body>
+    <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
     <div class="header-wrapper">
         <header class="header">
             <div class="header-left">
@@ -107,6 +108,9 @@
     </footer>
     <script>
         document.addEventListener('click',function(){document.querySelectorAll('.login-btn.active').forEach(function(e){e.classList.remove('active')})});
+    </script>
+    <script>
+        (function(){var ua=navigator.userAgent,o=false;if(/MSIE|Trident/.test(ua))o=true;else if(!/Edg/.test(ua)&&/Chrome\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<80)o=true;else if(/Firefox\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<74)o=true;else if(/Version\/(\d+\.?\d*).*Safari/.test(ua)&&parseFloat(RegExp.$1)<13.1)o=true;if(o)document.getElementById('browser-old-nudge').classList.remove('hidden')})();
     </script>
 </body>
 </html>
