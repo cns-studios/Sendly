@@ -516,6 +516,8 @@
         shareUrlCopyBtn.textContent = t('link_share_copy');
         shareUrlCopyBtn.classList.remove('copied');
         shareUrlModal.classList.remove('hidden');
+        shareUrlModal.offsetHeight;
+        shareUrlModal.classList.add('visible');
         shareUrlModal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('tos-gate-open');
         shareUrlCopyBtn.focus();
@@ -523,7 +525,8 @@
 
     function hideShareUrlModal() {
         if (!shareUrlModal) return;
-        shareUrlModal.classList.add('hidden');
+        shareUrlModal.classList.remove('visible');
+        setTimeout(() => shareUrlModal.classList.add('hidden'), 250);
         shareUrlModal.setAttribute('aria-hidden', 'true');
         document.body.classList.remove('tos-gate-open');
     }
