@@ -171,6 +171,7 @@
             }
         });
         document.addEventListener('click',function(){document.querySelectorAll('.login-btn.active').forEach(function(e){e.classList.remove('active')})});
+        (function(){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}})();
     </script>
     <script src="/static/js/crypto.js"></script>
     <script src="/static/js/app.js"></script>

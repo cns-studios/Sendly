@@ -72,7 +72,7 @@ body.page-index {
 
 .header {
     background-color: #E4E3E3;
-    border-radius: 100px;
+    border-radius: 900px;
     width: 40%;
     min-width: 500px;
     display: flex;
@@ -2330,13 +2330,14 @@ body.page-quickshare #fileListEmpty {
 /* ── Responsive ── */
 @media (max-width: 768px) {
     .header {
-        width: 90%;
+        width: 90vw;
+        max-width: 90vw;
         min-width: auto;
         flex-wrap: wrap;
         gap: 8px;
-        justify-content: center;
+        justify-content: space-between;
         padding: 10px 16px;
-        border-radius: 20px;
+        border-radius: 200px;
     }
 
     .header-left {
@@ -2347,7 +2348,15 @@ body.page-quickshare #fileListEmpty {
         gap: 14px;
     }
 
+    .quicklinks a:not(.lang-toggle) {
+        display: none;
+    }
+
     .recent-files-link {
+        display: none;
+    }
+
+    .footer a:not([href="/tos"]):not([href="/privacy"]) {
         display: none;
     }
 
@@ -2356,8 +2365,11 @@ body.page-quickshare #fileListEmpty {
     }
 
     body.page-index .header {
+        width: 100%;
+        max-width: 100%;
         flex-wrap: wrap;
         gap: 12px;
+        justify-content: space-between;
     }
 
     body.page-index .header-left {
@@ -2368,30 +2380,57 @@ body.page-quickshare #fileListEmpty {
         margin-left: 0;
     }
 
+    body.page-index .star-bg {
+        display: none;
+    }
+
     body.page-index .hero-section {
         padding-top: 40px;
         padding-bottom: 24px;
     }
 
     body.page-index .hero-title {
-        font-size: 36px;
+        font-size: 32px;
     }
 
     body.page-index .hero-subtitle {
-        font-size: 18px;
-        padding: 0 20px;
+        font-size: 17px;
+        padding: 0 24px;
+        max-width: 100%;
     }
 
     body.page-index .action-cards {
         flex-direction: column;
-        align-items: center;
-        gap: 32px;
-        padding: 20px 20px 40px;
+        align-items: stretch;
+        gap: 0;
+        padding: 20px 32px 40px;
     }
 
     body.page-index .action-card {
         width: 100%;
-        max-width: 385px;
+        max-width: 100%;
+        background: none;
+        border-radius: 0;
+        padding: 32px 0;
+        height: auto;
+    }
+
+    body.page-index .card-title {
+        font-size: 24px;
+        margin-bottom: 12px;
+        font-weight: 700;
+    }
+
+    body.page-index .card-desc {
+        font-size: 16px;
+        margin-bottom: 24px;
+        max-width: 100%;
+    }
+
+    body.page-index .card-btn {
+        width: 100%;
+        height: 55px;
+        font-size: 20px;
     }
 
     body.page-index .file-section {
@@ -2399,11 +2438,96 @@ body.page-quickshare #fileListEmpty {
         padding-right: 20px;
     }
 
+    body.page-link .link-content-wrapper {
+        padding: 24px 16px;
+        min-height: auto;
+    }
+
+    body.page-link .drop-zone {
+        width: 100%;
+        max-width: 100%;
+        height: 175px;
+        border-radius: 23px;
+        border: none;
+    }
+
+    body.page-link .drop-zone h3 {
+        font-size: 24px;
+        font-weight: 590;
+    }
+
+    body.page-link .drop-zone-icon,
+    body.page-link .drop-zone p {
+        display: none;
+    }
+
+    body.page-link .drop-zone.uploading .drop-zone-icon,
+    body.page-link .drop-zone.uploading p {
+        display: flex;
+    }
+
+    body.page-link .drop-zone.success .drop-zone-icon {
+        display: flex;
+    }
+
+    body.page-link .drop-zone.success h3 {
+        font-size: 18px;
+    }
+
+    body.page-link .drop-zone.success p {
+        display: block;
+    }
+
+    body.page-shared .header {
+        width: 90%;
+        max-width: 90%;
+    }
+
+    body.page-shared .shared-content-wrapper {
+        padding: 24px 16px;
+    }
+
+    body.page-shared .shared-heading {
+        font-size: 24px;
+    }
+
+    body.page-shared .file-info-box {
+        width: 100%;
+        border-radius: 21px;
+    }
+
+    body.page-shared .file-name-text {
+        font-size: 24px;
+    }
+
+    body.page-shared .file-meta-text {
+        font-size: 14px;
+    }
+
+    body.page-shared .downloading-box {
+        width: 100%;
+    }
+
+    body.page-shared #error-section {
+        width: 100%;
+        height: auto;
+        min-height: 300px;
+        padding: 1.5rem;
+    }
+
     body.page-quickshare .create-view,
     body.page-quickshare .session-view,
     body.page-quickshare .join-view,
     body.page-quickshare .queue-view {
-        padding: 40px 20px 0 20px;
+        padding: 32px 20px 0;
+    }
+
+    body.page-quickshare .create-view h1 {
+        font-size: 32px;
+    }
+
+    body.page-quickshare .create-view .subtitle {
+        font-size: 20px;
     }
 
     body.page-quickshare .bottom-bar,
@@ -2413,14 +2537,69 @@ body.page-quickshare #fileListEmpty {
 
     body.page-quickshare .session-view.active {
         flex-direction: column;
+        gap: 32px;
     }
 
     body.page-quickshare .session-right {
         align-items: center;
+        width: 100%;
+    }
+
+    body.page-quickshare .session-right .drop-zone {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    body.page-quickshare .session-left {
+        min-width: 0;
+        width: 100%;
+    }
+
+    body.page-quickshare .people-heading {
+        font-size: 24px;
+    }
+
+    body.page-quickshare .join-view h1 {
+        font-size: 32px;
+    }
+
+    body.page-quickshare .join-view .subtitle {
+        font-size: 20px;
+    }
+
+    body.page-quickshare .queue-view h1 {
+        font-size: 32px;
+    }
+
+    body.page-quickshare .queue-view .subtitle {
+        font-size: 20px;
     }
 
     body.page-link .two-column-grid {
         grid-template-columns: 1fr;
+    }
+
+    .recent-files-popup {
+        width: calc(100% - 32px);
+        border-radius: 20px;
+    }
+
+    .popup-header {
+        padding: 24px 20px 0;
+    }
+
+    .popup-header h2 {
+        font-size: 24px;
+    }
+
+    .popup-list {
+        padding: 20px;
+    }
+
+    .popup-entry {
+        height: auto;
+        min-height: 64px;
+        padding: 0 12px 0 16px;
     }
 }
 
