@@ -59,6 +59,11 @@ body.page-index {
     to { opacity: 0; filter: blur(6px); }
 }
 
+@keyframes text-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 /* ── Header ── */
 .header-wrapper {
     position: sticky;
@@ -391,6 +396,19 @@ body.page-index {
     color: #828282;
     margin-top: 8px;
     min-height: 20px;
+}
+
+.drop-zone .drop-zone-sub-text.shiny {
+    background: linear-gradient(90deg,
+        #828282 0%, #828282 25%,
+        rgba(255,255,255,0.85) 50%,
+        #828282 75%, #828282 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: text-shimmer 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
 
 .drop-zone input[type="file"] {
@@ -1444,13 +1462,14 @@ body.tos-gate-open {
     }
 
     .share-url-actions {
-        flex-direction: column;
+        flex-direction: row;
         gap: 10px;
+        justify-content: flex-end;
     }
 
     .btn-share-discard,
     .btn-share-copy {
-        width: 100%;
+        width: auto;
     }
 }
 
@@ -1659,6 +1678,19 @@ body.page-link .drop-zone p {
 body.page-link .drop-zone.uploading {
     opacity: 0.6;
     pointer-events: none;
+}
+
+body.page-link .drop-zone.uploading h3 {
+    background: linear-gradient(90deg,
+        #000 0%, #000 25%,
+        rgba(255,255,255,0.85) 50%,
+        #000 75%, #000 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: text-shimmer 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
 }
 
 body.page-link .drop-zone.success {
@@ -2423,7 +2455,7 @@ body.page-quickshare #fileListEmpty {
 
     body.page-index .card-desc {
         font-size: 16px;
-        margin-bottom: 24px;
+        margin-bottom: 4px;
         max-width: 100%;
     }
 
@@ -2431,6 +2463,7 @@ body.page-quickshare #fileListEmpty {
         width: 100%;
         height: 55px;
         font-size: 20px;
+        margin-top: 0;
     }
 
     body.page-index .file-section {
@@ -2617,12 +2650,13 @@ body.page-quickshare #fileListEmpty {
     }
 
     .tos-modal-actions {
-        flex-direction: column;
+        flex-direction: row;
         gap: 12px;
+        justify-content: center;
     }
 
     .tos-modal-actions .btn {
-        width: 100%;
+        width: auto;
     }
 
 }

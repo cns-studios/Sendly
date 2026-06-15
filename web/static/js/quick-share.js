@@ -873,6 +873,7 @@
         isUploading = true;
         dropMainText.textContent = t('status_uploading');
         dropSubText.textContent = file.name;
+        dropSubText.classList.add('shiny');
 
         try {
             if (isHost && !sessionPassword) {
@@ -1035,6 +1036,7 @@
 
             dropMainText.textContent = t('quickshare_place_files');
             dropSubText.textContent = '';
+            dropSubText.classList.remove('shiny');
             isUploading = false;
             await refreshTunnelState();
         } catch (error) {
@@ -1042,6 +1044,7 @@
             showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
             dropMainText.textContent = t('quickshare_place_files');
             dropSubText.textContent = '';
+            dropSubText.classList.remove('shiny');
             isUploading = false;
         }
     }
