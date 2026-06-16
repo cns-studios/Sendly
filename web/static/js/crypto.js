@@ -430,6 +430,15 @@ reject(new Error(t('error_failed_read_file')));
         });
     }
 
+    function computeOriginalFileSize(encryptedLength) {
+        const baseOverhead = FORMAT_MAGIC.length + CONFIG.saltLength;
+        const chunkOverhead = CONFIG.ivLength + 16;
+        const CHUNK_SIZE = 5 * 1024 * 1024;
+        const dataSize = encryptedLength - baseOverhead;
+        const numChunks = Math.ceil(dataSize / (CHUNK_SIZE + chunkOverhead));
+        return encryptedLength - baseOverhead - numChunks * chunkOverhead;
+    }
+
     async function decryptBlob(blob, password, onProgress) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -437,12 +446,24 @@ reject(new Error(t('error_failed_read_file')));
             reader.onload = async function(e) {
                 try {
                     if (onProgress) onProgress(0, t('status_decrypting'));
-                    
+
                     const data = new Uint8Array(e.target.result);
-                    const decrypted = await decrypt(data, password);
-                    
+
+                    const hasMagic =
+                        data.length >= 4 &&
+                        data[0] === FORMAT_MAGIC[0] && data[1] === FORMAT_MAGIC[1] &&
+                        data[2] === FORMAT_MAGIC[2] && data[3] === FORMAT_MAGIC[3];
+
+                    let decrypted;
+                    if (!hasMagic) {
+                        decrypted = await decrypt(data, password);
+                    } else {
+                        const originalSize = computeOriginalFileSize(data.length);
+                        decrypted = await decryptFileChunked(blob, password, originalSize, onProgress);
+                    }
+
                     if (onProgress) onProgress(100, t('status_decryption_complete'));
-                    
+
                     resolve(decrypted);
                 } catch (error) {
                     reject(error);

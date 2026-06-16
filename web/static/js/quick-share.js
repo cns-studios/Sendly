@@ -447,7 +447,7 @@
                             if (authUserKeyRaw) {
                                 const nonce = envelope.dek_wrap_nonce_b64
                                     ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64)
-                                    : null;
+                                    : new Uint8Array();
                                 rawDEK = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, authUserKeyRaw);
                             }
                         } else if (alg.startsWith('RSA-OAEP')) {
