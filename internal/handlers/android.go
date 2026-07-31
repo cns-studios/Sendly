@@ -111,6 +111,7 @@ type AndroidHandler struct {
 	db            *storage.Postgres
 	fs            *storage.Filesystem
 	uploadService *services.Upload
+	tracker       *services.Tracker
 	hub           *androidHub
 	deviceHub     *deviceEnrollmentHub
 }
@@ -137,12 +138,14 @@ func NewAndroidHandler(
 	db *storage.Postgres,
 	fs *storage.Filesystem,
 	uploadService *services.Upload,
+	tracker *services.Tracker,
 ) *AndroidHandler {
 	return &AndroidHandler{
 		cfg:           cfg,
 		db:            db,
 		fs:            fs,
 		uploadService: uploadService,
+		tracker:       tracker,
 		hub:           newAndroidHub(),
 	}
 }
@@ -226,6 +229,7 @@ func (h *AndroidHandler) Download(c *gin.Context) {
 	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
 	c.Header("X-Original-Filename", file.OriginalName)
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+	h.tracker.RecordDownload(c.Request.Context(), file.SizeBytes)
 	c.Status(http.StatusOK)
 	_, _ = io.Copy(c.Writer, reader)
 }

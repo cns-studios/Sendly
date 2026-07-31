@@ -8,22 +8,25 @@ import (
 
 	"shareit/internal/config"
 	"shareit/internal/models"
+	"shareit/internal/services"
 	"shareit/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
 
 type DownloadHandler struct {
-	cfg *config.Config
-	db  *storage.Postgres
-	fs  *storage.Filesystem
+	cfg     *config.Config
+	db      *storage.Postgres
+	fs      *storage.Filesystem
+	tracker *services.Tracker
 }
 
-func NewDownloadHandler(cfg *config.Config, db *storage.Postgres, fs *storage.Filesystem) *DownloadHandler {
+func NewDownloadHandler(cfg *config.Config, db *storage.Postgres, fs *storage.Filesystem, tracker *services.Tracker) *DownloadHandler {
 	return &DownloadHandler{
-		cfg: cfg,
-		db:  db,
-		fs:  fs,
+		cfg:     cfg,
+		db:      db,
+		fs:      fs,
+		tracker: tracker,
 	}
 }
 
@@ -99,7 +102,7 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	_, err := h.db.GetFileByID(c.Request.Context(), fileID)
+	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			status := http.StatusNotFound
@@ -142,6 +145,8 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.enc\"", fileID))
 	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+
+	h.tracker.RecordDownload(c.Request.Context(), file.SizeBytes)
 
 	c.Status(http.StatusOK)
 	c.Writer.Flush()

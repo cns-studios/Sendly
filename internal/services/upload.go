@@ -19,6 +19,7 @@ type Upload struct {
 	db       *storage.Postgres
 	redis    *storage.Redis
 	fs       *storage.Filesystem
+	tracker  *Tracker
 	stopChan chan struct{}
 	wg       sync.WaitGroup
 }
@@ -35,12 +36,13 @@ type FinalizeUploadOptions struct {
 	RecipientEnvelopes []models.FileRecipientKeyEnvelope
 }
 
-func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem) *Upload {
+func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem, tracker *Tracker) *Upload {
 	return &Upload{
 		cfg:      cfg,
 		db:       db,
 		redis:    redis,
 		fs:       fs,
+		tracker:  tracker,
 		stopChan: make(chan struct{}),
 	}
 }
@@ -341,6 +343,8 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, recipientEnvelopes); err != nil {
 		return nil, fmt.Errorf("error creating file record: %w", err)
 	}
+
+	u.tracker.RecordUpload(ctx, actualSize, session.UploaderIP)
 
 	u.redis.RemovePendingFile(ctx, session.FileID)
 	u.redis.DeleteUploadSession(ctx, sessionID)
