@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -33,6 +34,10 @@ type Config struct {
 	AutoDeleteReportCount int
 
 	DiscordWebhookURL string
+
+	ReportBotURL         string
+	ShareItBotAPIKey     string
+	StatsReportInterval  time.Duration
 
 	CNSAuthURL             string
 	CNSAuthClientID        string
@@ -70,6 +75,9 @@ func Load() (*Config, error) {
 		MaxFileSize:                    getEnvInt64("MAX_FILE_SIZE", 786432000),
 		AutoDeleteReportCount:          getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
 		DiscordWebhookURL:              getEnv("DISCORD_WEBHOOK_URL", ""),
+		ReportBotURL:                   getEnv("REPORT_BOT_URL", ""),
+		ShareItBotAPIKey:               getEnv("SHAREIT_BOT_API_KEY", ""),
+		StatsReportInterval:            time.Duration(getEnvInt("STATS_REPORT_INTERVAL_MINUTES", 5)) * time.Minute,
 		CNSAuthURL:                     getEnv("CNS_AUTH_URL", ""),
 		CNSAuthClientID:                getEnv("CNS_AUTH_CLIENT_ID", ""),
 		CNSAuthDesktopClientID:         getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),

@@ -62,6 +62,10 @@ func main() {
 	log.Println("Cleanup service started")
 
 	tracker := services.NewTracker(db)
+	statsReporter := services.NewStatsReporter(cfg, db)
+	go statsReporter.Start()
+	defer statsReporter.Stop()
+	log.Println("Stats reporter started")
 	uploadService := services.NewUpload(cfg, db, rdb, fs, tracker)
 	go uploadService.StartPendingCleanup()
 	defer uploadService.Stop()
