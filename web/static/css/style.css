@@ -371,6 +371,11 @@ body.page-index {
     left: 0;
 }
 
+.drop-zone-mobile,
+.drop-zone-mobile-icon {
+    display: none;
+}
+
 /* ── Buttons (quickshare) ── */
 .start-btn,
 .blue-btn {
@@ -687,7 +692,6 @@ body.page-index .card-desc {
     color: #6E6E73;
     line-height: 1.4;
     margin: 0;
-    flex: 1;
 }
 
 body.page-index .card-btn {
@@ -854,6 +858,31 @@ body.page-link .footer {
 
 body.page-quickshare .main-content {
     position: relative;
+}
+
+body.page-quickshare .page-loading,
+body.page-quickshare .page-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 45vh;
+    gap: 18px;
+}
+
+body.page-quickshare .page-loading .downloading-spinner {
+    width: 44px;
+    height: 44px;
+}
+
+body.page-quickshare .page-loading-text,
+body.page-quickshare .page-error-text {
+    font-family: 'Arimo', sans-serif;
+    font-weight: 400;
+    font-size: 16px;
+    color: #6E6E73;
+    margin: 0;
+    text-align: center;
 }
 
 body.page-quickshare .create-view {
@@ -1384,11 +1413,11 @@ body.tos-gate-open {
 
 /* ── Share URL card (link share) ── */
 .share-url-card {
-    width: min(870px, calc(100% - 2rem));
+    width: min(480px, calc(100% - 2rem));
     max-height: calc(100vh - 2rem);
     background: #FFFFFF;
-    border-radius: 20px;
-    padding: 28px;
+    border-radius: 12px;
+    padding: 16px;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.15);
     display: flex;
     flex-direction: column;
@@ -1466,7 +1495,7 @@ body.tos-gate-open {
 
 @media (max-width: 640px) {
     .share-url-card {
-        padding: 20px 16px;
+        padding: 16px 12px;
     }
 
     .share-url-title {
@@ -2466,13 +2495,24 @@ body.page-quickshare #fileListEmpty {
         padding: 36px 32px 40px;
     }
 
+    html,
+    body.page-index {
+        overflow-x: hidden;
+    }
+
+    body.page-index {
+        min-height: 100dvh;
+    }
+
     body.page-index .action-card {
         width: 100%;
         max-width: 100%;
-        background: none;
-        border-radius: 0;
-        padding: 32px 0;
+        background: #EEEEEE;
+        border-radius: 16px;
+        padding: 15px;
         height: auto;
+        aspect-ratio: auto;
+        margin-bottom: 16px;
     }
 
     body.page-index .card-title {
@@ -2507,36 +2547,53 @@ body.page-quickshare #fileListEmpty {
     body.page-link .drop-zone {
         width: 100%;
         max-width: 100%;
-        height: 175px;
-        border-radius: 23px;
-        border: none;
+        height: auto;
+        min-height: 140px;
+        padding: 28px 16px;
+        border: 1.5px dashed #00827B;
+        border-radius: 12px;
+        background: #FFFFFF;
+        gap: 4px;
+        -webkit-tap-highlight-color: transparent;
     }
 
-    body.page-link .drop-zone h3 {
-        font-size: 24px;
-        font-weight: 590;
+    body.page-link .drop-zone:active {
+        background: rgba(0, 130, 123, 0.05);
+        border-color: #00827B;
     }
 
-    body.page-link .drop-zone-icon,
+    body.page-link .drop-zone h3,
     body.page-link .drop-zone p {
         display: none;
     }
 
-    body.page-link .drop-zone.uploading .drop-zone-icon,
-    body.page-link .drop-zone.uploading p {
-        display: flex;
+    body.page-link .drop-zone-icon {
+        width: 28px;
+        height: 28px;
+        margin-bottom: 10px;
+        color: #00827B;
     }
 
     body.page-link .drop-zone.success .drop-zone-icon {
+        color: #00827B;
+    }
+
+    body.page-link .drop-zone-mobile {
         display: flex;
+        flex-direction: column;
+        align-items: center;
     }
 
-    body.page-link .drop-zone.success h3 {
-        font-size: 18px;
+    body.page-link .drop-zone-mobile-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1a1a1a;
+        margin-bottom: 2px;
     }
 
-    body.page-link .drop-zone.success p {
-        display: block;
+    body.page-link .drop-zone-mobile-subtitle {
+        font-size: 12px;
+        color: #6E6E73;
     }
 
     body.page-shared .header {
@@ -2611,6 +2668,40 @@ body.page-quickshare #fileListEmpty {
     body.page-quickshare .session-right .drop-zone {
         width: 100%;
         max-width: 100%;
+        height: auto;
+        min-height: 140px;
+        padding: 28px 16px;
+        border: 1.5px dashed #00827B;
+        border-radius: 12px;
+        background: #FFFFFF;
+        gap: 2px;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body.page-quickshare .session-right .drop-zone:active {
+        background: rgba(0, 130, 123, 0.05);
+        border-color: #00827B;
+    }
+
+    body.page-quickshare .drop-zone-mobile-icon {
+        display: block;
+        width: 28px;
+        height: 28px;
+        color: #00827B;
+        margin-bottom: 10px;
+    }
+
+    body.page-quickshare .drop-zone-main-text {
+        font-size: 14px;
+        font-weight: 500;
+        color: #1a1a1a;
+    }
+
+    body.page-quickshare .drop-zone-sub-text {
+        font-size: 12px;
+        color: #6E6E73;
+        margin-top: 2px;
+        min-height: 14px;
     }
 
     body.page-quickshare .session-left {

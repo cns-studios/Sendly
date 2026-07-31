@@ -87,6 +87,9 @@
     const queueCodeSquares = document.querySelectorAll('#queueCodeSquares .code-square');
     const peopleRow = document.getElementById('peopleRow');
     const queuePeopleRow = document.getElementById('queuePeopleRow');
+    const pageLoading = document.getElementById('page-loading');
+    const pageError = document.getElementById('page-error');
+    const pageErrorRetry = document.getElementById('page-error-retry');
     let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
@@ -276,6 +279,20 @@
 
     function goHome() {
         window.location.href = '/';
+    }
+
+    function showPageLoading() {
+        if (pageLoading) pageLoading.classList.remove('hidden');
+        if (pageError) pageError.classList.add('hidden');
+    }
+
+    function hidePageLoading() {
+        if (pageLoading) pageLoading.classList.add('hidden');
+    }
+
+    function showPageError() {
+        if (pageLoading) pageLoading.classList.add('hidden');
+        if (pageError) pageError.classList.remove('hidden');
     }
 
     function setCodeDisplay(squares, code) {
@@ -605,7 +622,7 @@
             if (AUTHENTICATED) {
                 const ready = await ensureDeviceReady();
                 if (!ready) {
-                    return;
+                    return false;
                 }
                 myDeviceId = authDeviceIdentity.deviceId;
             } else {
@@ -641,9 +658,11 @@
             renderParticipants(participants);
             setView('create');
             startTunnelPolling();
+            return true;
         } catch (error) {
             console.error('Create tunnel failed:', error);
             showErrorBanner(tpl('quickshare_create_failed', {msg: error.message}));
+            return false;
         }
     }
 
@@ -1046,6 +1065,16 @@
         joinSubmitBtn?.addEventListener('click', handleJoinTunnel);
         leaveBtn?.addEventListener('click', handleLeaveTunnel);
 
+        pageErrorRetry?.addEventListener('click', async () => {
+            showPageLoading();
+            const ok = await handleCreateTunnel();
+            if (ok) {
+                hidePageLoading();
+            } else {
+                showPageError();
+            }
+        });
+
         dropZone?.addEventListener('click', () => fileInput?.click());
         dropZone?.addEventListener('dragover', (e) => {
             e.preventDefault();
@@ -1184,10 +1213,16 @@
                 joinCodeHiddenInput.value = '';
                 joinCodeHiddenInput.focus();
             }
+            hidePageLoading();
             return;
         }
 
-        await handleCreateTunnel();
+        const ok = await handleCreateTunnel();
+        if (ok) {
+            hidePageLoading();
+        } else {
+            showPageError();
+        }
     }
 
     if (document.readyState === 'loading') {

@@ -78,6 +78,8 @@
 
   "link_drop_heading": "Datei hochladen",
   "link_drop_subtext": "Ziehe eine Datei hierher oder klicke zum auswählen.",
+  "dropzone_mobile_title": "Tippen zum Hochladen",
+  "dropzone_mobile_subtitle": "oder wähle aus Kamera, Dateien oder Fotos",
   "link_processing": "Hochladen",
   "link_pending_badge": "Starte deinen Upload",
   "link_pending_info": "Wähle die Gültigkeitsdauer zum Teilen dieser Datei.",
@@ -123,7 +125,10 @@
   "quickshare_join_title": "Beitreten",
   "quickshare_join_desc": "Gib den Raumcode ein, um einer Schnellfreigabe beizutreten",
   "quickshare_join_submit": "Beitreten",
-
+  "quickshare_loading": "Sitzung wird vorbereitet...",
+  "quickshare_page_error": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+  "quickshare_retry": "Erneut versuchen",
+ 
   "shared_loading": "Lade Dateiinformationen...",
   "shared_heading": "Dir wurde eine Datei gesendet",
   "shared_download": "Herunterladen",

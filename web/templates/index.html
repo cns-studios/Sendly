@@ -190,7 +190,7 @@
             }
         });
         document.addEventListener('click',function(){document.querySelectorAll('.login-btn.active').forEach(function(e){e.classList.remove('active')})});
-        (function(){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}})();
+        (function(){if(window.innerWidth>768){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}}})();
         (function(){
             var card=document.getElementById('quickshare-card');
             if(!card)return;

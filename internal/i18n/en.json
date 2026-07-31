@@ -78,6 +78,8 @@
 
   "link_drop_heading": "Upload File",
   "link_drop_subtext": "Drag and Drop a file here or click to browse.",
+  "dropzone_mobile_title": "Tap to upload",
+  "dropzone_mobile_subtitle": "or choose from camera, files, or photos",
   "link_processing": "Uploading",
   "link_pending_badge": "Start your Upload",
   "link_pending_info": "Select expiration to share this file.",
@@ -123,7 +125,10 @@
   "quickshare_join_title": "Join",
   "quickshare_join_desc": "Enter the Room Code to join a Quick Share",
   "quickshare_join_submit": "Join",
-
+  "quickshare_loading": "Preparing your session...",
+  "quickshare_page_error": "Something went wrong. Please try again.",
+  "quickshare_retry": "Try again",
+ 
   "shared_loading": "Loading file information...",
   "shared_heading": "You got sent a file",
   "shared_download": "Download",

@@ -79,6 +79,16 @@
 
     <div class="main-content">
 
+        <div id="page-loading" class="page-loading">
+            <div class="downloading-spinner"></div>
+            <p class="page-loading-text">{{.t.quickshare_loading}}</p>
+        </div>
+
+        <div id="page-error" class="page-error hidden">
+            <p class="page-error-text">{{.t.quickshare_page_error}}</p>
+            <button id="page-error-retry" class="btn btn-accent">{{.t.quickshare_retry}}</button>
+        </div>
+
         <div class="create-view" id="createView">
             <h1>{{.t.quickshare_invite_title}}</h1>
             <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
@@ -119,6 +129,7 @@
 
             <div class="session-right">
                 <div class="drop-zone" id="dropZone">
+                    <i data-lucide="circle-fading-arrow-up" class="drop-zone-mobile-icon"></i>
                     <span class="drop-zone-main-text" id="dropMainText">{{.t.quickshare_drop_text}}</span>
                     <span class="drop-zone-sub-text" id="dropSubText"></span>
                     <input type="file" id="fileInput" multiple>
