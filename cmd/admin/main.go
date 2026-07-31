@@ -85,6 +85,13 @@ func main() {
 	case "stats":
 		showStats(ctx, db, fs)
 
+	case "tracking":
+		limit := 10
+		if len(os.Args) >= 3 {
+			fmt.Sscanf(os.Args[2], "%d", &limit)
+		}
+		showTracking(ctx, db, limit)
+
 	case "reports":
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "Usage: admin reports <file_id>")
@@ -152,6 +159,7 @@ FILE COMMANDS
   download <file_id> [path]         Download encrypted file (optionally specify output path)
   list [limit] [offset]             List all files (default: limit=20, offset=0)
   stats                             Show system statistics
+  tracking [limit]                  Show data tracking counters and top uploaders by IP (default: limit=10)
   reports <file_id>                 Show reports for a file
   cleanup                           Force cleanup of expired files
 
@@ -169,6 +177,7 @@ Examples:
   admin delete abc123def456ghi78
   admin list 50 0
   admin stats
+  admin tracking 10
   admin create-key "CNS_Team"
   admin revoke-key dz_abc123...
   admin list-keys
@@ -353,6 +362,87 @@ func showStats(ctx context.Context, db *storage.Postgres, fs *storage.Filesystem
 	fmt.Printf("Total Size (Disk):    %s\n", formatFileSize(totalSizeDisk))
 	fmt.Printf("Files on Disk:        %d\n", len(diskFiles))
 	fmt.Printf("Active Upload Sessions: %d\n", len(sessionDirs))
+	fmt.Println(strings.Repeat("-", 60))
+	printTrackingCounters(ctx, db)
+	fmt.Println(strings.Repeat("=", 60))
+}
+
+func printTrackingCounters(ctx context.Context, db *storage.Postgres) {
+	counters, err := db.GetTrackingCounters(ctx)
+	if err != nil {
+		fmt.Printf("Warning: Failed to read tracking counters: %v\n", err)
+		return
+	}
+
+	downloads := counters.TotalProcessedBytes - counters.TotalUploadedBytes
+	if downloads < 0 {
+		downloads = 0
+	}
+
+	fmt.Println("DATA TRACKING")
+	fmt.Println(strings.Repeat("-", 60))
+	fmt.Printf("Total Uploaded:       %s (%d bytes)\n", formatFileSize(counters.TotalUploadedBytes), counters.TotalUploadedBytes)
+	fmt.Printf("Total Processed:      %s (%d bytes)\n", formatFileSize(counters.TotalProcessedBytes), counters.TotalProcessedBytes)
+	fmt.Printf("Total Downloads:      %s (%d bytes)\n", formatFileSize(downloads), downloads)
+	fmt.Printf("Last Upload:          %s\n", counters.TotalUploadedUpdatedAt.Format(time.RFC3339))
+	fmt.Printf("Last Transfer:        %s\n", counters.TotalProcessedUpdatedAt.Format(time.RFC3339))
+}
+
+func showTracking(ctx context.Context, db *storage.Postgres, limit int) {
+	if limit <= 0 {
+		limit = 10
+	}
+
+	counters, err := db.GetTrackingCounters(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting tracking counters: %v\n", err)
+		os.Exit(1)
+	}
+
+	downloads := counters.TotalProcessedBytes - counters.TotalUploadedBytes
+	if downloads < 0 {
+		downloads = 0
+	}
+
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("DATA TRACKING")
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Printf("Total Uploaded:       %s (%d bytes)\n", formatFileSize(counters.TotalUploadedBytes), counters.TotalUploadedBytes)
+	fmt.Printf("Total Processed:      %s (%d bytes)\n", formatFileSize(counters.TotalProcessedBytes), counters.TotalProcessedBytes)
+	fmt.Printf("Total Downloads:      %s (%d bytes)\n", formatFileSize(downloads), downloads)
+	fmt.Printf("Last Upload:          %s\n", counters.TotalUploadedUpdatedAt.Format(time.RFC3339))
+	fmt.Printf("Last Transfer:        %s\n", counters.TotalProcessedUpdatedAt.Format(time.RFC3339))
+
+	items, err := db.GetUploadsByIP(ctx, limit, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting uploads by IP: %v\n", err)
+		os.Exit(1)
+	}
+
+	totalIPs, err := db.GetUploadsByIPCount(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error counting tracked IPs: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Printf("TOP %d UPLOADERS BY IP (of %d total)\n", len(items), totalIPs)
+	fmt.Println(strings.Repeat("=", 60))
+
+	if len(items) == 0 {
+		fmt.Println("No tracked uploads by IP yet")
+	} else {
+		fmt.Printf("%-6s %-20s %-16s %s\n", "RANK", "IP", "UPLOADED", "LAST UPLOAD")
+		fmt.Println(strings.Repeat("-", 60))
+		for i, item := range items {
+			fmt.Printf("%-6d %-20s %-16s %s\n",
+				i+1,
+				item.IP,
+				formatFileSize(item.UploadedBytes),
+				item.UpdatedAt.Format(time.RFC3339),
+			)
+		}
+	}
 	fmt.Println(strings.Repeat("=", 60))
 }
 
