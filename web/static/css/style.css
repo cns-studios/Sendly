@@ -668,7 +668,7 @@ body.page-index .action-cards {
 
 body.page-index .action-card {
     width: clamp(280px, 22vw, 500px);
-    aspect-ratio: 385 / 320;
+    aspect-ratio: 385 / 270;
     background: #FFFFFF;
     border-radius: 27px;
     padding: clamp(24px, 2.2vw, 38px) clamp(20px, 2.2vw, 38px) clamp(20px, 1.8vw, 31px) clamp(20px, 2.2vw, 38px);
@@ -682,7 +682,7 @@ body.page-index .card-title {
     font-weight: 700;
     font-size: clamp(18px, 1.4vw, 28px);
     color: #000000;
-    margin: 0 0 23px 0;
+    margin: 0 0 30px 0;
 }
 
 body.page-index .card-desc {
@@ -691,7 +691,7 @@ body.page-index .card-desc {
     font-size: clamp(14px, 0.9vw, 19px);
     color: #6E6E73;
     line-height: 1.4;
-    margin: 0;
+    margin: 0 0 18px 0;
 }
 
 body.page-index .card-btn {
@@ -705,6 +705,7 @@ body.page-index .card-btn {
     font-size: clamp(16px, 1.1vw, 22px);
     text-decoration: none;
     transition: opacity 0.2s ease, background 0.2s ease;
+    margin-top: auto;
 }
 
 body.page-index .card-btn-primary {
@@ -729,6 +730,7 @@ body.page-index .card-btn-outline:hover {
 
 body.page-index .action-card-quickshare {
     cursor: pointer;
+    position: relative;
 }
 
 body.page-index .action-card-quickshare .card-desc,
@@ -741,13 +743,20 @@ body.page-index .action-card-quickshare.expanded .card-btn-quickshare {
     opacity: 0;
     transform: translateY(10px);
     pointer-events: none;
+    height: 0;
+    margin: 0 0 18px 0;
+    margin-top: auto;
+    overflow: hidden;
 }
 
 body.page-index .quick-share-actions {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    margin-top: 0;
+    position: absolute;
+    left: clamp(20px, 2.2vw, 38px);
+    right: clamp(20px, 2.2vw, 38px);
+    bottom: clamp(20px, 1.8vw, 31px);
     opacity: 0;
     transform: translateY(10px);
     pointer-events: none;
@@ -757,6 +766,7 @@ body.page-index .quick-share-actions {
 body.page-index .quick-share-actions .card-btn {
     opacity: 0;
     transform: translateY(10px);
+    margin-top: 0;
 }
 
 body.page-index .quick-share-actions .card-btn:first-child {
@@ -1446,8 +1456,9 @@ body.tos-gate-open {
     font-weight: 400;
     color: #000;
     line-height: 1.4;
-    word-break: break-all;
-    overflow-wrap: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .share-url-actions {
@@ -2534,6 +2545,16 @@ body.page-quickshare #fileListEmpty {
         margin-top: 0;
     }
 
+    body.page-index .action-card-quickshare.expanded {
+        min-height: 195px;
+    }
+
+    body.page-index .quick-share-actions {
+        left: 15px;
+        right: 15px;
+        bottom: 15px;
+    }
+
     body.page-index .file-section {
         padding-left: 20px;
         padding-right: 20px;
@@ -2594,6 +2615,35 @@ body.page-quickshare #fileListEmpty {
     body.page-link .drop-zone-mobile-subtitle {
         font-size: 12px;
         color: #6E6E73;
+    }
+
+    body.page-link .drop-zone.uploading .drop-zone-mobile,
+    body.page-link .drop-zone.uploading .drop-zone-icon,
+    body.page-link .drop-zone.success .drop-zone-mobile {
+        display: none;
+    }
+
+    body.page-link .drop-zone.uploading p,
+    body.page-link .drop-zone.success p {
+        display: block;
+        margin: 0;
+        min-height: 14px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #1a1a1a;
+    }
+
+    body.page-link .drop-zone.uploading p {
+        background: linear-gradient(90deg,
+            #000 0%, #000 25%,
+            rgba(255, 255, 255, 0.85) 50%,
+            #000 75%, #000 100%
+        );
+        background-size: 200% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: text-shimmer 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
     }
 
     body.page-shared .header {
