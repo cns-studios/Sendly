@@ -25,6 +25,16 @@
   "title_encryption": "Data Encryption ➤ ShareIt",
   "title_help": "Help ➤ ShareIt",
 
+  "desc_index": "ShareIt lets you send files to people or devices, fast and easy without annoying limits. Upload a file, get a link and share it with anyone.",
+  "desc_link": "Upload a file on ShareIt, get a shareable link and send it to anyone. Files are end-to-end encrypted and delete themselves automatically.",
+  "desc_quickshare": "Share multiple files with a group in real time on ShareIt. Like a shared folder, everyone can send and receive freely.",
+  "desc_shared": "You got sent a file on ShareIt. Download and decrypt it securely. Files are end-to-end encrypted and expire automatically.",
+  "desc_tos": "Terms of Service for ShareIt. Please read the conditions for using our file sharing service carefully.",
+  "desc_privacy": "Privacy Policy for ShareIt. Learn how your data is handled when you use our file sharing service.",
+  "desc_limits": "Current file size limits, retention periods and rate limits for ShareIt, for guests and logged-in users.",
+  "desc_encryption": "ShareIt encrypts every file end-to-end before it leaves your device. Learn how data encryption and decryption work.",
+  "desc_help": "Help and FAQ for ShareIt. Answers to common questions about sharing files, links, quick shares and encryption.",
+
   "tos_accept_title": "Accept to continue",
   "tos_accept_desc": "Please review and accept our",
   "tos_accept_and": "and",

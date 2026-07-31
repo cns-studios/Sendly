@@ -25,6 +25,16 @@
   "title_encryption": "Datenverschlüsselung ➤ ShareIt",
   "title_help": "Hilfe ➤ ShareIt",
 
+  "desc_index": "Mit ShareIt sendest du Dateien an Personen oder Geräte – schnell und einfach ohne lästige Grenzen. Datei hochladen, Link erhalten und mit jedem teilen.",
+  "desc_link": "Lade mit ShareIt eine Datei hoch, erhalte einen teilbaren Link und sende ihn an jeden. Dateien sind Ende-zu-Ende verschlüsselt und löschen sich automatisch.",
+  "desc_quickshare": "Teile mit ShareIt mehrere Dateien in Echtzeit mit einer Gruppe. Wie ein gemeinsamer Ordner – alle können frei senden und empfangen.",
+  "desc_shared": "Dir wurde eine Datei über ShareIt gesendet. Lade sie sicher herunter und entschlüssele sie. Dateien sind Ende-zu-Ende verschlüsselt und laufen automatisch ab.",
+  "desc_tos": "Nutzungsbedingungen für ShareIt. Bitte lies die Bedingungen für die Nutzung unseres Datei-Sharing-Dienstes sorgfältig.",
+  "desc_privacy": "Datenschutzerklärung für ShareIt. Erfahre, wie deine Daten bei der Nutzung unseres Datei-Sharing-Dienstes behandelt werden.",
+  "desc_limits": "Aktuelle Dateigrößen-Grenzen, Aufbewahrungsfristen und Ratenlimits für ShareIt – für Gäste und angemeldete Nutzer.",
+  "desc_encryption": "ShareIt verschlüsselt jede Datei Ende-zu-Ende, bevor sie dein Gerät verlässt. Erfahre, wie Datenverschlüsselung und -entschlüsselung funktionieren.",
+  "desc_help": "Hilfe und FAQ für ShareIt. Antworten auf häufige Fragen zu Dateien, Links, Quick Shares und Verschlüsselung.",
+
   "tos_accept_title": "Akzeptieren um fortzufahren",
   "tos_accept_desc": "Bitte lies und akzeptiere unsere",
   "tos_accept_and": "und",

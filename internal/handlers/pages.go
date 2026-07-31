@@ -4,12 +4,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"shareit/internal/config"
 	"shareit/internal/i18n"
 	"shareit/internal/middleware"
+	"shareit/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,12 +20,14 @@ import (
 type PageHandler struct {
 	cfg *config.Config
 	tr  *i18n.Translator
+	db  *storage.Postgres
 }
 
-func NewPageHandler(cfg *config.Config, tr *i18n.Translator) *PageHandler {
+func NewPageHandler(cfg *config.Config, tr *i18n.Translator, db *storage.Postgres) *PageHandler {
 	return &PageHandler{
 		cfg: cfg,
 		tr:  tr,
+		db:  db,
 	}
 }
 
@@ -40,6 +45,17 @@ func (h *PageHandler) render(c *gin.Context, templateName string, data gin.H) {
 	} else {
 		data["otherLocale"] = "de"
 		data["otherLocaleLabel"] = translations["lang_de"]
+	}
+	desc, ok := data["description"].(string)
+	if !ok || desc == "" {
+		data["description"] = translations["desc_index"]
+	}
+	baseURL := strings.TrimSuffix(h.cfg.BaseURL, "/")
+	data["canonicalURL"] = baseURL + c.Request.URL.Path
+	data["ogImage"] = baseURL + "/static/images/og-image.png"
+	data["ogLocale"] = "en_US"
+	if locale == "de" {
+		data["ogLocale"] = "de_DE"
 	}
 	c.HTML(http.StatusOK, templateName, data)
 }
@@ -87,6 +103,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 	}
 	h.render(c, "index.html", gin.H{
 		"title":            translations["title_index"],
+		"description":      translations["desc_index"],
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -115,6 +132,7 @@ func (h *PageHandler) ToS(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "tos.html", gin.H{
 		"title":         translations["title_tos"],
+		"description":   translations["desc_tos"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -138,6 +156,7 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "privacy.html", gin.H{
 		"title":         translations["title_privacy"],
+		"description":   translations["desc_privacy"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -161,6 +180,7 @@ func (h *PageHandler) LimitsPage(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "limits.html", gin.H{
 		"title":         translations["title_limits"],
+		"description":   translations["desc_limits"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -184,6 +204,7 @@ func (h *PageHandler) DataEncryption(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "data-encryption.html", gin.H{
 		"title":         translations["title_encryption"],
+		"description":   translations["desc_encryption"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -207,6 +228,7 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "help.html", gin.H{
 		"title":         translations["title_help"],
+		"description":   translations["desc_help"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
@@ -247,6 +269,7 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "quickshare.html", gin.H{
 		"title":            translations["title_quickshare"],
+		"description":      translations["desc_quickshare"],
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -292,6 +315,7 @@ func (h *PageHandler) Link(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	h.render(c, "link.html", gin.H{
 		"title":            translations["title_link"],
+		"description":      translations["desc_link"],
 		"baseURL":          h.cfg.BaseURL,
 		"maxFileSize":      tier.MaxFileSize,
 		"authMaxFileSize":  h.cfg.AuthMaxFileSize,
@@ -330,16 +354,35 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 		configJSON = []byte("{}")
 	}
 	translations := h.tr.Get(locale)
+	title := translations["title_shared"]
+	if file, lookupErr := h.db.GetFileByID(c.Request.Context(), fileID); lookupErr == nil {
+		title = fmt.Sprintf("%s · %s ➤ ShareIt", file.OriginalName, formatBytes(file.SizeBytes))
+	}
 	h.render(c, "shared.html", gin.H{
-		"title":        translations["title_shared"],
-		"baseURL":      h.cfg.BaseURL,
-		"fileID":       fileID,
+		"title":         title,
+		"description":   translations["desc_shared"],
+		"baseURL":       h.cfg.BaseURL,
+		"fileID":        fileID,
 		"authenticated": authenticated,
-		"username":     username,
-		"authLoginURL": authLoginURL,
-		"tosVersion":   h.cfg.TOSVersion,
-		"configJSON":   template.JS(string(configJSON)),
+		"username":      username,
+		"authLoginURL":  authLoginURL,
+		"tosVersion":    h.cfg.TOSVersion,
+		"noindex":       true,
+		"configJSON":    template.JS(string(configJSON)),
 	})
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 func (h *PageHandler) Limits(c *gin.Context) {

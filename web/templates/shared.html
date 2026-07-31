@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.title}}</title>
+    <meta name="description" content="{{.description}}">
+    <meta name="robots" content="{{if .noindex}}noindex, nofollow{{else}}index, follow{{end}}">
+    <link rel="canonical" href="{{.canonicalURL}}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="ShareIt">
+    <meta property="og:title" content="{{.title}}">
+    <meta property="og:description" content="{{.description}}">
+    <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:url" content="{{.canonicalURL}}">
+    <meta property="og:locale" content="{{.ogLocale}}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{.title}}">
+    <meta name="twitter:description" content="{{.description}}">
+    <meta name="twitter:image" content="{{.ogImage}}">
     <link rel="stylesheet" href="/static/css/style.css">
     
     

@@ -94,7 +94,7 @@ func main() {
 	router.Use(cnsAuth)
 	router.Use(middleware.LocaleMiddleware())
 
-	pageHandler := handlers.NewPageHandler(cfg, translator)
+	pageHandler := handlers.NewPageHandler(cfg, translator, db)
 	authHandler := handlers.NewAuthHandler(cfg)
 	uploadHandler := handlers.NewUploadHandler(cfg, db, rdb, fs, uploadService)
 	downloadHandler := handlers.NewDownloadHandler(cfg, db, fs, tracker)
@@ -119,6 +119,9 @@ func main() {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
 	})
+
+	router.GET("/robots.txt", pageHandler.RobotsTXT)
+	router.GET("/sitemap.xml", pageHandler.Sitemap)
 
 	router.GET("/", pageHandler.Index)
 	router.GET("/quickshare", pageHandler.QuickShare)
