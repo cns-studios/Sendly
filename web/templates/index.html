@@ -100,11 +100,15 @@
                 <p class="card-desc">{{.t.card_send_desc}}</p>
                 <span class="card-btn card-btn-primary">{{.t.card_send_btn}}</span>
             </a>
-            <a href="/quickshare" class="action-card">
+            <div id="quickshare-card" class="action-card action-card-quickshare" role="button" tabindex="0" aria-expanded="false" aria-label="{{.t.card_quickshare_title}}">
                 <h2 class="card-title">{{.t.card_quickshare_title}}</h2>
                 <p class="card-desc">{{.t.card_quickshare_desc}}</p>
-                <span class="card-btn card-btn-outline">{{.t.card_quickshare_btn}}</span>
-            </a>
+                <span class="card-btn card-btn-outline card-btn-quickshare">{{.t.card_quickshare_btn}}</span>
+                <div class="quick-share-actions">
+                    <a href="/quickshare?action=create" class="card-btn card-btn-primary">{{.t.card_quickshare_create}}</a>
+                    <a href="/quickshare?action=join" class="card-btn card-btn-outline">{{.t.card_quickshare_join}}</a>
+                </div>
+            </div>
         </div>
 
         <div class="star-bg">
@@ -173,6 +177,24 @@
         });
         document.addEventListener('click',function(){document.querySelectorAll('.login-btn.active').forEach(function(e){e.classList.remove('active')})});
         (function(){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}})();
+        (function(){
+            var card=document.getElementById('quickshare-card');
+            if(!card)return;
+            function toggle(open){
+                card.classList.toggle('expanded',open);
+                card.setAttribute('aria-expanded',open?'true':'false');
+            }
+            function onClick(e){
+                if(e.target.closest('.quick-share-actions'))return;
+                if(card.classList.contains('expanded')){toggle(false);return;}
+                e.preventDefault();
+                toggle(true);
+            }
+            card.addEventListener('click',onClick);
+            card.addEventListener('keydown',function(e){
+                if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle(!card.classList.contains('expanded'));}
+            });
+        })();
     </script>
     <script src="/static/js/crypto.js"></script>
     <script src="/static/js/app.js"></script>

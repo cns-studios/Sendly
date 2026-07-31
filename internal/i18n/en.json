@@ -50,6 +50,8 @@
   "card_quickshare_title": "Quickly Share now",
   "card_quickshare_desc": "Share multiple files with a Group in real time. Like a shared folder, everyone can send and receive freely",
   "card_quickshare_btn": "Share with a Group",
+  "card_quickshare_create": "Create a Share",
+  "card_quickshare_join": "Join a Share",
 
   "device_approval_title": "Connect new device",
   "device_approval_desc": "A new device wants to view your files. If you did not ask for this, decline and change your CNS password.",
@@ -99,8 +101,6 @@
   "status_failed_init": "Failed to initialize upload",
   "status_failed_complete": "Failed to complete",
  
-  "quickshare_create": "Create",
-  "quickshare_join": "Join",
   "quickshare_invite_title": "Invite others",
   "quickshare_invite_desc": "Share this code with the people you want to share files with. Once they join, they'll show up here.",
   "quickshare_people": "People",

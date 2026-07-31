@@ -50,6 +50,8 @@
   "card_quickshare_title": "Jetzt schnell teilen",
   "card_quickshare_desc": "Teile mehrere Dateien in Echtzeit mit einer Gruppe. Wie ein gemeinsamer Ordner, jeder kann frei senden und empfangen.",
   "card_quickshare_btn": "Mit Gruppe teilen",
+  "card_quickshare_create": "Freigabe erstellen",
+  "card_quickshare_join": "An Freigabe teilnehmen",
 
   "device_approval_title": "Neues Gerät verbinden",
   "device_approval_desc": "Ein neues Gerät möchte auf deine Dateien zugreifen. Falls du dies nicht angefordert hast, lehne ab und ändere dein CNS-Passwort.",
@@ -99,8 +101,6 @@
   "status_failed_init": "Initialisierung des Uploads fehlgeschlagen",
   "status_failed_complete": "Abschluss fehlgeschlagen",
 
-  "quickshare_create": "Erstellen",
-  "quickshare_join": "Beitreten",
   "quickshare_invite_title": "Andere einladen",
   "quickshare_invite_desc": "Teile diesen Code mit den Personen, mit denen du Dateien teilen möchtest. Sobald sie beitreten, werden sie hier angezeigt.",
   "quickshare_people": "Personen",

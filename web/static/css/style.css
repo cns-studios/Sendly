@@ -205,56 +205,6 @@ body.page-index {
     flex-direction: column;
 }
 
-/* ── Action buttons (index, quickshare initial) ── */
-.action-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 48px;
-    margin-top: 60px;
-}
-
-.action-btn-group {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-}
-
-.circle-btn {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    background-color: #C7C7C7;
-    border: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: transform 0.2s ease-in-out;
-    text-decoration: none;
-}
-
-.circle-btn:hover {
-    transform: scale(1.1);
-}
-
-.circle-btn svg {
-    width: 28px;
-    height: 28px;
-    color: #000000;
-    stroke: currentColor;
-    stroke-width: 3px;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.action-label {
-    font-family: 'Arimo', sans-serif;
-    font-weight: 400;
-    font-size: 20px;
-    color: #000000;
-}
-
 /* ── File list / entries (shared) ── */
 .file-list {
     display: flex;
@@ -771,6 +721,57 @@ body.page-index .card-btn-outline {
 
 body.page-index .card-btn-outline:hover {
     background: rgba(0, 130, 123, 0.05);
+}
+
+body.page-index .action-card-quickshare {
+    cursor: pointer;
+}
+
+body.page-index .action-card-quickshare .card-desc,
+body.page-index .action-card-quickshare .card-btn-quickshare {
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+body.page-index .action-card-quickshare.expanded .card-desc,
+body.page-index .action-card-quickshare.expanded .card-btn-quickshare {
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+}
+
+body.page-index .quick-share-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 0;
+    opacity: 0;
+    transform: translateY(10px);
+    pointer-events: none;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+body.page-index .quick-share-actions .card-btn {
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+body.page-index .quick-share-actions .card-btn:first-child {
+    transition: opacity 0.25s ease 0.1s, transform 0.25s ease 0.1s;
+}
+
+body.page-index .quick-share-actions .card-btn:last-child {
+    transition: opacity 0.25s ease 0.18s, transform 0.25s ease 0.18s;
+}
+
+body.page-index .action-card-quickshare.expanded .quick-share-actions {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+body.page-index .action-card-quickshare.expanded .quick-share-actions .card-btn {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 body.page-index .file-section {

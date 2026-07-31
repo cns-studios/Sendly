@@ -64,15 +64,12 @@
     let hostToken = '';
     let joinCodeInput = '';
 
-    const initialView = document.getElementById('initialView');
     const createView = document.getElementById('createView');
     const joinView = document.getElementById('joinView');
     const sessionView = document.getElementById('sessionView');
     const queueView = document.getElementById('queueView');
     const bottomBar = document.getElementById('bottomBar');
     const joinBottomBar = document.getElementById('joinBottomBar');
-    const createBtn = document.getElementById('createBtn');
-    const joinBtn = document.getElementById('joinBtn');
     const startBtn = document.getElementById('startBtn');
     const joinSubmitBtn = document.getElementById('joinSubmitBtn');
     const leaveBtn = document.getElementById('leaveBtn');
@@ -265,7 +262,6 @@
     }
 
     function setView(view) {
-        initialView.style.display = view === 'initial' ? '' : 'none';
         createView.classList.toggle('active', view === 'create');
         joinView.classList.toggle('active', view === 'join');
         sessionView.classList.toggle('active', view === 'session');
@@ -276,6 +272,10 @@
         if (startBtn) {
             startBtn.style.display = (view === 'create' && isHost && !hasStarted) ? '' : 'none';
         }
+    }
+
+    function goHome() {
+        window.location.href = '/';
     }
 
     function setCodeDisplay(squares, code) {
@@ -601,15 +601,10 @@
     }
 
     async function handleCreateTunnel() {
-        createBtn.disabled = true;
-        createBtn.style.opacity = '0.5';
-
         try {
             if (AUTHENTICATED) {
                 const ready = await ensureDeviceReady();
                 if (!ready) {
-                    createBtn.disabled = false;
-                    createBtn.style.opacity = '';
                     return;
                 }
                 myDeviceId = authDeviceIdentity.deviceId;
@@ -650,9 +645,6 @@
             console.error('Create tunnel failed:', error);
             showErrorBanner(tpl('quickshare_create_failed', {msg: error.message}));
         }
-
-        createBtn.disabled = false;
-        createBtn.style.opacity = '';
     }
 
     async function handleJoinTunnel() {
@@ -767,7 +759,7 @@
         }
 
         clearTunnelState(leavingTunnelId);
-        setView('initial');
+        goHome();
     }
 
     async function refreshTunnelState() {
@@ -782,7 +774,7 @@
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState(activeTunnel?.id);
                     showErrorBanner(t('quickshare_ended'));
-                    setView('initial');
+                    goHome();
                     return;
                 }
                 throw new Error('Failed to refresh tunnel state');
@@ -1050,18 +1042,6 @@
     }
 
     function setupEventListeners() {
-        createBtn?.addEventListener('click', handleCreateTunnel);
-
-        joinBtn?.addEventListener('click', () => {
-            setView('join');
-            joinCodeInput = '';
-            setCodeDisplay(joinCodeSquares, '');
-            if (joinCodeHiddenInput) {
-                joinCodeHiddenInput.value = '';
-                joinCodeHiddenInput.focus();
-            }
-        });
-
         startBtn?.addEventListener('click', handleStartTunnel);
         joinSubmitBtn?.addEventListener('click', handleJoinTunnel);
         leaveBtn?.addEventListener('click', handleLeaveTunnel);
@@ -1194,7 +1174,20 @@
         }
 
         setupEventListeners();
-        setView('initial');
+
+        const action = new URLSearchParams(window.location.search).get('action');
+        if (action === 'join') {
+            setView('join');
+            joinCodeInput = '';
+            setCodeDisplay(joinCodeSquares, '');
+            if (joinCodeHiddenInput) {
+                joinCodeHiddenInput.value = '';
+                joinCodeHiddenInput.focus();
+            }
+            return;
+        }
+
+        await handleCreateTunnel();
     }
 
     if (document.readyState === 'loading') {
