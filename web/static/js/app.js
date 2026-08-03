@@ -254,11 +254,24 @@
 
     async function ensureDeviceReady() {
         try {
-            const payload = await registerCurrentDevice(true);
-            if (payload?.needs_enrollment) {
-                isDeviceUntrusted = true;
-                setRecoveryActionVisible(true);
-                const enrollment = await requestDeviceEnrollment(authDeviceIdentity.deviceId);
+        const payload = await registerCurrentDevice(true);
+        if (payload?.needs_enrollment) {
+            isDeviceUntrusted = true;
+            setRecoveryActionVisible(true);
+
+            const currentDeviceId = authDeviceIdentity?.deviceId;
+            const existingEnrollment = currentDeviceId
+                ? pendingEnrollmentItems.find((item) => {
+                    const requestDeviceId = item?.request_device?.id || item?.enrollment?.request_device_id || '';
+                    return requestDeviceId === currentDeviceId;
+                })
+                : null;
+            if (existingEnrollment?.enrollment?.id) {
+                showWaitingEnrollment(existingEnrollment, pendingEnrollmentItems.length);
+                return false;
+            }
+
+            const enrollment = await requestDeviceEnrollment(authDeviceIdentity.deviceId);
                 if (enrollment?.enrollment_id) {
                     showWaitingEnrollment({
                         enrollment: {
@@ -460,8 +473,15 @@
                 return;
             }
 
-            if (pendingEnrollmentItems.length > 0) {
-                showApprovalEnrollment(pendingEnrollmentItems[0], pendingEnrollmentItems.length);
+            const approvalItems = currentDeviceId
+                ? pendingEnrollmentItems.filter((item) => {
+                    const requestDeviceId = item?.request_device?.id || item?.enrollment?.request_device_id || '';
+                    return requestDeviceId !== currentDeviceId;
+                })
+                : pendingEnrollmentItems;
+
+            if (approvalItems.length > 0) {
+                showApprovalEnrollment(approvalItems[0], approvalItems.length);
             } else {
                 hidePendingEnrollmentModal();
             }
@@ -1398,7 +1418,7 @@
             let decrypted;
             try {
                 decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase, (progress) => {
-                    updateProgress(80 + progress * 20);
+                    updateProgress(80 + progress * 0.2);
                 });
             } catch (error) {
                 const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
@@ -2069,7 +2089,7 @@
                     }
                 }
             }
-            const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+            totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
             const initResponse = await initUpload(selectedFile.size, totalChunks);
             uploadSessionId = initResponse.session_id;
             uploadedChunks = 0;
@@ -2439,7 +2459,7 @@
     function hideErrorBanner() {}
 
     function updateProgress(percent, sub, main) {
-        progressVal.textContent = `${Math.floor(percent)}%`;
+        progressVal.textContent = `${Math.floor(Math.min(100, Math.max(0, percent)))}%`;
         if (sub) processSub.textContent = sub;
         if (main) processMain.textContent = main;
     }

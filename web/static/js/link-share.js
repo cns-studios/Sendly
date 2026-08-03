@@ -307,7 +307,7 @@
             }
 
             zoneSubtext.textContent = t('status_uploading');
-            const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+            totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
             const initResponse = await initUpload(selectedFile.size, totalChunks);
             uploadSessionId = initResponse.session_id;
             uploadedChunks = 0;

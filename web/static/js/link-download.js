@@ -131,13 +131,13 @@
             updateProgress(0, t('status_downloading'));
             encryptedBlob = await downloadEncryptedFile();
 
-            updateProgress(80, t('status_decrypting'));
+            updateProgress(80, t('status_downloading'));
             const decryptedData = await SecureCrypto.decryptFileChunked(
                 encryptedBlob,
                 password,
                 fileMetadata.size_bytes,
-                (progress, status) => {
-                    updateProgress(80 + (progress * 20), status);
+                (progress) => {
+                    updateProgress(80 + (progress * 0.2), t('status_downloading'));
                 }
             );
 
@@ -270,7 +270,7 @@
     }
 
     function updateProgress(percent, text) {
-        if (progressText) progressText.textContent = `${Math.round(percent)}%`;
+        if (progressText) progressText.textContent = `${Math.round(Math.min(100, Math.max(0, percent)))}%`;
         if (text && progressTitle) progressTitle.textContent = text;
         const iconEl = document.getElementById('progress-icon');
         const fill = iconEl?.querySelector('.progress-circle-fill');

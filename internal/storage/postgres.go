@@ -766,6 +766,28 @@ func (p *Postgres) GetEnrollmentByID(ctx context.Context, userID int64, enrollme
 	return &item, nil
 }
 
+func (p *Postgres) GetPendingEnrollmentForDevice(ctx context.Context, userID int64, deviceID string) (*models.DeviceEnrollment, error) {
+	query := `
+		SELECT id, cns_user_id, request_device_id, verification_code, status, approved_by_device_id, expires_at, created_at, approved_at
+		FROM device_enrollments
+		WHERE cns_user_id = $1
+		  AND request_device_id = $2
+		  AND status = $3
+		  AND expires_at > NOW()
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var item models.DeviceEnrollment
+	err := p.db.GetContext(ctx, &item, query, userID, deviceID, models.EnrollmentStatusPending)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
 func (p *Postgres) ApproveEnrollment(ctx context.Context, userID int64, enrollmentID, approverDeviceID string) error {
 	query := `
 		UPDATE device_enrollments

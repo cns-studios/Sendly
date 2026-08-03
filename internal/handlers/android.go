@@ -671,6 +671,21 @@ func (h *AndroidHandler) CreateEnrollment(c *gin.Context) {
 	if !owned {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Request device does not belong to user", Code: "DEVICE_NOT_AUTHORIZED"})
 		return
+		
+	}
+
+	existing, err := h.db.GetPendingEnrollmentForDevice(c.Request.Context(), int64(user.ID), req.RequestDeviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to inspect pending enrollment", Code: "ENROLLMENT_LOOKUP_FAILED"})
+		return
+	}
+	if existing != nil {
+		c.JSON(http.StatusOK, models.CreateEnrollmentResponse{
+			EnrollmentID:     existing.ID,
+			VerificationCode: existing.VerificationCode,
+			ExpiresAt:        existing.ExpiresAt,
+		})
+		return
 	}
 
 	enrollment := &models.DeviceEnrollment{

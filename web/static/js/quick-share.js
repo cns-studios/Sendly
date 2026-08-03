@@ -551,7 +551,7 @@
 
             const encryptedBlob = new Blob(chunks);
             const decrypted = await SecureCrypto.decryptBlob(encryptedBlob, password, (progress) => {
-                updateProgress(80 + progress * 20);
+                updateProgress(80 + progress * 0.2);
             });
 
             const url = URL.createObjectURL(new Blob([decrypted]));
