@@ -6,8 +6,16 @@
 
     const fileId = window.CONFIG?.fileID;
     let fileMetadata = null;
-    let encryptedBlob = null;
     let currentPassword = null;
+
+    const downloadState = {
+        promise: null,
+        blob: null,
+        chunks: [],
+        received: 0,
+        total: 0
+    };
+    let isProcessing = false;
 
     const loadingSection = document.getElementById('loading-section');
     const passwordSection = document.getElementById('password-section');
@@ -92,6 +100,8 @@
 
             loadingSection.classList.add('hidden');
             passwordSection.classList.remove('hidden');
+
+            if (currentPassword) startOptimisticDownload();
         } catch (error) {
             console.error('Failed to load file metadata:', error);
             showFileError('cloud-alert', t('error_connection_title'), t('error_connection_desc'));
@@ -106,8 +116,12 @@
     }
 
     async function downloadAndDecrypt(password) {
+        if (isProcessing) return;
+        isProcessing = true;
+
         const validation = SecureCrypto.validatePassword(password);
         if (!validation.valid) {
+            isProcessing = false;
             showNotification(validation.error, 'error');
             return;
         }
@@ -128,8 +142,8 @@
                 iconEl.appendChild(createProgressCircle(36));
             }
 
-            updateProgress(0, t('status_downloading'));
-            encryptedBlob = await downloadEncryptedFile();
+            updateProgress(getEncryptedDownloadProgress(), t('status_downloading'));
+            const encryptedBlob = await downloadEncryptedFile();
 
             updateProgress(80, t('status_downloading'));
             const decryptedData = await SecureCrypto.decryptFileChunked(
@@ -162,10 +176,43 @@
             if (currentPassword) {
                 autoDecryptSection.classList.remove('hidden');
             }
+        } finally {
+            isProcessing = false;
         }
     }
 
+    function getEncryptedDownloadProgress() {
+        if (downloadState.blob) return 80;
+        if (!downloadState.total) return 0;
+        return Math.min(80, (downloadState.received / downloadState.total) * 80);
+    }
+
+    function startOptimisticDownload() {
+        if (downloadState.promise || downloadState.blob) return;
+        if (!fileMetadata) return;
+        downloadEncryptedFile().catch((error) => {
+            console.error('Optimistic download failed:', error);
+        });
+    }
+
     async function downloadEncryptedFile() {
+        if (downloadState.blob) return downloadState.blob;
+        if (!downloadState.promise) {
+            downloadState.promise = streamEncryptedFile();
+        }
+        try {
+            await downloadState.promise;
+            return downloadState.blob;
+        } catch (error) {
+            downloadState.promise = null;
+            downloadState.chunks = [];
+            downloadState.received = 0;
+            downloadState.total = 0;
+            throw error;
+        }
+    }
+
+    async function streamEncryptedFile() {
         const response = await fetch(`/api/file/${fileMetadata.id}/download`);
         if (!response.ok) {
             const error = await response.json();
@@ -174,24 +221,24 @@
 
         const contentLength = response.headers.get('Content-Length');
         const total = parseInt(contentLength, 10);
+        downloadState.total = total;
         const reader = response.body.getReader();
-        const chunks = [];
-        let received = 0;
 
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
-            chunks.push(value);
-            received += value.length;
+            downloadState.chunks.push(value);
+            downloadState.received += value.length;
 
             if (total) {
-                const progress = (received / total) * 80;
+                const progress = (downloadState.received / total) * 80;
                 updateProgress(progress, t('status_downloading'));
             }
         }
 
-        return new Blob(chunks);
+        downloadState.blob = new Blob(downloadState.chunks);
+        return downloadState.blob;
     }
 
     function triggerDownload(data, filename) {
@@ -301,6 +348,12 @@
     function resetDownloadBox() {
         if (progressTitle) progressTitle.textContent = t('status_downloading');
         if (progressText) progressText.textContent = t('app_0_pct');
+
+        downloadState.promise = null;
+        downloadState.blob = null;
+        downloadState.chunks = [];
+        downloadState.received = 0;
+        downloadState.total = 0;
 
         const iconEl = document.getElementById('progress-icon');
         if (iconEl) {
