@@ -86,7 +86,7 @@ type refreshTokenResult struct {
 }
 
 func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
-	tokenURL := cfg.CNSAuthURL + "/v2/token/refresh"
+	tokenURL := cfg.CNSAuthURL + "/api/auth/token/refresh"
 
 	jsonPayload := map[string]string{
 		"refresh_token": refreshToken,

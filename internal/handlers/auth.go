@@ -192,7 +192,7 @@ func (h *AuthHandler) exchangeToken(code, verifier, clientID, redirectURI, state
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	tokenURL := h.cfg.CNSAuthURL + "/v2/token"
+	tokenURL := h.cfg.CNSAuthURL + "/api/auth/token"
 
 	jsonPayload := map[string]string{
 		"code":          code,
