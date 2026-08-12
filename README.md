@@ -1,6 +1,6 @@
-# ShareIt
+# Sendly
 
-ShareIt is an encrypted file sharing backend with three client surfaces:
+Sendly is an encrypted file sharing backend with three client surfaces:
 
 - Browser API: `/api`
 - Desktop API: `/desktop`
@@ -32,9 +32,9 @@ BASE_URL=http://localhost:8085
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
-POSTGRES_USER=shareit
+POSTGRES_USER=sendly
 POSTGRES_PASSWORD=changeme
-POSTGRES_DB=shareit
+POSTGRES_DB=sendly
 
 REDIS_HOST=localhost
 REDIS_PORT=6379
