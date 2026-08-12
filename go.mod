@@ -1,4 +1,4 @@
-module shareit
+module sendly
 
 go 1.22
 

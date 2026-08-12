@@ -11,8 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"shareit/internal/config"
-	"shareit/internal/middleware"
+	"sendly/internal/config"
+	"sendly/internal/middleware"
 	"strings"
 	"time"
 
@@ -158,6 +158,12 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	result, err := middleware.RefreshAccessToken(ctx, h.cfg, refreshToken)
 	if err != nil {
+		// Clear the dead refresh token so the browser stops presenting it,
+		// but only when the auth server confirms it is invalid (401/403) and
+		// not for transient upstream failures.
+		if middleware.IsDeadTokenError(err) {
+			middleware.ClearRefreshTokenCookie(c, h.cfg)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh failed"})
 		return
 	}

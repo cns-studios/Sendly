@@ -14,9 +14,9 @@ const SecureCrypto = (function() {
         wordCount: 5
     };
 
-    const DEVICE_STORAGE_KEY = 'shareit_device_identity_v1';
-    const USER_KEY_PREFIX = 'shareit_user_key_v1_';
-    const FILE_KEY_PREFIX = 'shareit_file_key_v1_';
+    const DEVICE_STORAGE_KEY = 'sendly_device_identity_v1';
+    const USER_KEY_PREFIX = 'sendly_user_key_v1_';
+    const FILE_KEY_PREFIX = 'sendly_file_key_v1_';
 
      
     let wordList = null;

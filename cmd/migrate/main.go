@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/storage"
 )
 
 func main() {

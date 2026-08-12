@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/models"
+	"sendly/internal/config"
+	"sendly/internal/models"
 )
 
 type Discord struct {

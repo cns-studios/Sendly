@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/middleware"
-	"shareit/internal/models"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/middleware"
+	"sendly/internal/models"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -624,7 +624,7 @@ func (h *TunnelHandler) generateUniqueTunnelCode(ctx context.Context) (string, e
 
 func (h *TunnelHandler) buildQRPayload(tunnel *models.Tunnel) string {
 	payload, err := json.Marshal(gin.H{
-		"p": "shareit-tunnel-v1",
+		"p": "sendly-tunnel-v1",
 		"s": h.cfg.BaseURL,
 		"c": tunnel.Code,
 	})

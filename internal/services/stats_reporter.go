@@ -11,16 +11,16 @@ import (
 	"sync"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/storage"
 )
 
 const (
-	statsReportSource = "shareit-service"
+	statsReportSource = "sendly-service"
 	statsReportUnit   = "bytes"
 
-	statsReportMetricUploaded  = "shareit.uploaded_bytes"
-	statsReportMetricProcessed = "shareit.processed_bytes"
+	statsReportMetricUploaded  = "sendly.uploaded_bytes"
+	statsReportMetricProcessed = "sendly.processed_bytes"
 
 	statsReportMaxRetries = 3
 )
@@ -54,12 +54,12 @@ func NewStatsReporter(cfg *config.Config, db *storage.Postgres) *StatsReporter {
 }
 
 func (r *StatsReporter) IsConfigured() bool {
-	return r.cfg.ReportBotURL != "" && r.cfg.ShareItBotAPIKey != ""
+	return r.cfg.ReportBotURL != "" && r.cfg.SendlyBotAPIKey != ""
 }
 
 func (r *StatsReporter) Start() {
 	if !r.IsConfigured() {
-		log.Println("Stats reporter disabled: REPORT_BOT_URL or SHAREIT_BOT_API_KEY not set")
+		log.Println("Stats reporter disabled: REPORT_BOT_URL or SENDLY_BOT_API_KEY not set")
 		return
 	}
 	r.wg.Add(1)
@@ -171,7 +171,7 @@ func (r *StatsReporter) send(ctx context.Context, payload statsReportBatch) (int
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+r.cfg.ShareItBotAPIKey)
+	req.Header.Set("Authorization", "Bearer "+r.cfg.SendlyBotAPIKey)
 
 	resp, err := r.http.Do(req)
 	if err != nil {

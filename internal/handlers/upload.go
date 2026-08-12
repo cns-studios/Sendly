@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"shareit/internal/config"
-	"shareit/internal/middleware"
-	"shareit/internal/models"
-	"shareit/internal/services"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/middleware"
+	"sendly/internal/models"
+	"sendly/internal/services"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )

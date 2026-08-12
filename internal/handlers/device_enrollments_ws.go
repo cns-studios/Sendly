@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"sync"
 
-	"shareit/internal/middleware"
-	"shareit/internal/models"
-	"shareit/internal/storage"
+	"sendly/internal/middleware"
+	"sendly/internal/models"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"

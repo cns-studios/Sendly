@@ -1,7 +1,7 @@
 services:
   app:
     volumes:
-      - /mnt/shareit:/data
+      - /mnt/sendly:/data
 volumes:
   postgres_data:
   redis_data:

@@ -1,6 +1,6 @@
 package middleware
 
-import "shareit/internal/config"
+import "sendly/internal/config"
 
 type Tier struct {
 	MaxFileSize      int64

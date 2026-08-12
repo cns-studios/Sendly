@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"strings"
 
-	"shareit/internal/config"
-	"shareit/internal/i18n"
-	"shareit/internal/middleware"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/i18n"
+	"sendly/internal/middleware"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -356,7 +356,7 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 	translations := h.tr.Get(locale)
 	title := translations["title_shared"]
 	if file, lookupErr := h.db.GetFileByID(c.Request.Context(), fileID); lookupErr == nil {
-		title = fmt.Sprintf("%s · %s ➤ ShareIt", file.OriginalName, formatBytes(file.SizeBytes))
+		title = fmt.Sprintf("%s · %s ➤ Sendly", file.OriginalName, formatBytes(file.SizeBytes))
 	}
 	h.render(c, "shared.html", gin.H{
 		"title":         title,

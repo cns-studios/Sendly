@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"shareit/internal/storage"
+	"sendly/internal/storage"
 )
 
 type Tracker struct {

@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"shareit/internal/config"
+	"sendly/internal/config"
 
 	"github.com/gin-gonic/gin"
 )
@@ -40,7 +42,7 @@ func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token strin
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("User-Agent", "ShareIt-Auth-Bridge/1.0")
+		req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
 		if serviceKey != "" {
 			req.Header.Set("x-service-key", serviceKey)
 		}
@@ -85,6 +87,27 @@ type refreshTokenResult struct {
 	ExpiresIn    int64  `json:"expires_in"`
 }
 
+// tokenRefreshError carries the upstream status so callers can distinguish a
+// dead token (401/403) from a transient upstream failure (5xx, network).
+type tokenRefreshError struct {
+	status int
+	msg    string
+}
+
+func (e *tokenRefreshError) Error() string { return e.msg }
+
+func (e *tokenRefreshError) deadToken() bool {
+	return e.status == http.StatusUnauthorized || e.status == http.StatusForbidden
+}
+
+// IsDeadTokenError reports whether the given refresh error means the token
+// itself was rejected by the auth server (401/403) rather than an upstream
+// outage or transient network failure.
+func IsDeadTokenError(err error) bool {
+	var tre *tokenRefreshError
+	return errors.As(err, &tre) && tre.deadToken()
+}
+
 func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
 	tokenURL := cfg.CNSAuthURL + "/api/auth/token/refresh"
 
@@ -113,7 +136,7 @@ func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken st
 	rawBody := strings.TrimSpace(string(raw))
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token refresh failed with status %d: %s", resp.StatusCode, rawBody)
+		return nil, &tokenRefreshError{status: resp.StatusCode, msg: fmt.Sprintf("token refresh failed with status %d: %s", resp.StatusCode, rawBody)}
 	}
 
 	var result refreshTokenResult
@@ -149,10 +172,58 @@ func clearAuthTokenCookie(c *gin.Context, cfg *config.Config) {
 	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
 }
 
+func clearRefreshTokenCookie(c *gin.Context, cfg *config.Config) {
+	isSecure := strings.HasPrefix(cfg.BaseURL, "https")
+	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
+}
+
+// ClearRefreshTokenCookie expires the refresh_token cookie on the response.
+func ClearRefreshTokenCookie(c *gin.Context, cfg *config.Config) {
+	clearRefreshTokenCookie(c, cfg)
+}
+
+// refreshCoordinator coalesces concurrent refresh attempts that share the same
+// refresh token. A burst of requests all arriving while the access token is
+// near expiry previously raced N rotations of the same token upstream; now the
+// first request performs the rotation and the rest reuse its result within the
+// window, so exactly one rotation (and one new refresh token) exists at a time.
+type refreshCoordinator struct {
+	mu         sync.Mutex
+	lastToken  string
+	lastResult *refreshTokenResult
+	lastAt     time.Time
+}
+
+const refreshShareWindow = 5 * time.Second
+
+func (rc *refreshCoordinator) shared(token string) *refreshTokenResult {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	if rc.lastToken == token && rc.lastResult != nil && time.Since(rc.lastAt) < refreshShareWindow {
+		return rc.lastResult
+	}
+	return nil
+}
+
+func (rc *refreshCoordinator) store(token string, result *refreshTokenResult) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	rc.lastToken = token
+	rc.lastResult = result
+	rc.lastAt = time.Now()
+}
+
+var refreshCoord = &refreshCoordinator{}
+
 func tryRefresh(c *gin.Context, cfg *config.Config) (newToken string, ok bool) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil || refreshToken == "" {
 		return "", false
+	}
+
+	if shared := refreshCoord.shared(refreshToken); shared != nil {
+		setAuthCookies(c, cfg, shared.AccessToken, shared.RefreshToken, shared.ExpiresIn)
+		return shared.AccessToken, true
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -160,9 +231,17 @@ func tryRefresh(c *gin.Context, cfg *config.Config) (newToken string, ok bool) {
 
 	result, refreshErr := RefreshAccessToken(ctx, cfg, refreshToken)
 	if refreshErr != nil {
+		// Only treat the token as dead when the auth server says so (401/403).
+		// Transient failures (5xx, network) must not log the user out; the
+		// next request simply retries. A dead token is cleared immediately so
+		// subsequent requests don't keep hammering the refresh endpoint.
+		if IsDeadTokenError(refreshErr) {
+			clearRefreshTokenCookie(c, cfg)
+		}
 		return "", false
 	}
 
+	refreshCoord.store(refreshToken, result)
 	setAuthCookies(c, cfg, result.AccessToken, result.RefreshToken, result.ExpiresIn)
 	return result.AccessToken, true
 }

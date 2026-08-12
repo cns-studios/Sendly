@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/models"
+	"sendly/internal/config"
+	"sendly/internal/models"
 
 	"github.com/go-redis/redis/v8"
 )

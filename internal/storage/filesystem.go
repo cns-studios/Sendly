@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"shareit/internal/config"
+	"sendly/internal/config"
 )
 
 type Filesystem struct {

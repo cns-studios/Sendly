@@ -9,12 +9,12 @@
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
     const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
-    const TOS_COOKIE_NAME = 'shareit_tos_accepted';
+    const TOS_COOKIE_NAME = 'sendly_tos_accepted';
     const TUNNEL_MAX_FILE_SIZE = 3 * 1024 * 1024 * 1024;
     const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
     const TUNNEL_POLL_INTERVAL = 2000;
-    const SESSION_PASSWORD_PREFIX = 'shareit_tunnel_pw_';
+    const SESSION_PASSWORD_PREFIX = 'sendly_tunnel_pw_';
 
     function createProgressCircle(size) {
         const svgNS = 'http://www.w3.org/2000/svg';
@@ -136,13 +136,13 @@
 
     function getOrCreateGuestDeviceId() {
         if (myDeviceId && !AUTHENTICATED) return myDeviceId;
-        const stored = localStorage.getItem('shareit_guest_device_id');
+        const stored = localStorage.getItem('sendly_guest_device_id');
         if (stored) {
             if (!AUTHENTICATED) myDeviceId = stored;
             return stored;
         }
         const created = randomUUID();
-        localStorage.setItem('shareit_guest_device_id', created);
+        localStorage.setItem('sendly_guest_device_id', created);
         if (!AUTHENTICATED) myDeviceId = created;
         return created;
     }

@@ -4,7 +4,7 @@ import (
 	"net"
 	"strings"
 
-	"shareit/internal/config"
+	"sendly/internal/config"
 
 	"github.com/gin-gonic/gin"
 )

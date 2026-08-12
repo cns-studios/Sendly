@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"regexp"
 
-	"shareit/internal/config"
-	"shareit/internal/models"
-	"shareit/internal/services"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/models"
+	"sendly/internal/services"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )

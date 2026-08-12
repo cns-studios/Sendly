@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/middleware"
-	"shareit/internal/models"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/middleware"
+	"sendly/internal/models"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )

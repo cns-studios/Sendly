@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/models"
-	"shareit/internal/services"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/models"
+	"sendly/internal/services"
+	"sendly/internal/storage"
 )
 
 func main() {
@@ -149,7 +149,7 @@ func main() {
 
 func printUsage() {
 	usage := `
-ShareIt Admin CLI
+Sendly Admin CLI
 
 Usage: admin <command> [arguments]
 

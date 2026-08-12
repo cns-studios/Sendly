@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/models"
+	"sendly/internal/config"
+	"sendly/internal/models"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"

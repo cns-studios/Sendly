@@ -10,7 +10,7 @@
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
     const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
-    const TOS_COOKIE_NAME = 'shareit_tos_accepted';
+    const TOS_COOKIE_NAME = 'sendly_tos_accepted';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const RETENTION = AUTHENTICATED ? '90d' : '7d';
     const RETENTION_LABEL = AUTHENTICATED ? '90 Days' : '7 Days';
@@ -239,14 +239,14 @@
     function applyTierUI() {
         if (!AUTHENTICATED) {
             const nudge = document.getElementById('auth-nudge');
-            if (nudge && !localStorage.getItem('shareit_auth_nudge_dismissed')) {
+            if (nudge && !localStorage.getItem('sendly_auth_nudge_dismissed')) {
                 nudge.classList.remove('hidden');
             }
             const closeBtn = document.getElementById('auth-nudge-close');
             if (closeBtn) {
                 closeBtn.addEventListener('click', () => {
                     nudge.classList.add('hidden');
-                    localStorage.setItem('shareit_auth_nudge_dismissed', '1');
+                    localStorage.setItem('sendly_auth_nudge_dismissed', '1');
                 });
             }
         }

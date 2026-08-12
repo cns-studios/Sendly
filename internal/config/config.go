@@ -36,7 +36,7 @@ type Config struct {
 	DiscordWebhookURL string
 
 	ReportBotURL         string
-	ShareItBotAPIKey     string
+	SendlyBotAPIKey     string
 	StatsReportInterval  time.Duration
 
 	CNSAuthURL             string
@@ -64,9 +64,9 @@ func Load() (*Config, error) {
 		TOSVersion:                     getEnv("TOS_VERSION", "2026-04-05"),
 		PostgresHost:                   getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:                   getEnv("POSTGRES_PORT", "5432"),
-		PostgresUser:                   getEnv("POSTGRES_USER", "shareit"),
-		PostgresPassword:               getEnv("POSTGRES_PASSWORD", "shareit"),
-		PostgresDB:                     getEnv("POSTGRES_DB", "shareit"),
+		PostgresUser:                   getEnv("POSTGRES_USER", "sendly"),
+		PostgresPassword:               getEnv("POSTGRES_PASSWORD", "sendly"),
+		PostgresDB:                     getEnv("POSTGRES_DB", "sendly"),
 		RedisHost:                      getEnv("REDIS_HOST", "localhost"),
 		RedisPort:                      getEnv("REDIS_PORT", "6379"),
 		DataDir:                        getEnv("DATA_DIR", "./data"),
@@ -76,7 +76,7 @@ func Load() (*Config, error) {
 		AutoDeleteReportCount:          getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
 		DiscordWebhookURL:              getEnv("DISCORD_WEBHOOK_URL", ""),
 		ReportBotURL:                   getEnv("REPORT_BOT_URL", ""),
-		ShareItBotAPIKey:               getEnv("SHAREIT_BOT_API_KEY", ""),
+		SendlyBotAPIKey:               getEnv("SENDLY_BOT_API_KEY", ""),
 		StatsReportInterval:            time.Duration(getEnvInt("STATS_REPORT_INTERVAL_MINUTES", 5)) * time.Minute,
 		CNSAuthURL:                     getEnv("CNS_AUTH_URL", ""),
 		CNSAuthClientID:                getEnv("CNS_AUTH_CLIENT_ID", ""),

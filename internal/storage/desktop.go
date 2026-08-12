@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"shareit/internal/models"
+	"sendly/internal/models"
 )
 
 

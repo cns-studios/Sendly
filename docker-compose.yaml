@@ -10,9 +10,9 @@ services:
       - BASE_URL=${BASE_URL:-http://localhost:8085}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER:-shareit}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-shareit}
-      - POSTGRES_DB=${POSTGRES_DB:-shareit}
+      - POSTGRES_USER=${POSTGRES_USER:-sendly}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sendly}
+      - POSTGRES_DB=${POSTGRES_DB:-sendly}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CHUNK_DIR=/chunks
@@ -36,26 +36,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - shareit
+      - sendly
 
   postgres:
     build:
       context: .
       dockerfile: Dockerfile.postgres
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-shareit}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-shareit}
-      - POSTGRES_DB=${POSTGRES_DB:-shareit}
+      - POSTGRES_USER=${POSTGRES_USER:-sendly}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sendly}
+      - POSTGRES_DB=${POSTGRES_DB:-sendly}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-shareit} -d ${POSTGRES_DB:-shareit}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sendly} -d ${POSTGRES_DB:-sendly}"]
       interval: 5s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
-      - shareit
+      - sendly
 
   redis:
     image: redis:7-alpine
@@ -69,7 +69,7 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - shareit
+      - sendly
 
 volumes:
   postgres_data:
@@ -77,5 +77,5 @@ volumes:
   chunk_data:
   file_data:
 networks:
-  shareit:
+  sendly:
     driver: bridge

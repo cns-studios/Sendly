@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"shareit/internal/models"
+	"sendly/internal/models"
 )
 
 func (p *Postgres) CreateTunnel(ctx context.Context, tunnel *models.Tunnel) error {

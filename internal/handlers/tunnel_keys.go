@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"shareit/internal/models"
+	"sendly/internal/models"
 )
 
 func resolveTunnelPeerRecipient(tunnel *models.Tunnel, actorUserID int64) (int64, string) {

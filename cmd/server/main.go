@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/handlers"
-	"shareit/internal/i18n"
-	"shareit/internal/middleware"
-	"shareit/internal/services"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/handlers"
+	"sendly/internal/i18n"
+	"sendly/internal/middleware"
+	"sendly/internal/services"
+	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )

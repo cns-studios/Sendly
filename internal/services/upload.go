@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"shareit/internal/config"
-	"shareit/internal/models"
-	"shareit/internal/storage"
+	"sendly/internal/config"
+	"sendly/internal/models"
+	"sendly/internal/storage"
 )
 
 type Upload struct {
