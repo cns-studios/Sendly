@@ -2,14 +2,7 @@ services:
   app:
     volumes:
       - /mnt/shareit:/data
-    networks:
-      - coolify
-    labels:
-      - traefik.docker.network=coolify
 volumes:
   postgres_data:
   redis_data:
   chunk_data:
-networks:
-  coolify:
-    external: true
