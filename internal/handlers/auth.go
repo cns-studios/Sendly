@@ -118,6 +118,11 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
 	c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
 
+	// Clear any existing auth cookies before setting new ones to prevent session fixation
+	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+
 	maxAge := int(result.ExpiresIn)
 	if maxAge <= 0 {
 		maxAge = 86400

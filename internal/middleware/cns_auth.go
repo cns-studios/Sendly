@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"sendly/internal/config"
@@ -158,6 +157,7 @@ func setAuthCookies(c *gin.Context, cfg *config.Config, token, refreshToken stri
 	}
 	expiresAt := time.Now().Unix() + int64(maxAge)
 
+	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("auth_token", token, 3600*24*30, "/", "", isSecure, true)
 	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
 	if refreshToken != "" {
@@ -182,48 +182,12 @@ func ClearRefreshTokenCookie(c *gin.Context, cfg *config.Config) {
 	clearRefreshTokenCookie(c, cfg)
 }
 
-// refreshCoordinator coalesces concurrent refresh attempts that share the same
-// refresh token. A burst of requests all arriving while the access token is
-// near expiry previously raced N rotations of the same token upstream; now the
-// first request performs the rotation and the rest reuse its result within the
-// window, so exactly one rotation (and one new refresh token) exists at a time.
-type refreshCoordinator struct {
-	mu         sync.Mutex
-	lastToken  string
-	lastResult *refreshTokenResult
-	lastAt     time.Time
-}
-
-const refreshShareWindow = 5 * time.Second
-
-func (rc *refreshCoordinator) shared(token string) *refreshTokenResult {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	if rc.lastToken == token && rc.lastResult != nil && time.Since(rc.lastAt) < refreshShareWindow {
-		return rc.lastResult
-	}
-	return nil
-}
-
-func (rc *refreshCoordinator) store(token string, result *refreshTokenResult) {
-	rc.mu.Lock()
-	defer rc.mu.Unlock()
-	rc.lastToken = token
-	rc.lastResult = result
-	rc.lastAt = time.Now()
-}
-
-var refreshCoord = &refreshCoordinator{}
-
-func tryRefresh(c *gin.Context, cfg *config.Config) (newToken string, ok bool) {
+// refreshAccessToken attempts to refresh the access token using the refresh token cookie.
+// Returns the new access token on success, empty string on failure.
+func refreshAccessToken(c *gin.Context, cfg *config.Config) (string, bool) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil || refreshToken == "" {
 		return "", false
-	}
-
-	if shared := refreshCoord.shared(refreshToken); shared != nil {
-		setAuthCookies(c, cfg, shared.AccessToken, shared.RefreshToken, shared.ExpiresIn)
-		return shared.AccessToken, true
 	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
@@ -241,7 +205,6 @@ func tryRefresh(c *gin.Context, cfg *config.Config) (newToken string, ok bool) {
 		return "", false
 	}
 
-	refreshCoord.store(refreshToken, result)
 	setAuthCookies(c, cfg, result.AccessToken, result.RefreshToken, result.ExpiresIn)
 	return result.AccessToken, true
 }
@@ -262,7 +225,7 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		if expiresAtStr, cookieErr := c.Cookie("auth_expires_at"); cookieErr == nil {
 			if expiresAt, parseErr := strconv.ParseInt(expiresAtStr, 10, 64); parseErr == nil {
 				if time.Now().Unix() >= expiresAt-60 {
-					if newToken, ok := tryRefresh(c, cfg); ok {
+					if newToken, ok := refreshAccessToken(c, cfg); ok {
 						authToken = newToken
 					}
 				}
@@ -275,7 +238,7 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 		user, err := ValidateCNSAccessToken(ctx, cfg, authToken)
 		if err != nil {
 			if strings.Contains(err.Error(), "status 401") || strings.Contains(err.Error(), "status 403") {
-				if newToken, ok := tryRefresh(c, cfg); ok {
+				if newToken, ok := refreshAccessToken(c, cfg); ok {
 					newCtx, newCancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 					defer newCancel()
 					user, err = ValidateCNSAccessToken(newCtx, cfg, newToken)
