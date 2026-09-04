@@ -247,7 +247,7 @@ func (h *AndroidHandler) UploadInit(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, middleware.GetClientIP(c))
+	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, middleware.GetClientIP(c), tier.MaxFileSize)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})

@@ -67,7 +67,7 @@ func (h *UploadHandler) Init(c *gin.Context) {
 
 	clientIP := middleware.GetClientIP(c)
 
-	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, clientIP)
+	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, clientIP, maxSize)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{

@@ -122,9 +122,9 @@ func (u *Upload) cleanupPendingUploads() {
 	}
 }
 
-func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, uploaderIP string) (*models.UploadInitResponse, error) {
+func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, uploaderIP string, maxFileSize int64) (*models.UploadInitResponse, error) {
 
-	if req.FileSize > u.cfg.MaxFileSize {
+	if req.FileSize > maxFileSize {
 		return nil, models.ErrFileTooLarge
 	}
 

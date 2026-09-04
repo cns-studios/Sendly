@@ -160,6 +160,7 @@ func (h *DesktopHandler) OAuthVerify(c *gin.Context) {
 
 func (h *DesktopHandler) UploadInit(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
+	user := middleware.GetCNSUser(c)
 
 	var req models.UploadInitRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -169,7 +170,8 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 		return
 	}
 
-	if req.FileSize > h.cfg.MaxFileSize {
+	tier := middleware.GetTier(h.cfg, user)
+	if req.FileSize > tier.MaxFileSize {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: models.ErrFileTooLarge.Message, Code: models.ErrFileTooLarge.Code,
 		})
@@ -177,7 +179,7 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 	}
 
 	clientIP := middleware.GetClientIP(c)
-	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, clientIP)
+	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, clientIP, tier.MaxFileSize)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
