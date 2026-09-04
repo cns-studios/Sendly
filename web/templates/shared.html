@@ -5,22 +5,62 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.title}}</title>
     <meta name="description" content="{{.description}}">
-    <meta name="robots" content="{{if .noindex}}noindex, nofollow{{else}}index, follow{{end}}">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="canonical" href="{{.canonicalURL}}">
+
+    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Sendly">
     <meta property="og:title" content="{{.title}}">
     <meta property="og:description" content="{{.description}}">
     <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Download file from Sendly">
     <meta property="og:url" content="{{.canonicalURL}}">
     <meta property="og:locale" content="{{.ogLocale}}">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="de_DE">
+
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{.title}}">
     <meta name="twitter:description" content="{{.description}}">
     <meta name="twitter:image" content="{{.ogImage}}">
+    <meta name="twitter:image:alt" content="Download file from Sendly">
+
+    <!-- hreflang for international SEO -->
+    <link rel="alternate" hreflang="en" href="{{.baseURL}}/shared/{{.fileID}}?lang=en">
+    <link rel="alternate" hreflang="de" href="{{.baseURL}}/shared/{{.fileID}}?lang=de">
+    <link rel="alternate" hreflang="x-default" href="{{.baseURL}}/shared/{{.fileID}}">
+
+    <!-- Structured Data / JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "{{.title}}",
+      "description": "{{.description}}",
+      "url": "{{.canonicalURL}}",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Sendly",
+        "url": "{{.baseURL}}"
+      },
+      "mainEntity": {
+        "@type": "DigitalDocument",
+        "name": "{{.title}}",
+        "description": "{{.description}}",
+        "encodingFormat": "application/octet-stream",
+        "inLanguage": ["en", "de"]
+      },
+      "inLanguage": ["en", "de"]
+    }
+    </script>
+
     <link rel="stylesheet" href="/static/css/style.css">
-    
-    
+
+
     <script src="https://unpkg.com/lucide@latest"></script>
 <link rel="icon" type="image/png" href="/static/favicon.png">
 </head>

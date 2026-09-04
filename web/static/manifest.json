@@ -1,0 +1,22 @@
+{
+  "name": "Sendly",
+  "short_name": "Sendly",
+  "description": "Sendly lets you send files to people or devices, fast and easy without annoying limits. Upload a file, get a link and share it with anyone.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0d0d",
+  "theme_color": "#00AE71",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/static/images/bun.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity"],
+  "lang": "en",
+  "dir": "ltr"
+}

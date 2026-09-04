@@ -7,21 +7,76 @@
     <meta name="description" content="{{.description}}">
     <meta name="robots" content="{{if .noindex}}noindex, nofollow{{else}}index, follow{{end}}">
     <link rel="canonical" href="{{.canonicalURL}}">
+
+    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Sendly">
     <meta property="og:title" content="{{.title}}">
     <meta property="og:description" content="{{.description}}">
     <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Sendly Help and FAQ">
     <meta property="og:url" content="{{.canonicalURL}}">
     <meta property="og:locale" content="{{.ogLocale}}">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="de_DE">
+
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{.title}}">
     <meta name="twitter:description" content="{{.description}}">
     <meta name="twitter:image" content="{{.ogImage}}">
+    <meta name="twitter:image:alt" content="Sendly Help and FAQ">
+
+    <!-- hreflang for international SEO -->
+    <link rel="alternate" hreflang="en" href="{{.baseURL}}/help?lang=en">
+    <link rel="alternate" hreflang="de" href="{{.baseURL}}/help?lang=de">
+    <link rel="alternate" hreflang="x-default" href="{{.baseURL}}/help">
+
+    <!-- Structured Data / JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "{{.title}}",
+      "description": "{{.description}}",
+      "url": "{{.canonicalURL}}",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Sendly",
+        "url": "{{.baseURL}}"
+      },
+      "mainEntity": {
+        "@type": "FAQPage",
+        "name": "Sendly Help & FAQ",
+        "description": "Answers to common questions about Sendly file sharing",
+        "inLanguage": ["en", "de"]
+      },
+      "inLanguage": ["en", "de"],
+      "datePublished": "2026-05-24",
+      "dateModified": "2026-05-24"
+    }
+    </script>
+
     <link rel="stylesheet" href="/static/css/style.css">
-    
-    
+
+
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Mobile & PWA Meta -->
+    <meta name="theme-color" content="#00AE71">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sendly">
+    <link rel="apple-touch-icon" href="/static/images/bun.png">
+
+    <!-- DNS Prefetch for external domains -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
 <link rel="icon" type="image/png" href="/static/favicon.png">
 </head>
 <body>
@@ -52,59 +107,73 @@
     </div>
 
         <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
-            <article class="legal-document">
+            <article class="legal-document" itemscope itemtype="https://schema.org/FAQPage">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
                     <h1>Help</h1>
                 </div>
                 <p class="last-updated">Last updated: May 24, 2026</p>
 
-                <section>
-                    <h2>How do I share a file?</h2>
-                    <p>
-                        You have two options to share a file. You can either create a direct Quick Share to quickly transfer many files between devices and people, or you can create a Link, which is more suitable for sharing a file with many people for a longer time.
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">How do I share a file?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            You have two options to share a file. You can either create a direct Quick Share to quickly transfer many files between devices and people, or you can create a Link, which is more suitable for sharing a file with many people for a longer time.
+                        </p>
+                    </div>
                 </section>
 
-                <section>
-                    <h2>How long are files stored?</h2>
-                    <p>
-                        Guest (non-logged-in users) uploads are stored for 7 days. Logged-In users get 90 days of storage. After the retention period expires, the file is automatically and permanently deleted. More about that in our <a href="/limits">Limits</a> Page.
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">How long are files stored?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            Guest (non-logged-in users) uploads are stored for 7 days. Logged-In users get 90 days of storage. After the retention period expires, the file is automatically and permanently deleted. More about that in our <a href="/limits">Limits</a> Page.
+                        </p>
+                    </div>
                 </section>
 
-                <section>
-                    <h2>What is the maximum file size I can upload?</h2>
-                    <p>
-                        Guest (non-logged-in users) can upload files up to 750 MB. Logged-In users can upload files up to 1.5 GB. More about that in our <a href="/limits">Limits</a> Page.
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">What is the maximum file size I can upload?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            Guest (non-logged-in users) can upload files up to 750 MB. Logged-In users can upload files up to 1.5 GB. More about that in our <a href="/limits">Limits</a> Page.
+                        </p>
+                    </div>
                 </section>
 
-                <section>
-                    <h2>Is my file secure?</h2>
-                    <p>
-                        Yes. All files are encrypted with AES-256-GCM before they are stored. The link you share contains the key needed for decryption. TLS 1.3 protects the data during transit. We cannot view any file contents by design.
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">Is my file secure?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            Yes. All files are encrypted with AES-256-GCM before they are stored. The link you share contains the key needed for decryption. TLS 1.3 protects the data during transit. We cannot view any file contents by design.
+                        </p>
+                    </div>
                 </section>
 
-                <section>
-                    <h2>Can I cancel an upload?</h2>
-                    <p>
-                        No, once an upload has started, it cannot be canceled. However, we cannot view any files, so if you accidentally upload a file, you can simply not share the link that has been copied to your clipboard. The file will be automatically deleted after the retention period.
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">Can I cancel an upload?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            No, once an upload has started, it cannot be canceled. However, we cannot view any files, so if you accidentally upload a file, you can simply not share the link that has been copied to your clipboard. The file will be automatically deleted after the retention period.
+                        </p>
+                    </div>
                 </section>
 
-                <section>
-                    <h2>What happens if the link is wrong or broken?</h2>
-                    <p>
-                        If you visit a share link that shows a "Wrong Link" message, double-check the URL you received and make sure you copied the entire link. If the Link still doesn't work, ask the sender to send the link again, or ask the sender to upload the file again
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">What happens if the link is wrong or broken?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            If you visit a share link that shows a "Wrong Link" message, double-check the URL you received and make sure you copied the entire link. If the Link still doesn't work, ask the sender to send the link again, or ask the sender to upload the file again
+                        </p>
+                    </div>
                 </section>
 
-                <section>
-                    <h2>How much can I upload?</h2>
-                    <p>
-                        You can upload as many files as you want, as long as the files stay in the limits of your account type (Guest or Logged-In). If you got "Rate Limited", just wait a bit and try again. This is to ensure our servers remain accessible for everyone.
-                    </p>
+                <section itemprop="mainEntity" itemscope itemtype="https://schema.org/Question">
+                    <h2 itemprop="name">How much can I upload?</h2>
+                    <div itemprop="acceptedAnswer" itemscope itemtype="https://schema.org/Answer">
+                        <p itemprop="text">
+                            You can upload as many files as you want, as long as the files stay in the limits of your account type (Guest or Logged-In). If you got "Rate Limited", just wait a bit and try again. This is to ensure our servers remain accessible for everyone.
+                        </p>
+                    </div>
                 </section>
             </article>
         </main>

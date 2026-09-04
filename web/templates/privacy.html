@@ -7,21 +7,76 @@
     <meta name="description" content="{{.description}}">
     <meta name="robots" content="{{if .noindex}}noindex, nofollow{{else}}index, follow{{end}}">
     <link rel="canonical" href="{{.canonicalURL}}">
+
+    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Sendly">
     <meta property="og:title" content="{{.title}}">
     <meta property="og:description" content="{{.description}}">
     <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Sendly Privacy Policy">
     <meta property="og:url" content="{{.canonicalURL}}">
     <meta property="og:locale" content="{{.ogLocale}}">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="de_DE">
+
+    <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{.title}}">
     <meta name="twitter:description" content="{{.description}}">
     <meta name="twitter:image" content="{{.ogImage}}">
+    <meta name="twitter:image:alt" content="Sendly Privacy Policy">
+
+    <!-- hreflang for international SEO -->
+    <link rel="alternate" hreflang="en" href="{{.baseURL}}/privacy?lang=en">
+    <link rel="alternate" hreflang="de" href="{{.baseURL}}/privacy?lang=de">
+    <link rel="alternate" hreflang="x-default" href="{{.baseURL}}/privacy">
+
+    <!-- Structured Data / JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": "{{.title}}",
+      "description": "{{.description}}",
+      "url": "{{.canonicalURL}}",
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Sendly",
+        "url": "{{.baseURL}}"
+      },
+      "mainEntity": {
+        "@type": "WebPage",
+        "name": "Privacy Policy",
+        "description": "Privacy Policy for Sendly file sharing service",
+        "inLanguage": ["en", "de"]
+      },
+      "inLanguage": ["en", "de"],
+      "datePublished": "2026-04-04",
+      "dateModified": "2026-04-04"
+    }
+    </script>
+
     <link rel="stylesheet" href="/static/css/style.css">
-    
-    
+
+
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Mobile & PWA Meta -->
+    <meta name="theme-color" content="#00AE71">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sendly">
+    <link rel="apple-touch-icon" href="/static/images/bun.png">
+
+    <!-- DNS Prefetch for external domains -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
 <link rel="icon" type="image/png" href="/static/favicon.png">
 </head>
 <body>

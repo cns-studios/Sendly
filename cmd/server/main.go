@@ -120,6 +120,7 @@ func main() {
 
 	router.GET("/robots.txt", pageHandler.RobotsTXT)
 	router.GET("/sitemap.xml", pageHandler.Sitemap)
+	router.GET("/.well-known/security.txt", pageHandler.SecurityTXT)
 
 	router.GET("/", pageHandler.Index)
 	router.GET("/quickshare", pageHandler.QuickShare)
