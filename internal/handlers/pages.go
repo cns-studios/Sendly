@@ -88,7 +88,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 	// Build account URL from CNS Auth base URL
 	accountURL := ""
 	if h.cfg.CNSAuthURL != "" {
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/")
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,

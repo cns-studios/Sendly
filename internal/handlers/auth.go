@@ -162,16 +162,6 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 func (h *AuthHandler) Logout(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
-	// Set cookie domain to allow subdomains when not localhost
-	cookieDomain := ""
-	if !strings.Contains(h.cfg.BaseURL, "localhost") {
-		// Extract hostname from BaseURL and add leading dot for subdomain matching
-		u, err := url.Parse(h.cfg.BaseURL)
-		if err == nil && u.Hostname() != "" {
-			cookieDomain = "." + u.Hostname()
-		}
-	}
-
 	// Best-effort call to CNS Auth to revoke the refresh token family server-side.
 	// This ensures the session is fully invalidated, not just the local cookies cleared.
 	// If CNS Auth is unreachable or returns an error, we log it but still proceed with
@@ -208,9 +198,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	// Clear local cookies regardless of remote call outcome
-	c.SetCookie("auth_token", "", -1, "/", cookieDomain, isSecure, true)
-	c.SetCookie("refresh_token", "", -1, "/", cookieDomain, isSecure, true)
-	c.SetCookie("auth_expires_at", "", -1, "/", cookieDomain, isSecure, true)
+	// Use empty string for domain to match middleware cookie handling
+	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
+	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
 	c.Redirect(http.StatusFound, "/")
 }
 
