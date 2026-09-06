@@ -42,7 +42,37 @@ func (u *CNSUser) UnmarshalJSON(data []byte) error {
 	if u.Avatar == "" {
 		u.Avatar = payload.AvatarURLCamel
 	}
+	if u.Avatar == "" {
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err == nil {
+			u.Avatar = findAvatarURL(raw)
+		}
+	}
 	return nil
+}
+
+func findAvatarURL(value interface{}) string {
+	switch value := value.(type) {
+	case map[string]interface{}:
+		for key, nested := range value {
+			normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+			if normalized == "avatar" || normalized == "avatarurl" || normalized == "profileimage" || normalized == "profilepicture" || normalized == "picture" {
+				if candidate, ok := nested.(string); ok && strings.HasPrefix(candidate, "http") {
+					return candidate
+				}
+			}
+			if candidate := findAvatarURL(nested); candidate != "" {
+				return candidate
+			}
+		}
+	case []interface{}:
+		for _, nested := range value {
+			if candidate := findAvatarURL(nested); candidate != "" {
+				return candidate
+			}
+		}
+	}
+	return ""
 }
 
 func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token string) (*CNSUser, error) {

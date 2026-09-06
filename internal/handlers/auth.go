@@ -32,6 +32,46 @@ type tokenExchangeResult struct {
 	AvatarURL    string              `json:"avatar_url,omitempty"`
 }
 
+func (r *tokenExchangeResult) UnmarshalJSON(data []byte) error {
+	type tokenExchangeAlias tokenExchangeResult
+	var payload tokenExchangeAlias
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	*r = tokenExchangeResult(payload)
+	if r.Avatar == "" {
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err == nil {
+			r.Avatar = findAvatarURL(raw)
+		}
+	}
+	return nil
+}
+
+func findAvatarURL(value interface{}) string {
+	switch value := value.(type) {
+	case map[string]interface{}:
+		for key, nested := range value {
+			normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+			if normalized == "avatar" || normalized == "avatarurl" || normalized == "profileimage" || normalized == "profilepicture" || normalized == "picture" {
+				if candidate, ok := nested.(string); ok && strings.HasPrefix(candidate, "http") {
+					return candidate
+				}
+			}
+			if candidate := findAvatarURL(nested); candidate != "" {
+				return candidate
+			}
+		}
+	case []interface{}:
+		for _, nested := range value {
+			if candidate := findAvatarURL(nested); candidate != "" {
+				return candidate
+			}
+		}
+	}
+	return ""
+}
+
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{cfg: cfg}
 }
