@@ -76,6 +76,27 @@ func NewAuthHandler(cfg *config.Config) *AuthHandler {
 	return &AuthHandler{cfg: cfg}
 }
 
+func authCookieDomain(cfg *config.Config) string {
+	if strings.Contains(cfg.BaseURL, "localhost") {
+		return ""
+	}
+	u, err := url.Parse(cfg.BaseURL)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	return "." + u.Hostname()
+}
+
+func clearAuthCookies(c *gin.Context, cfg *config.Config) {
+	isSecure := strings.HasPrefix(cfg.BaseURL, "https")
+	for _, domain := range []string{"", authCookieDomain(cfg)} {
+		c.SetCookie("auth_token", "", -1, "/", domain, isSecure, true)
+		c.SetCookie("refresh_token", "", -1, "/", domain, isSecure, true)
+		c.SetCookie("auth_expires_at", "", -1, "/", domain, isSecure, true)
+		c.SetCookie("auth_avatar", "", -1, "/", domain, isSecure, true)
+	}
+}
+
 func (h *AuthHandler) Login(c *gin.Context) {
 	if h.cfg.CNSAuthURL == "" || h.cfg.CNSAuthClientID == "" {
 		c.String(http.StatusInternalServerError, "CNS Auth is not configured")
@@ -89,14 +110,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
 	// Set cookie domain to allow subdomains when not localhost
-	cookieDomain := ""
-	if !strings.Contains(h.cfg.BaseURL, "localhost") {
-		// Extract hostname from BaseURL and add leading dot for subdomain matching
-		u, err := url.Parse(h.cfg.BaseURL)
-		if err == nil && u.Hostname() != "" {
-			cookieDomain = "." + u.Hostname()
-		}
-	}
+	cookieDomain := authCookieDomain(h.cfg)
 
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("pkce_verifier", verifier, 600, "/", cookieDomain, isSecure, true)
@@ -125,14 +139,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
 	// Set cookie domain to allow subdomains when not localhost
-	cookieDomain := ""
-	if !strings.Contains(h.cfg.BaseURL, "localhost") {
-		// Extract hostname from BaseURL and add leading dot for subdomain matching
-		u, err := url.Parse(h.cfg.BaseURL)
-		if err == nil && u.Hostname() != "" {
-			cookieDomain = "." + u.Hostname()
-		}
-	}
+	cookieDomain := authCookieDomain(h.cfg)
 
 	if authErr != "" {
 		c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
@@ -213,8 +220,6 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
-
 	// Best-effort call to CNS Auth to revoke the refresh token family server-side.
 	// This ensures the session is fully invalidated, not just the local cookies cleared.
 	// If CNS Auth is unreachable or returns an error, we log it but still proceed with
@@ -250,12 +255,8 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
-	// Clear local cookies regardless of remote call outcome
-	// Use empty string for domain to match middleware cookie handling
-	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
-	c.SetCookie("auth_avatar", "", -1, "/", "", isSecure, true)
+	// Clear both host-only and domain-scoped cookies regardless of upstream outcome.
+	clearAuthCookies(c, h.cfg)
 	c.Redirect(http.StatusFound, "/")
 }
 
