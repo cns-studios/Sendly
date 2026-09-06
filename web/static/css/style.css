@@ -175,6 +175,160 @@ body.page-index {
     color: #fff;
 }
 
+/* ── Account Menu (new dropdown with avatar) ── */
+.account-menu-trigger {
+    background: #fff !important;
+    color: #1a1a1f !important;
+    border: 1px solid #e2e2e6 !important;
+    border-radius: 12px !important;
+    padding: 10px 14px 10px 10px !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-family: 'Arimo', sans-serif;
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.4;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+.account-menu-trigger:hover {
+    background: #fff !important;
+    border-color: #c9c9d1 !important;
+}
+.account-menu-trigger:focus-visible {
+    outline: 2px solid #c9c9d1 !important;
+    outline-offset: 2px !important;
+}
+
+.account-menu-trigger[aria-expanded="true"] {
+    background: #fff !important;
+    color: #1a1a1f !important;
+    border: 1px solid #c9c9d1 !important;
+    box-shadow: 0 0 0 3px #f0f0f2 !important;
+}
+.account-menu-trigger[aria-expanded="true"] .account-menu-username {
+    color: #1a1a1f;
+}
+.account-menu-trigger[aria-expanded="true"] i[data-lucide="chevron-down"],
+.account-menu-trigger[aria-expanded="true"] svg[data-lucide="chevron-down"] {
+    color: #78787f;
+    transform: rotate(180deg);
+}
+.account-menu-trigger i[data-lucide="chevron-down"],
+.account-menu-trigger svg[data-lucide="chevron-down"] {
+    transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.account-menu-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.account-menu-avatar-img {
+    border-radius: 50%;
+    object-fit: cover;
+    width: 24px;
+    height: 24px;
+}
+
+.account-menu-trigger[aria-expanded="true"] + .account-menu {
+    display: block !important;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    animation: account-menu-enter 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.account-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    margin-top: 0 !important;
+    background: #fff !important;
+    border: 1px solid #e2e2e6 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 30px rgba(20,20,30,0.08), 0 2px 8px rgba(20,20,30,0.06) !important;
+    min-width: 200px;
+    padding: 6px !important;
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(-3px) scale(0.995);
+    transform-origin: top center;
+    pointer-events: none;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.account-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px !important;
+    color: #1a1a1f !important;
+    text-decoration: none;
+    font-family: 'Arimo', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    transition: background 0.12s ease, color 0.12s ease;
+    border-bottom: 0 !important;
+    border-radius: 8px !important;
+}
+.account-menu-item:last-child {
+    border-bottom: none;
+}
+.account-menu-item:hover,
+.account-menu-item:focus {
+    background: #f4f4f6;
+    color: #1a1a1f;
+    outline: none;
+}
+.account-menu-item:focus-visible {
+    outline: 2px solid #c9c9d1;
+    outline-offset: -2px;
+    border-radius: 0;
+}
+
+@keyframes account-menu-enter {
+    from {
+        opacity: 0;
+        transform: translateY(-3px) scale(0.995);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+.account-menu-item i[data-lucide] {
+    color: #666;
+    flex-shrink: 0;
+}
+.account-menu-item:hover i[data-lucide],
+.account-menu-item:focus i[data-lucide] {
+    color: #333;
+}
+
+/* Mobile adjustments for account menu */
+@media (max-width: 768px) {
+    .account-menu {
+        right: 0;
+        left: auto;
+        max-width: calc(100vw - 32px);
+        min-width: 180px;
+    }
+    .account-menu-trigger {
+        padding: 6px 10px 6px 6px;
+    }
+    .account-menu-avatar-img {
+        width: 22px;
+        height: 22px;
+    }
+    .account-menu-username {
+        max-width: 140px !important;
+    }
+}
+
 /* ── Footer ── */
 .footer {
     background-color: #E5E5E5;

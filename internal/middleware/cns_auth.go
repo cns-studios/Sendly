@@ -22,6 +22,57 @@ const CNSUserKey = "cns_user"
 type CNSUser struct {
 	ID       int    `json:"id"`
 	Username string `json:"username"`
+	Avatar   string `json:"avatar,omitempty"`
+}
+
+func (u *CNSUser) UnmarshalJSON(data []byte) error {
+	type cnsUserAlias CNSUser
+	var payload struct {
+		cnsUserAlias
+		AvatarURL      string `json:"avatar_url"`
+		AvatarURLCamel string `json:"avatarUrl"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	*u = CNSUser(payload.cnsUserAlias)
+	if u.Avatar == "" {
+		u.Avatar = payload.AvatarURL
+	}
+	if u.Avatar == "" {
+		u.Avatar = payload.AvatarURLCamel
+	}
+	if u.Avatar == "" {
+		var raw map[string]interface{}
+		if err := json.Unmarshal(data, &raw); err == nil {
+			u.Avatar = findAvatarURL(raw)
+		}
+	}
+	return nil
+}
+
+func findAvatarURL(value interface{}) string {
+	switch value := value.(type) {
+	case map[string]interface{}:
+		for key, nested := range value {
+			normalized := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(key, "_", ""), "-", ""))
+			if normalized == "avatar" || normalized == "avatarurl" || normalized == "profileimage" || normalized == "profilepicture" || normalized == "picture" {
+				if candidate, ok := nested.(string); ok && strings.HasPrefix(candidate, "http") {
+					return candidate
+				}
+			}
+			if candidate := findAvatarURL(nested); candidate != "" {
+				return candidate
+			}
+		}
+	case []interface{}:
+		for _, nested := range value {
+			if candidate := findAvatarURL(nested); candidate != "" {
+				return candidate
+			}
+		}
+	}
+	return ""
 }
 
 func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token string) (*CNSUser, error) {
@@ -255,6 +306,11 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		if user.Avatar == "" {
+			if avatar, cookieErr := c.Cookie("auth_avatar"); cookieErr == nil {
+				user.Avatar = avatar
+			}
+		}
 		c.Set(CNSUserKey, user)
 		c.Next()
 	}
