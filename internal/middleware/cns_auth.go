@@ -22,6 +22,7 @@ const CNSUserKey = "cns_user"
 type CNSUser struct {
 	ID       int    `json:"id"`
 	Username string `json:"username"`
+	Avatar   string `json:"avatar,omitempty"`
 }
 
 func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token string) (*CNSUser, error) {

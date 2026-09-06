@@ -76,12 +76,19 @@ func (h *PageHandler) Index(c *gin.Context) {
 	tier := middleware.GetTier(h.cfg, user)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+	}
+	// Build account URL from CNS Auth base URL
+	accountURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,
@@ -90,6 +97,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 		"authenticated":    authenticated,
 		"cnsUserId":        userIDOrZero(user),
 		"cnsUsername":      username,
+		"cnsUserAvatar":    userAvatar,
 		"allowedDurations": tier.AllowedDurations,
 		"tosVersion":       h.cfg.TOSVersion,
 	}
@@ -112,6 +120,8 @@ func (h *PageHandler) Index(c *gin.Context) {
 		"tosVersion":       h.cfg.TOSVersion,
 		"authLoginURL":     authLoginURL,
 		"username":         username,
+		"userAvatar":       userAvatar,
+		"accountURL":       accountURL,
 		"configJSON":       template.JS(string(configJSON)),
 	})
 }
@@ -121,12 +131,16 @@ func (h *PageHandler) ToS(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
+	authLoginURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
-	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -137,6 +151,8 @@ func (h *PageHandler) ToS(c *gin.Context) {
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
 	})
 }
 
@@ -145,12 +161,16 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -161,6 +181,8 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
 	})
 }
 
@@ -169,12 +191,16 @@ func (h *PageHandler) LimitsPage(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -185,6 +211,8 @@ func (h *PageHandler) LimitsPage(c *gin.Context) {
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
 	})
 }
 
@@ -193,12 +221,16 @@ func (h *PageHandler) DataEncryption(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -209,6 +241,8 @@ func (h *PageHandler) DataEncryption(c *gin.Context) {
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
 	})
 }
 
@@ -217,12 +251,16 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -233,6 +271,8 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 		"authenticated": authenticated,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
 	})
 }
 
@@ -242,12 +282,16 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 	tier := middleware.GetTier(h.cfg, user)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,
@@ -256,6 +300,7 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 		"authenticated":    authenticated,
 		"cnsUserId":        userIDOrZero(user),
 		"cnsUsername":      username,
+		"cnsUserAvatar":    userAvatar,
 		"allowedDurations": tier.AllowedDurations,
 		"tosVersion":       h.cfg.TOSVersion,
 	}
@@ -278,6 +323,8 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 		"tosVersion":       h.cfg.TOSVersion,
 		"authLoginURL":     authLoginURL,
 		"username":         username,
+		"userAvatar":       userAvatar,
+		"accountURL":       accountURL,
 		"configJSON":       template.JS(string(configJSON)),
 	})
 }
@@ -288,12 +335,16 @@ func (h *PageHandler) Link(c *gin.Context) {
 	tier := middleware.GetTier(h.cfg, user)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,
@@ -302,6 +353,7 @@ func (h *PageHandler) Link(c *gin.Context) {
 		"authenticated":    authenticated,
 		"cnsUserId":        userIDOrZero(user),
 		"cnsUsername":      username,
+		"cnsUserAvatar":    userAvatar,
 		"allowedDurations": tier.AllowedDurations,
 		"tosVersion":       h.cfg.TOSVersion,
 	}
@@ -324,6 +376,8 @@ func (h *PageHandler) Link(c *gin.Context) {
 		"tosVersion":       h.cfg.TOSVersion,
 		"authLoginURL":     authLoginURL,
 		"username":         username,
+		"userAvatar":       userAvatar,
+		"accountURL":       accountURL,
 		"configJSON":       template.JS(string(configJSON)),
 	})
 }
@@ -334,17 +388,22 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
+	userAvatar := ""
+	accountURL := ""
 	if user != nil {
 		username = user.Username
+		userAvatar = user.Avatar
 	}
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
 	}
 	configData := map[string]interface{}{
-		"baseURL":    h.cfg.BaseURL,
-		"fileID":     fileID,
-		"tosVersion": h.cfg.TOSVersion,
+		"baseURL":       h.cfg.BaseURL,
+		"fileID":        fileID,
+		"tosVersion":    h.cfg.TOSVersion,
+		"cnsUserAvatar": userAvatar,
 	}
 	locale := middleware.GetLocale(c)
 	configData["t"] = h.tr.Get(locale)
@@ -365,6 +424,8 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 		"fileID":        fileID,
 		"authenticated": authenticated,
 		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
 		"authLoginURL":  authLoginURL,
 		"tosVersion":    h.cfg.TOSVersion,
 		"noindex":       true,

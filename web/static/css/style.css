@@ -175,6 +175,134 @@ body.page-index {
     color: #fff;
 }
 
+/* ── Account Menu (new dropdown with avatar) ── */
+.account-menu-trigger {
+    background: #333 !important;
+    color: #fff;
+    border: none;
+    border-radius: 34px;
+    padding: 8px 12px 8px 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-family: 'Arimo', sans-serif;
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 1.4;
+    transition: background 0.15s, box-shadow 0.15s;
+}
+.account-menu-trigger:hover {
+    background: #444 !important;
+}
+.account-menu-trigger:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.account-menu-trigger[aria-expanded="true"] {
+    background: #f5f5f5 !important;
+    color: #1a1a1a !important;
+    border-radius: 34px 34px 0 0;
+    border: 1px solid #e0e0e0;
+    border-bottom: none;
+}
+.account-menu-trigger[aria-expanded="true"] .account-menu-username {
+    color: #1a1a1a;
+}
+.account-menu-trigger[aria-expanded="true"] i[data-lucide="chevron-down"] {
+    color: #666;
+}
+
+.account-menu-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.account-menu-avatar-img {
+    border-radius: 50%;
+    object-fit: cover;
+    width: 24px;
+    height: 24px;
+}
+
+.account-menu-trigger[aria-expanded="true"] + .account-menu {
+    display: block;
+}
+
+.account-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0;
+    background: #f5f5f5;
+    border: 1px solid #e0e0e0;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 200px;
+    overflow: hidden;
+    z-index: 1000;
+}
+
+.account-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    color: #1a1a1a;
+    text-decoration: none;
+    font-family: 'Arimo', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
+    transition: background 0.15s;
+    border-bottom: 1px solid #e0e0e0;
+}
+.account-menu-item:last-child {
+    border-bottom: none;
+}
+.account-menu-item:hover,
+.account-menu-item:focus {
+    background: #e8e8e8;
+    color: #000;
+    outline: none;
+}
+.account-menu-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: 0;
+}
+.account-menu-item i[data-lucide] {
+    color: #666;
+    flex-shrink: 0;
+}
+.account-menu-item:hover i[data-lucide],
+.account-menu-item:focus i[data-lucide] {
+    color: #333;
+}
+
+/* Mobile adjustments for account menu */
+@media (max-width: 768px) {
+    .account-menu {
+        right: 0;
+        left: auto;
+        max-width: calc(100vw - 32px);
+        min-width: 180px;
+    }
+    .account-menu-trigger {
+        padding: 6px 10px 6px 6px;
+    }
+    .account-menu-avatar-img {
+        width: 22px;
+        height: 22px;
+    }
+    .account-menu-username {
+        max-width: 140px !important;
+    }
+}
+
 /* ── Footer ── */
 .footer {
     background-color: #E5E5E5;

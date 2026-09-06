@@ -141,6 +141,43 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 
 func (h *AuthHandler) Logout(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
+
+	// Best-effort call to CNS Auth to revoke the refresh token family server-side.
+	// This ensures the session is fully invalidated, not just the local cookies cleared.
+	// If CNS Auth is unreachable or returns an error, we log it but still proceed with
+	// local logout so the user is never blocked from logging out.
+	if h.cfg.CNSAuthURL != "" {
+		authToken, err := c.Cookie("auth_token")
+		if err == nil && authToken != "" {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+			defer cancel()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.CNSAuthURL+"/api/auth/logout", nil)
+			if err == nil {
+				req.Header.Set("Authorization", "Bearer "+authToken)
+				req.Header.Set("Content-Type", "application/json")
+				// Include client_id if configured (for proper token revocation scoping)
+				if h.cfg.CNSAuthClientID != "" {
+					q := req.URL.Query()
+					q.Set("client_id", h.cfg.CNSAuthClientID)
+					req.URL.RawQuery = q.Encode()
+				}
+
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					// Log but don't block local logout
+					fmt.Printf("CNS Auth logout call failed: %v\n", err)
+				} else {
+					resp.Body.Close()
+					if resp.StatusCode != http.StatusNoContent {
+						fmt.Printf("CNS Auth logout returned non-204: %d\n", resp.StatusCode)
+					}
+				}
+			}
+		}
+	}
+
+	// Clear local cookies regardless of remote call outcome
 	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
 	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
 	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)

@@ -6,7 +6,7 @@ services:
     ports:
       - "8085:8085"
     environment:
-      - PORT=8085
+      - PORT=${PORT:-8085}
       - BASE_URL=${BASE_URL:-http://localhost:8085}
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
