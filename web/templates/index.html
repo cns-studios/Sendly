@@ -372,46 +372,21 @@
                 }
             });
 
-            // Initialize Lucide icons in menu (for dynamic content)
-            var observer = new MutationObserver(function() {
-                if (window.lucide && lucide.createIcons) {
+            // Ensure Lucide icons in menu are initialized when menu opens (menu is server-rendered,
+            // so global DOMContentLoaded already handles it, but this is a safety net for
+            // any edge case where icons weren't initialized yet)
+            var iconsInitialized = false;
+            var originalOpenMenu = openMenu;
+            openMenu = function() {
+                originalOpenMenu();
+                if (!iconsInitialized && window.lucide && lucide.createIcons) {
                     lucide.createIcons();
+                    iconsInitialized = true;
                 }
-            });
-            observer.observe(menu, { childList: true, subtree: true });
+            };
         })();
 
-        // Build initials avatar fallback
-        function buildInitialsAvatar(username) {
-            if (!username) return document.createElement('span');
-            var initials = username.trim().split(/\s+/).map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
-            // Deterministic color from username - WCAG AA compliant (≥4.5:1 against white)
-            var hash = 0;
-            for (var i = 0; i < username.length; i++) {
-                hash = username.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            var palette = [
-                '#004AAD', '#006B3F', '#8B0000', '#6B3A00', '#4B0082',
-                '#800040', '#005A7A', '#2E6B2E', '#6B4000', '#4A006B'
-            ];
-            var color = palette[Math.abs(hash) % palette.length];
-            var span = document.createElement('span');
-            span.textContent = initials;
-            span.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:600;color:#fff;background:' + color + ';';
-            return span;
-        }
-
-        // Hydrate initials placeholders on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.account-menu-avatar-placeholder').forEach(function(el) {
-                var username = el.closest('[data-username]')?.dataset.username || '';
-                if (username) {
-                    var avatar = buildInitialsAvatar(username);
-                    el.replaceWith(avatar);
-                }
-            });
-        });
-
+        
         (function(){if(window.innerWidth>768){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}}})();
         (function(){
             var card=document.getElementById('quickshare-card');

@@ -322,13 +322,18 @@
                 }
             });
 
-            // Initialize Lucide icons in menu (for dynamic content)
-            var observer = new MutationObserver(function() {
-                if (window.lucide && lucide.createIcons) {
+            // Ensure Lucide icons in menu are initialized when menu opens (menu is server-rendered,
+            // so global DOMContentLoaded already handles it, but this is a safety net for
+            // any edge case where icons weren't initialized yet)
+            var iconsInitialized = false;
+            var originalOpenMenu = openMenu;
+            openMenu = function() {
+                originalOpenMenu();
+                if (!iconsInitialized && window.lucide && lucide.createIcons) {
                     lucide.createIcons();
+                    iconsInitialized = true;
                 }
-            });
-            observer.observe(menu, { childList: true, subtree: true });
+            };
         })();
 
         // Build initials avatar fallback

@@ -45,9 +45,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
+	// Set cookie domain to allow subdomains when not localhost
+	cookieDomain := ""
+	if !strings.Contains(h.cfg.BaseURL, "localhost") {
+		// Extract hostname from BaseURL and add leading dot for subdomain matching
+		u, err := url.Parse(h.cfg.BaseURL)
+		if err == nil && u.Hostname() != "" {
+			cookieDomain = "." + u.Hostname()
+		}
+	}
+
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("pkce_verifier", verifier, 600, "/", "", isSecure, true)
-	c.SetCookie("pkce_state", state, 600, "/", "", isSecure, true)
+	c.SetCookie("pkce_verifier", verifier, 600, "/", cookieDomain, isSecure, true)
+	c.SetCookie("pkce_state", state, 600, "/", cookieDomain, isSecure, true)
 
 	authURL := h.cfg.CNSAuthURL + "/login"
 	redirectURI := h.cfg.BaseURL + "/auth/callback"
@@ -71,39 +81,49 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
+	// Set cookie domain to allow subdomains when not localhost
+	cookieDomain := ""
+	if !strings.Contains(h.cfg.BaseURL, "localhost") {
+		// Extract hostname from BaseURL and add leading dot for subdomain matching
+		u, err := url.Parse(h.cfg.BaseURL)
+		if err == nil && u.Hostname() != "" {
+			cookieDomain = "." + u.Hostname()
+		}
+	}
+
 	if authErr != "" {
-		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 		c.String(http.StatusBadRequest, "Authentication failed: %s", authErr)
 		return
 	}
 
 	if code == "" || state == "" {
-		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 		c.String(http.StatusBadRequest, "Authentication callback missing required parameters")
 		return
 	}
 
 	savedState, err := c.Cookie("pkce_state")
 	if err != nil {
-		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 		c.String(http.StatusBadRequest, "Invalid state: missing pkce_state cookie. (Error: %v)", err)
 		return
 	}
 	if savedState != state {
 		fmt.Printf("State Mismatch: saved_cookie=%s, got_url=%s\n", savedState, state)
-		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 		c.String(http.StatusBadRequest, "Invalid state: mismatch. Cookie had '%s' but URL had '%s'.", savedState, state)
 		return
 	}
 
 	verifier, err := c.Cookie("pkce_verifier")
 	if err != nil {
-		c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-		c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+		c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
+		c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 		c.String(http.StatusBadRequest, "Missing verifier cookie. Your session may have expired.")
 		return
 	}
@@ -115,13 +135,13 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("pkce_verifier", "", -1, "/", "", isSecure, true)
-	c.SetCookie("pkce_state", "", -1, "/", "", isSecure, true)
+	c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
+	c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 
 	// Clear any existing auth cookies before setting new ones to prevent session fixation
-	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+	c.SetCookie("auth_token", "", -1, "/", cookieDomain, isSecure, true)
+	c.SetCookie("refresh_token", "", -1, "/", cookieDomain, isSecure, true)
+	c.SetCookie("auth_expires_at", "", -1, "/", cookieDomain, isSecure, true)
 
 	maxAge := int(result.ExpiresIn)
 	if maxAge <= 0 {
@@ -130,10 +150,10 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	expiresAt := time.Now().Unix() + int64(maxAge)
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
+	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", cookieDomain, isSecure, true)
+	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", cookieDomain, isSecure, true)
 	if result.RefreshToken != "" {
-		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", "", isSecure, true)
+		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
 
 	c.Redirect(http.StatusFound, "/")
@@ -141,6 +161,16 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 
 func (h *AuthHandler) Logout(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
+
+	// Set cookie domain to allow subdomains when not localhost
+	cookieDomain := ""
+	if !strings.Contains(h.cfg.BaseURL, "localhost") {
+		// Extract hostname from BaseURL and add leading dot for subdomain matching
+		u, err := url.Parse(h.cfg.BaseURL)
+		if err == nil && u.Hostname() != "" {
+			cookieDomain = "." + u.Hostname()
+		}
+	}
 
 	// Best-effort call to CNS Auth to revoke the refresh token family server-side.
 	// This ensures the session is fully invalidated, not just the local cookies cleared.
@@ -178,9 +208,9 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}
 
 	// Clear local cookies regardless of remote call outcome
-	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+	c.SetCookie("auth_token", "", -1, "/", cookieDomain, isSecure, true)
+	c.SetCookie("refresh_token", "", -1, "/", cookieDomain, isSecure, true)
+	c.SetCookie("auth_expires_at", "", -1, "/", cookieDomain, isSecure, true)
 	c.Redirect(http.StatusFound, "/")
 }
 
