@@ -276,6 +276,11 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		if user.Avatar == "" {
+			if avatar, cookieErr := c.Cookie("auth_avatar"); cookieErr == nil {
+				user.Avatar = avatar
+			}
+		}
 		c.Set(CNSUserKey, user)
 		c.Next()
 	}

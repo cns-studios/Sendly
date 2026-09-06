@@ -24,9 +24,12 @@ type AuthHandler struct {
 }
 
 type tokenExchangeResult struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
+	AccessToken  string              `json:"access_token"`
+	RefreshToken string              `json:"refresh_token"`
+	ExpiresIn    int64               `json:"expires_in"`
+	User         *middleware.CNSUser `json:"user,omitempty"`
+	Avatar       string              `json:"avatar,omitempty"`
+	AvatarURL    string              `json:"avatar_url,omitempty"`
 }
 
 func NewAuthHandler(cfg *config.Config) *AuthHandler {
@@ -152,6 +155,16 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", cookieDomain, isSecure, true)
+	avatar := result.Avatar
+	if avatar == "" {
+		avatar = result.AvatarURL
+	}
+	if avatar == "" && result.User != nil {
+		avatar = result.User.Avatar
+	}
+	if avatar != "" {
+		c.SetCookie("auth_avatar", avatar, 3600*24*30, "/", cookieDomain, isSecure, true)
+	}
 	if result.RefreshToken != "" {
 		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
@@ -202,6 +215,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
 	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
 	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+	c.SetCookie("auth_avatar", "", -1, "/", "", isSecure, true)
 	c.Redirect(http.StatusFound, "/")
 }
 
