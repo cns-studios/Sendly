@@ -129,3 +129,4 @@
     const tunnelConfirmBtn = document.getElementById('tunnel-confirm-btn');
     const tunnelActiveMeta = document.getElementById('tunnel-active-meta');
     const tunnelQRWrap = document.getElementById('tunnel-qr-wrap');
+})();
