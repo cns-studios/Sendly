@@ -254,7 +254,19 @@ func (u *Upload) FinalizeUpload(ctx context.Context, sessionID, duration string)
 }
 
 func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, duration string, opts *FinalizeUploadOptions) (*models.UploadFinalizeResponse, error) {
-	session, err := u.redis.GetUploadSession(ctx, sessionID)
+	var session *models.UploadSession
+	var err error
+	const maxRetries = 3
+	for i := 0; i < maxRetries; i++ {
+		session, err = u.redis.GetUploadSession(ctx, sessionID)
+		if err == nil {
+			break
+		}
+		if i == maxRetries-1 {
+			break
+		}
+		time.Sleep(time.Duration(50<<i) * time.Millisecond)
+	}
 	if err != nil {
 		if err == models.ErrSessionNotFound {
 			return nil, models.ErrSessionExpired
@@ -262,7 +274,19 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		return nil, err
 	}
 	var isPending bool
-	isPending, err = u.redis.IsFilePending(ctx, session.FileID)
+	var err2 error
+	for i := 0; i < maxRetries; i++ {
+		isPending, err2 = u.redis.IsFilePending(ctx, session.FileID)
+		if err2 == nil {
+			err = nil
+			break
+		}
+		if i == maxRetries-1 {
+			err = err2
+			break
+		}
+		time.Sleep(time.Duration(50<<i) * time.Millisecond)
+	}
 	if err != nil {
 		return nil, err
 	}
