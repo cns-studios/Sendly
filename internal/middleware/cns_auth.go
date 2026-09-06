@@ -25,6 +25,26 @@ type CNSUser struct {
 	Avatar   string `json:"avatar,omitempty"`
 }
 
+func (u *CNSUser) UnmarshalJSON(data []byte) error {
+	type cnsUserAlias CNSUser
+	var payload struct {
+		cnsUserAlias
+		AvatarURL      string `json:"avatar_url"`
+		AvatarURLCamel string `json:"avatarUrl"`
+	}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return err
+	}
+	*u = CNSUser(payload.cnsUserAlias)
+	if u.Avatar == "" {
+		u.Avatar = payload.AvatarURL
+	}
+	if u.Avatar == "" {
+		u.Avatar = payload.AvatarURLCamel
+	}
+	return nil
+}
+
 func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token string) (*CNSUser, error) {
 	if cfg.CNSAuthURL == "" {
 		return nil, fmt.Errorf("cns auth is not configured")
