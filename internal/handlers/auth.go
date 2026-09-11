@@ -262,6 +262,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
+	cookieDomain := authCookieDomain(h.cfg)
 
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil || refreshToken == "" {
@@ -291,10 +292,10 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		maxAge = 86400
 	}
 	expiresAt := time.Now().Unix() + int64(maxAge)
-	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
+	c.SetCookie("auth_token", result.AccessToken, 3600*24*30, "/", cookieDomain, isSecure, true)
+	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", cookieDomain, isSecure, true)
 	if result.RefreshToken != "" {
-		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", "", isSecure, true)
+		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

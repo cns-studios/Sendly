@@ -3,13 +3,16 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"sendly/internal/config"
@@ -144,6 +147,18 @@ type tokenRefreshError struct {
 	msg    string
 }
 
+const refreshResultCacheTTL = 10 * time.Second
+
+var refreshCoordinator = struct {
+	sync.Mutex
+	results map[[32]byte]cachedRefreshResult
+}{results: make(map[[32]byte]cachedRefreshResult)}
+
+type cachedRefreshResult struct {
+	result    *refreshTokenResult
+	expiresAt time.Time
+}
+
 func (e *tokenRefreshError) Error() string { return e.msg }
 
 func (e *tokenRefreshError) deadToken() bool {
@@ -159,6 +174,20 @@ func IsDeadTokenError(err error) bool {
 }
 
 func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
+	tokenKey := sha256.Sum256([]byte(refreshToken))
+	refreshCoordinator.Lock()
+	defer refreshCoordinator.Unlock()
+
+	now := time.Now()
+	for key, cached := range refreshCoordinator.results {
+		if now.After(cached.expiresAt) {
+			delete(refreshCoordinator.results, key)
+		}
+	}
+	if cached, ok := refreshCoordinator.results[tokenKey]; ok {
+		return cached.result, nil
+	}
+
 	tokenURL := cfg.CNSAuthURL + "/api/auth/token/refresh"
 
 	jsonPayload := map[string]string{
@@ -197,11 +226,35 @@ func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken st
 		return nil, fmt.Errorf("refresh response missing access_token")
 	}
 
+	refreshCoordinator.results[tokenKey] = cachedRefreshResult{
+		result:    &result,
+		expiresAt: time.Now().Add(refreshResultCacheTTL),
+	}
 	return &result, nil
 }
 
-func setAuthCookies(c *gin.Context, cfg *config.Config, token, refreshToken string, expiresIn int64) {
+func authCookieDomain(cfg *config.Config) string {
+	if strings.Contains(cfg.BaseURL, "localhost") {
+		return ""
+	}
+	parsed, err := url.Parse(cfg.BaseURL)
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	return "." + parsed.Hostname()
+}
+
+func setCookieForAuthScope(c *gin.Context, name, value string, maxAge int, cfg *config.Config) {
 	isSecure := strings.HasPrefix(cfg.BaseURL, "https")
+	domain := authCookieDomain(cfg)
+	c.SetCookie(name, value, maxAge, "/", domain, isSecure, true)
+	if domain != "" {
+		// Remove older host-only cookies created before domain scoping was consistent.
+		c.SetCookie(name, "", -1, "/", "", isSecure, true)
+	}
+}
+
+func setAuthCookies(c *gin.Context, cfg *config.Config, token, refreshToken string, expiresIn int64) {
 	maxAge := int(expiresIn)
 	if maxAge <= 0 {
 		maxAge = 86400
@@ -209,23 +262,27 @@ func setAuthCookies(c *gin.Context, cfg *config.Config, token, refreshToken stri
 	expiresAt := time.Now().Unix() + int64(maxAge)
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("auth_token", token, 3600*24*30, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, "/", "", isSecure, true)
+	setCookieForAuthScope(c, "auth_token", token, 3600*24*30, cfg)
+	setCookieForAuthScope(c, "auth_expires_at", fmt.Sprintf("%d", expiresAt), 3600*24*30, cfg)
 	if refreshToken != "" {
-		c.SetCookie("refresh_token", refreshToken, 3600*24*30, "/", "", isSecure, true)
+		setCookieForAuthScope(c, "refresh_token", refreshToken, 3600*24*30, cfg)
 	}
 }
 
 func clearAuthTokenCookie(c *gin.Context, cfg *config.Config) {
 	isSecure := strings.HasPrefix(cfg.BaseURL, "https")
-	c.SetCookie("auth_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
-	c.SetCookie("auth_expires_at", "", -1, "/", "", isSecure, true)
+	for _, domain := range []string{"", authCookieDomain(cfg)} {
+		c.SetCookie("auth_token", "", -1, "/", domain, isSecure, true)
+		c.SetCookie("refresh_token", "", -1, "/", domain, isSecure, true)
+		c.SetCookie("auth_expires_at", "", -1, "/", domain, isSecure, true)
+	}
 }
 
 func clearRefreshTokenCookie(c *gin.Context, cfg *config.Config) {
 	isSecure := strings.HasPrefix(cfg.BaseURL, "https")
-	c.SetCookie("refresh_token", "", -1, "/", "", isSecure, true)
+	for _, domain := range []string{"", authCookieDomain(cfg)} {
+		c.SetCookie("refresh_token", "", -1, "/", domain, isSecure, true)
+	}
 }
 
 // ClearRefreshTokenCookie expires the refresh_token cookie on the response.
