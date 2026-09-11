@@ -502,19 +502,6 @@ body.page-index {
     min-height: 20px;
 }
 
-.drop-zone .drop-zone-sub-text.shiny {
-    background: linear-gradient(90deg,
-        #828282 0%, #828282 25%,
-        rgba(255,255,255,0.85) 50%,
-        #828282 75%, #828282 100%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: text-shimmer 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-}
-
 .drop-zone input[type="file"] {
     position: absolute;
     width: 100%;
@@ -1706,6 +1693,7 @@ body.tos-gate-open {
     height: 40px;
     background: #D9D9D9;
     border-radius: 21px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
     display: flex;
     align-items: center;
     gap: 9px;
@@ -1902,19 +1890,6 @@ body.page-link .drop-zone.uploading {
     pointer-events: none;
 }
 
-body.page-link .drop-zone.uploading h3 {
-    background: linear-gradient(90deg,
-        #000 0%, #000 25%,
-        rgba(255,255,255,0.85) 50%,
-        #000 75%, #000 100%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: text-shimmer 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-}
-
 body.page-link .drop-zone.success {
     opacity: 1;
     pointer-events: auto;
@@ -1950,12 +1925,12 @@ body.page-link .drop-zone.success {
 }
 
 body.page-link .drop-zone {
-    min-height: 242px;
+    min-height: 150px;
     height: auto;
     background: #FAFAFA;
     border: 2px dashed #C8C8C8;
     border-radius: 16px;
-    padding: 2.5rem 1.5rem;
+    padding: 1.25rem 1.5rem;
     transition: border-color .25s, background .25s, transform .15s;
 }
 
@@ -3030,19 +3005,6 @@ body.page-quickshare #fileListEmpty {
         font-size: 14px;
         font-weight: 500;
         color: #1a1a1a;
-    }
-
-    body.page-link .drop-zone.uploading p {
-        background: linear-gradient(90deg,
-            #000 0%, #000 25%,
-            rgba(255, 255, 255, 0.85) 50%,
-            #000 75%, #000 100%
-        );
-        background-size: 200% 100%;
-        -webkit-background-clip: text;
-        background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: text-shimmer 2.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
     }
 
     body.page-shared .header {
