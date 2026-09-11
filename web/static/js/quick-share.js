@@ -882,6 +882,7 @@
         }
 
         isUploading = true;
+        dropZone.classList.add('uploading');
         dropMainText.textContent = t('status_uploading');
         dropSubText.textContent = file.name;
         dropSubText.classList.add('shiny');
@@ -1049,6 +1050,7 @@
             dropSubText.textContent = '';
             dropSubText.classList.remove('shiny');
             isUploading = false;
+            dropZone.classList.remove('uploading');
             await refreshTunnelState();
         } catch (error) {
             console.error('Tunnel file upload failed:', error);
@@ -1057,6 +1059,7 @@
             dropSubText.textContent = '';
             dropSubText.classList.remove('shiny');
             isUploading = false;
+            dropZone.classList.remove('uploading');
         }
     }
 

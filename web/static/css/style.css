@@ -1932,6 +1932,237 @@ body.page-link .drop-zone.success {
     color: #007aff;
 }
 
+@keyframes drop-zone-pulse-ring {
+    from { transform: scale(.8); opacity: .7; }
+    to { transform: scale(1.55); opacity: 0; }
+}
+
+@keyframes drop-zone-shake {
+    10%, 90% { transform: translateX(-1px); }
+    20%, 80% { transform: translateX(2px); }
+    30%, 50%, 70% { transform: translateX(-4px); }
+    40%, 60% { transform: translateX(4px); }
+}
+
+@keyframes drop-zone-bar-sweep {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(400%); }
+}
+
+body.page-link .drop-zone {
+    min-height: 242px;
+    height: auto;
+    background: #FAFAFA;
+    border: 2px dashed #C8C8C8;
+    border-radius: 16px;
+    padding: 2.5rem 1.5rem;
+    transition: border-color .25s, background .25s, transform .15s;
+}
+
+body.page-link .drop-zone:hover,
+body.page-link .drop-zone.active {
+    border-color: #00AE71;
+    background: #E9FBF3;
+    transform: scale(1.01);
+}
+
+body.page-link .drop-zone-icon-wrap {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 14px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+body.page-link .drop-zone-ring {
+    display: none;
+    position: absolute;
+    inset: 0;
+    border: 2px solid #00AE71;
+    border-radius: 50%;
+}
+
+body.page-link .drop-zone.dragging .drop-zone-ring,
+body.page-link .drop-zone.uploading .drop-zone-ring {
+    display: block;
+    animation: drop-zone-pulse-ring 1.6s ease-out infinite;
+}
+
+body.page-link .drop-zone.dragging .drop-zone-ring:nth-child(2),
+body.page-link .drop-zone.uploading .drop-zone-ring:nth-child(2) {
+    animation-delay: .5s;
+}
+
+body.page-link .drop-zone-icon {
+    width: 32px;
+    height: 32px;
+    margin: 0;
+    color: #00AE71;
+    transition: color .25s;
+}
+
+body.page-link .drop-zone.uploading .drop-zone-icon {
+    animation: spin 1.1s linear infinite;
+}
+
+body.page-link .drop-zone.error {
+    border-color: #E48178;
+    background: #FDECEA;
+    animation: drop-zone-shake .5s;
+}
+
+body.page-link .drop-zone.error .drop-zone-icon {
+    color: #B3261E;
+    animation: none;
+}
+
+body.page-link .drop-zone.warning {
+    border-color: #E6B45C;
+    background: #FDF3E1;
+}
+
+body.page-link .drop-zone.warning .drop-zone-icon {
+    color: #B57A00;
+    animation: drop-zone-warning-float 2.4s ease-in-out infinite;
+}
+
+body.page-link .drop-zone.success {
+    border-color: #00AE71;
+    background: #E9FBF3;
+}
+
+body.page-link .drop-zone.success .drop-zone-icon {
+    color: #00AE71;
+}
+
+body.page-link .drop-zone-progress {
+    display: none;
+    width: min(280px, 100%);
+    height: 6px;
+    margin: 16px auto 0;
+    border-radius: 4px;
+    background: #E0E0E0;
+    overflow: hidden;
+    position: relative;
+}
+
+body.page-link .drop-zone.uploading .drop-zone-progress {
+    display: block;
+}
+
+body.page-link .drop-zone-progress-fill {
+    width: 0;
+    height: 100%;
+    border-radius: 4px;
+    background: #00AE71;
+    transition: width .4s ease;
+}
+
+body.page-link .drop-zone-progress-shimmer {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 25%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+    animation: drop-zone-bar-sweep 1.2s linear infinite;
+}
+
+body.page-link .drop-zone-badge {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 6px 14px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+body.page-link .drop-zone.success .drop-zone-badge,
+body.page-link .drop-zone.error .drop-zone-badge,
+body.page-link .drop-zone.warning .drop-zone-badge {
+    display: inline-flex;
+}
+
+body.page-link .drop-zone.success .drop-zone-badge {
+    background: #DFF7E8;
+    color: #00814F;
+}
+
+body.page-link .drop-zone.error .drop-zone-badge {
+    background: #FBDFDD;
+    color: #B3261E;
+}
+
+body.page-link .drop-zone.warning .drop-zone-badge {
+    background: #FDECC8;
+    color: #8A5300;
+}
+
+@keyframes drop-zone-warning-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+body.page-quickshare .session-right .drop-zone {
+    min-height: 242px;
+    height: auto;
+    background: #FAFAFA;
+    border: 2px dashed #C8C8C8;
+    border-radius: 16px;
+    transition: border-color .25s, background .25s, transform .15s;
+}
+
+body.page-quickshare .session-right .drop-zone:hover,
+body.page-quickshare .session-right .drop-zone.active {
+    border-color: #00AE71;
+    background: #E9FBF3;
+    transform: scale(1.01);
+}
+
+body.page-quickshare .session-right .drop-zone-icon-wrap {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 14px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+body.page-quickshare .session-right .drop-zone-ring {
+    display: none;
+    position: absolute;
+    inset: 0;
+    border: 2px solid #00AE71;
+    border-radius: 50%;
+}
+
+body.page-quickshare .session-right .drop-zone.active .drop-zone-ring {
+    display: block;
+    animation: drop-zone-pulse-ring 1.6s ease-out infinite;
+}
+
+body.page-quickshare .session-right .drop-zone.active .drop-zone-ring:nth-child(2) {
+    animation-delay: .5s;
+}
+
+body.page-quickshare .session-right .drop-zone-icon {
+    width: 32px;
+    height: 32px;
+    color: #00AE71;
+}
+
+body.page-quickshare .session-right .drop-zone.uploading .drop-zone-icon {
+    animation: spin 1.1s linear infinite;
+}
+
+body.page-quickshare .session-right .drop-zone.warning .drop-zone-icon {
+    color: #B57A00;
+    animation: drop-zone-warning-float 2.4s ease-in-out infinite;
+}
+
 body.page-link #file-details {
     animation: slideInRight 0.3s ease;
 }
@@ -2730,6 +2961,20 @@ body.page-quickshare #fileListEmpty {
         background: #FFFFFF;
         gap: 4px;
         -webkit-tap-highlight-color: transparent;
+    }
+
+    body.page-quickshare .session-right .drop-zone-icon-wrap {
+        display: none;
+    }
+
+    body.page-link .drop-zone-icon-wrap {
+        display: contents;
+    }
+
+    body.page-link .drop-zone-ring,
+    body.page-link .drop-zone-progress,
+    body.page-link .drop-zone-badge {
+        display: none !important;
     }
 
     body.page-link .drop-zone:active {

@@ -187,9 +187,18 @@
             <div id="stage-entry" class="form-section">
                 <div id="drop-zone" class="drop-zone">
                     <input type="file" id="file-input" class="hidden">
-                    <i data-lucide="circle-fading-arrow-up" class="drop-zone-icon"></i>
+                    <div class="drop-zone-icon-wrap">
+                        <span class="drop-zone-ring" aria-hidden="true"></span>
+                        <span class="drop-zone-ring" aria-hidden="true"></span>
+                        <i data-lucide="cloud-upload" class="drop-zone-icon" aria-hidden="true"></i>
+                    </div>
                     <h3>{{.t.link_drop_heading}}</h3>
                     <p>{{.t.link_drop_subtext}}</p>
+                    <div class="drop-zone-progress" aria-hidden="true">
+                        <div class="drop-zone-progress-fill"></div>
+                        <div class="drop-zone-progress-shimmer"></div>
+                    </div>
+                    <div class="drop-zone-badge" aria-live="polite"></div>
                     <div class="drop-zone-mobile">
                         <span class="drop-zone-mobile-title">{{.t.dropzone_mobile_title}}</span>
                         <span class="drop-zone-mobile-subtitle">{{.t.dropzone_mobile_subtitle}}</span>

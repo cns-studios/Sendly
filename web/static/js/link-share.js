@@ -164,9 +164,9 @@
         fileInput.click();
     }
 
-    function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; dropZone.classList.add('active'); }
-    function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); if (e.target === dropZone) dropZone.classList.remove('active'); }
-    function handleDrop(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active'); if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); }
+    function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; dropZone.classList.add('active', 'dragging'); }
+    function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); if (e.target === dropZone) dropZone.classList.remove('active', 'dragging'); }
+    function handleDrop(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active', 'dragging'); if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); }
     function handleFileSelect(e) { if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.target.files.length > 0) processFile(e.target.files[0]); }
 
     async function processFile(file) {
@@ -175,13 +175,17 @@
             showFileSizeWarning();
             return;
         }
-        if (file.size === 0) { showErrorBanner(t('link_cannot_upload_empty')); return; }
+        if (file.size === 0) {
+            setDropZoneState('error', t('link_cannot_upload_empty'));
+            showErrorBanner(t('link_cannot_upload_empty'));
+            return;
+        }
 
         selectedFile = file;
 
         const zoneHeading = dropZone.querySelector('h3');
         const zoneSubtext = dropZone.querySelector('p');
-        dropZone.classList.add('uploading');
+        setDropZoneState('uploading', selectedFile.name);
         zoneHeading.textContent = selectedFile.name;
         zoneSubtext.textContent = t('status_processing');
 
@@ -190,12 +194,52 @@
 
     function showFileSizeWarning() {
         const sub = dropZone.querySelector('p');
-        if (sub) {
-            const original = sub.textContent;
-            sub.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
-            sub.style.color = '#ff4444';
-            setTimeout(() => { sub.textContent = original; sub.style.color = ''; }, 3000);
+        if (!sub) return;
+        setDropZoneState('warning');
+        sub.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
+        setTimeout(() => { if (dropZone.classList.contains('warning')) resetDropZoneState(); }, 3000);
+    }
+
+    function setDropZoneState(state, filename = selectedFile?.name) {
+        const icon = dropZone.querySelector('.drop-zone-icon');
+        const heading = dropZone.querySelector('h3');
+        const subtext = dropZone.querySelector('p');
+        const badge = dropZone.querySelector('.drop-zone-badge');
+        const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
+        dropZone.classList.remove('uploading', 'success', 'error', 'warning');
+        if (state !== 'idle') dropZone.classList.add(state);
+        if (progressFill && (state === 'idle' || state === 'uploading')) progressFill.style.width = '0';
+
+        if (state === 'uploading') {
+            icon?.setAttribute('data-lucide', 'loader-2');
+            heading.textContent = filename || '';
+            subtext.textContent = t('status_uploading');
+        } else if (state === 'success') {
+            icon?.setAttribute('data-lucide', 'circle-check');
+            heading.textContent = t('status_complete');
+            subtext.textContent = filename || '';
+            if (badge) badge.textContent = t('status_complete');
+        } else if (state === 'error') {
+            icon?.setAttribute('data-lucide', 'frown');
+            heading.textContent = t('status_upload_failed');
+            subtext.textContent = filename || '';
+            if (badge) badge.textContent = t('status_upload_failed');
+        } else if (state === 'warning') {
+            icon?.setAttribute('data-lucide', 'triangle-alert');
+            heading.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
+            subtext.textContent = filename || t('drop_subtext');
+            if (badge) badge.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
+        } else {
+            icon?.setAttribute('data-lucide', 'cloud-upload');
+            heading.textContent = t('drop_heading');
+            subtext.textContent = t('drop_subtext');
+            if (badge) badge.textContent = '';
         }
+        if (window.lucide?.createIcons) lucide.createIcons();
+    }
+
+    function resetDropZoneState() {
+        setDropZoneState('idle');
     }
 
     function handleFinalize() {
@@ -260,6 +304,8 @@
     function updateUploadProgress() {
         if (totalChunks === 0) return;
         const pct = Math.floor((uploadedChunks / totalChunks) * 100);
+        const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
+        if (progressFill) progressFill.style.width = `${pct}%`;
         processMain.textContent = t('status_uploading');
         processSub.textContent = `${pct}%`;
         if (progressVal) progressVal.textContent = `${pct}%`;
@@ -342,9 +388,7 @@
             uploadError = error.message;
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
-            const zoneHeading = dropZone.querySelector('h3');
-            zoneHeading.textContent = t('status_upload_failed');
-            zoneSubtext.textContent = error.message;
+            setDropZoneState('error', error.message);
             showErrorBanner(tpl('link_upload_failed', {msg: error.message}));
         }
     }
@@ -413,11 +457,7 @@
         } catch (error) {
             console.error('Finalize failed:', error);
             isFinalizing = false; updateFinalizeButtonState();
-            dropZone.classList.remove('uploading');
-            const zoneHeading = dropZone.querySelector('h3');
-            const zoneSubtext = dropZone.querySelector('p');
-            zoneHeading.textContent = t('status_upload_failed');
-            zoneSubtext.textContent = error.message;
+            setDropZoneState('error', error.message);
             showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
         }
     }
@@ -429,8 +469,7 @@
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         lastShareUrl = fullShareUrl;
 
-        dropZone.classList.remove('uploading');
-        dropZone.classList.add('success');
+        setDropZoneState('success', selectedFile?.name);
         const zoneIcon = dropZone.querySelector('.drop-zone-icon');
         const zoneHeading = dropZone.querySelector('h3');
         const zoneSubtext = dropZone.querySelector('p');
@@ -588,14 +627,7 @@
         if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
         fileInput.value = '';
 
-        dropZone.classList.remove('uploading', 'success');
-        const zoneIcon = dropZone.querySelector('.drop-zone-icon');
-        const zoneHeading = dropZone.querySelector('h3');
-        const zoneSubtext = dropZone.querySelector('p');
-        zoneIcon.setAttribute('data-lucide', 'circle-fading-arrow-up');
-        zoneHeading.textContent = t('drop_heading');
-        zoneSubtext.textContent = t('drop_subtext');
-        if (window.lucide && lucide.createIcons) lucide.createIcons();
+        resetDropZoneState();
 
         stageEntry.classList.remove('hidden');
         stageProcessing.classList.add('hidden');
