@@ -106,6 +106,17 @@
         </div>
     </div>
 
+    <div id="share-url-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="share-url-card" role="dialog" aria-modal="true" aria-labelledby="share-url-title">
+            <h2 id="share-url-title" class="share-url-title">{{.t.link_share_title}}</h2>
+            <p id="shareUrlText" class="share-url-text"></p>
+            <div class="share-url-actions">
+                <button id="shareUrlDiscardBtn" type="button" class="btn-share-discard">{{.t.link_share_discard}}</button>
+                <button id="shareUrlCopyBtn" type="button" class="btn-share-copy">{{.t.link_share_copy}}</button>
+            </div>
+        </div>
+    </div>
+
     <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
         <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">{{.t.auth_nudge_login}}</a> {{.t.auth_nudge_link}}</span>
         <button id="auth-nudge-close" aria-label="{{.t.auth_nudge_close_label}}" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
