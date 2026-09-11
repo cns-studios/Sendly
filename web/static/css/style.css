@@ -1886,7 +1886,7 @@ body.page-link .drop-zone p {
 }
 
 body.page-link .drop-zone.uploading {
-    opacity: 0.6;
+    opacity: 1;
     pointer-events: none;
 }
 
@@ -1927,6 +1927,7 @@ body.page-link .drop-zone.success {
 body.page-link .drop-zone {
     min-height: 150px;
     height: auto;
+    flex: 0 0 auto;
     background: #FAFAFA;
     border: 2px dashed #C8C8C8;
     border-radius: 16px;
