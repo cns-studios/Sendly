@@ -15,7 +15,11 @@
         received: 0,
         total: 0
     };
+    const DOWNLOAD_CHUNK_SIZE = 32 * 1024 * 1024;
+    const DOWNLOAD_CONCURRENCY = 4;
+    const MAX_CHUNK_DOWNLOAD_RETRIES = 5;
     let isProcessing = false;
+    let downloadStartedAt = 0;
 
     const loadingSection = document.getElementById('loading-section');
     const passwordSection = document.getElementById('password-section');
@@ -37,6 +41,10 @@
     const reportModal = document.getElementById('report-modal');
     const reportCancel = document.getElementById('report-cancel');
     const reportConfirm = document.getElementById('report-confirm');
+    const downloadCard = document.getElementById('download-card');
+    const downloadPercent = document.getElementById('download-percent');
+    const downloadBarFill = document.getElementById('download-bar-fill');
+    const downloadStatusRow = document.getElementById('download-status-row');
 
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
@@ -67,7 +75,6 @@
 
     function setupEventListeners() {
         downloadAutoBtn?.addEventListener('click', () => downloadAndDecrypt(currentPassword));
-
         reportBtn?.addEventListener('click', () => { reportModal.classList.remove('hidden'); });
         reportCancel?.addEventListener('click', () => { reportModal.classList.add('hidden'); });
         reportConfirm?.addEventListener('click', submitReport);
@@ -85,6 +92,7 @@
 
             fileMetadata = await response.json();
             displayFileMetadata();
+            resetDownloadCard();
 
             const hashPassword = SecureCrypto.getPasswordFromHash();
             if (hashPassword) {
@@ -101,7 +109,6 @@
             loadingSection.classList.add('hidden');
             passwordSection.classList.remove('hidden');
 
-            if (currentPassword) startOptimisticDownload();
         } catch (error) {
             console.error('Failed to load file metadata:', error);
             showFileError('cloud-alert', t('error_connection_title'), t('error_connection_desc'));
@@ -111,8 +118,31 @@
     function displayFileMetadata() {
         fileNameEl.textContent = fileMetadata.original_name;
         fileSizeEl.textContent = SecureCrypto.formatFileSize(fileMetadata.size_bytes);
-        fileCreatedEl.textContent = SecureCrypto.formatDate(fileMetadata.created_at);
+        const uploadedDate = new Date(fileMetadata.created_at).toLocaleDateString();
+        fileCreatedEl.textContent = ` · ${t('shared_uploaded')} ${uploadedDate}`;
         fileExpiresEl.textContent = SecureCrypto.getTimeRemaining(fileMetadata.expires_at);
+    }
+
+    function updateDownloadCard(percent, status, state = 'active') {
+        if (!downloadCard) return;
+        downloadCard.classList.remove('active', 'done', 'error');
+        if (state) downloadCard.classList.add(state);
+        if (downloadPercent) downloadPercent.textContent = `${Math.round(percent)}%`;
+        if (downloadBarFill) downloadBarFill.style.width = `${percent}%`;
+        if (downloadStatusRow) {
+            const label = downloadStatusRow.querySelector('span');
+            if (label) label.textContent = status;
+        }
+    }
+
+    function resetDownloadCard() {
+        downloadCard?.classList.remove('active', 'done', 'error');
+        if (downloadPercent) downloadPercent.textContent = '';
+        if (downloadBarFill) downloadBarFill.style.width = '0%';
+        if (downloadStatusRow) {
+            const label = downloadStatusRow.querySelector('span');
+            if (label) label.textContent = t('shared_ready');
+        }
     }
 
     async function downloadAndDecrypt(password) {
@@ -129,13 +159,14 @@
         currentPassword = password;
 
         loadingSection.classList.add('hidden');
-        passwordSection.classList.add('hidden');
         autoDecryptSection.classList.add('hidden');
-        progressSection.classList.remove('hidden');
+        progressSection.classList.add('hidden');
 
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
         try {
+            downloadStartedAt = Date.now();
+            updateDownloadCard(0, t('shared_downloading_status'));
             const iconEl = document.getElementById('progress-icon');
             if (iconEl) {
                 iconEl.innerHTML = '';
@@ -157,22 +188,20 @@
 
             triggerDownload(decryptedData, fileMetadata.original_name);
 
+            updateDownloadCard(100, t('shared_complete'), 'done');
             showDownloadedState();
 
             await new Promise((resolve) => setTimeout(resolve, 3000));
 
             resetDownloadBox();
-            progressSection.classList.add('hidden');
-            passwordSection.classList.remove('hidden');
             if (currentPassword) {
                 autoDecryptSection.classList.remove('hidden');
             }
         } catch (error) {
             console.error('Download/decrypt failed:', error);
-            progressSection.classList.add('hidden');
+            updateDownloadCard(0, t('shared_retry'), 'error');
 
             showNotification(t('toast_download_failed'), 'error');
-            passwordSection.classList.remove('hidden');
             if (currentPassword) {
                 autoDecryptSection.classList.remove('hidden');
             }
@@ -185,14 +214,6 @@
         if (downloadState.blob) return 80;
         if (!downloadState.total) return 0;
         return Math.min(80, (downloadState.received / downloadState.total) * 80);
-    }
-
-    function startOptimisticDownload() {
-        if (downloadState.promise || downloadState.blob) return;
-        if (!fileMetadata) return;
-        downloadEncryptedFile().catch((error) => {
-            console.error('Optimistic download failed:', error);
-        });
     }
 
     async function downloadEncryptedFile() {
@@ -213,32 +234,90 @@
     }
 
     async function streamEncryptedFile() {
-        const response = await fetch(`/api/file/${fileMetadata.id}/download`);
-        if (!response.ok) {
-            const error = await response.json();
+        if (!downloadStartedAt) downloadStartedAt = Date.now();
+        const firstEnd = DOWNLOAD_CHUNK_SIZE - 1;
+        const firstResponse = await fetch(`/api/file/${fileMetadata.id}/download`, {
+            headers: { Range: `bytes=0-${firstEnd}` }
+        });
+        if (!firstResponse.ok) {
+            const error = await firstResponse.json().catch(() => ({}));
             throw new Error(error.error || t('toast_download_failed'));
         }
 
-        const contentLength = response.headers.get('Content-Length');
-        const total = parseInt(contentLength, 10);
+        const contentRange = firstResponse.headers.get('Content-Range') || '';
+        const rangeMatch = contentRange.match(/bytes\s+\d+-\d+\/(\d+)/i);
+        const total = rangeMatch ? Number(rangeMatch[1]) : Number(firstResponse.headers.get('Content-Length'));
+        if (!Number.isFinite(total) || total <= 0) throw new Error(t('toast_download_failed'));
+
         downloadState.total = total;
-        const reader = response.body.getReader();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            downloadState.chunks.push(value);
-            downloadState.received += value.length;
-
-            if (total) {
-                const progress = (downloadState.received / total) * 80;
-                updateProgress(progress, t('status_downloading'));
-            }
+        downloadState.received = 0;
+        const chunkCount = Math.ceil(total / DOWNLOAD_CHUNK_SIZE);
+        downloadState.chunks = new Array(chunkCount);
+        if (firstResponse.status === 200) {
+            const data = new Uint8Array(await firstResponse.arrayBuffer());
+            if (data.length !== total) throw new Error(t('toast_download_failed'));
+            downloadState.chunks = [data];
+            downloadState.received = data.length;
+            updateDownloadCard(100, t('shared_downloading_status'));
+            downloadState.blob = new Blob(downloadState.chunks);
+            return downloadState.blob;
         }
 
+        const firstChunk = new Uint8Array(await firstResponse.arrayBuffer());
+        const expectedFirstLength = Math.min(DOWNLOAD_CHUNK_SIZE, total);
+        if (firstChunk.length !== expectedFirstLength) throw new Error(t('toast_download_failed'));
+        downloadState.chunks[0] = firstChunk;
+        downloadState.received = firstChunk.length;
+        updateDownloadCard((downloadState.received / total) * 100, t('shared_downloading_status'));
+        let nextChunk = 1;
+
+        async function worker() {
+            while (true) {
+                const index = nextChunk++;
+                if (index >= chunkCount) return;
+                const start = index * DOWNLOAD_CHUNK_SIZE;
+                const end = Math.min(total - 1, start + DOWNLOAD_CHUNK_SIZE - 1);
+                downloadState.chunks[index] = await downloadRangeWithRetry(start, end);
+                downloadState.received += downloadState.chunks[index].length;
+                updateProgress((downloadState.received / total) * 80, t('status_downloading'));
+                const percent = (downloadState.received / total) * 100;
+                const elapsed = Math.max(0.1, (Date.now() - downloadStartedAt) / 1000);
+                const bytesPerSecond = downloadState.received / elapsed;
+                const remaining = bytesPerSecond > 0 ? Math.ceil((total - downloadState.received) / bytesPerSecond) : 0;
+                updateDownloadCard(percent, `${SecureCrypto.formatFileSize(bytesPerSecond)}/s · ${tpl('shared_eta', { time: formatDuration(remaining) })}`);
+            }
+
+            function formatDuration(seconds) {
+                if (seconds < 60) return `${Math.max(1, seconds)}s`;
+                return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+            }
+        }
+        await Promise.all(Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, chunkCount) }, worker));
         downloadState.blob = new Blob(downloadState.chunks);
         return downloadState.blob;
+    }
+
+    async function downloadRangeWithRetry(start, end) {
+        let lastError;
+        for (let attempt = 0; attempt < MAX_CHUNK_DOWNLOAD_RETRIES; attempt++) {
+            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
+            try {
+                const response = await fetch(`/api/file/${fileMetadata.id}/download`, {
+                    headers: { Range: `bytes=${start}-${end}` }
+                });
+                if (!response.ok && response.status !== 206) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || `Download chunk ${start} failed`);
+                }
+                const data = new Uint8Array(await response.arrayBuffer());
+                if (data.length !== end - start + 1) throw new Error(`Incomplete download chunk ${start}`);
+                return data;
+            } catch (error) {
+                lastError = error;
+                console.warn(`Download chunk ${start}-${end} attempt ${attempt + 1} failed:`, error.message);
+            }
+        }
+        throw lastError;
     }
 
     function triggerDownload(data, filename) {

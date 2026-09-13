@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 
@@ -30,7 +29,6 @@ func NewDownloadHandler(cfg *config.Config, db *storage.Postgres, fs *storage.Fi
 	}
 }
 
- 
 func (h *DownloadHandler) GetMetadata(c *gin.Context) {
 	fileID := c.Param("id")
 	if fileID == "" {
@@ -41,7 +39,6 @@ func (h *DownloadHandler) GetMetadata(c *gin.Context) {
 		return
 	}
 
-	 
 	if !isValidFileID(fileID) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid file ID format",
@@ -50,7 +47,6 @@ func (h *DownloadHandler) GetMetadata(c *gin.Context) {
 		return
 	}
 
-	 
 	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -71,7 +67,6 @@ func (h *DownloadHandler) GetMetadata(c *gin.Context) {
 		return
 	}
 
-	 
 	if !h.fs.FileExists(fileID) {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
 			Error: "File not found on storage",
@@ -83,7 +78,6 @@ func (h *DownloadHandler) GetMetadata(c *gin.Context) {
 	c.JSON(http.StatusOK, file.ToMetadata())
 }
 
- 
 func (h *DownloadHandler) Download(c *gin.Context) {
 	fileID := c.Param("id")
 	if fileID == "" {
@@ -122,7 +116,7 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	reader, err := h.fs.GetFileReader(fileID)
+	reader, err := h.fs.OpenFile(fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
 			Error: "File not found on storage",
@@ -132,31 +126,15 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 	}
 	defer reader.Close()
 
-	fileSize, err := h.fs.GetFileSize(fileID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
-			Error: "Failed to get file size",
-			Code:  "FILE_SIZE_ERROR",
-		})
-		return
-	}
-
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.enc\"", fileID))
-	c.Header("Content-Length", fmt.Sprintf("%d", fileSize))
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 
 	h.tracker.RecordDownload(c.Request.Context(), file.SizeBytes)
 
-	c.Status(http.StatusOK)
-	c.Writer.Flush()
-	_, err = io.Copy(c.Writer, reader)
-	if err != nil {
-		fmt.Printf("Error streaming file %s: %v\n", fileID, err)
-	}
+	http.ServeContent(c.Writer, c.Request, fileID+".enc", file.CreatedAt, reader)
 }
 
- 
 func (h *DownloadHandler) GetByCode(c *gin.Context) {
 	code := c.Param("code")
 	if code == "" {
@@ -167,7 +145,6 @@ func (h *DownloadHandler) GetByCode(c *gin.Context) {
 		return
 	}
 
-	 
 	if !isValidNumericCode(code) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid numeric code format. Must be 12 digits.",
@@ -176,7 +153,6 @@ func (h *DownloadHandler) GetByCode(c *gin.Context) {
 		return
 	}
 
-	 
 	file, err := h.db.GetFileByNumericCode(c.Request.Context(), code)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
@@ -197,7 +173,6 @@ func (h *DownloadHandler) GetByCode(c *gin.Context) {
 		return
 	}
 
-	 
 	if !h.fs.FileExists(file.ID) {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{
 			Error: "File not found on storage",
@@ -209,9 +184,8 @@ func (h *DownloadHandler) GetByCode(c *gin.Context) {
 	c.JSON(http.StatusOK, file.ToMetadata())
 }
 
- 
 func isValidFileID(id string) bool {
-	 
+
 	if len(id) != 17 {
 		return false
 	}
@@ -219,7 +193,6 @@ func isValidFileID(id string) bool {
 	return matched
 }
 
- 
 func isValidNumericCode(code string) bool {
 	if len(code) != 12 {
 		return false
