@@ -27,6 +27,7 @@
     let isFinalizing = false;
     let uploadComplete = false;
     let uploadError = null;
+    let uploadStartedAt = 0;
     let finalizeEnvelopePayload = null;
     let authDeviceIdentity = null;
     let authUserKeyRaw = null;
@@ -206,14 +207,17 @@
         const subtext = dropZone.querySelector('p');
         const badge = dropZone.querySelector('.drop-zone-badge');
         const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
+        const eta = dropZone.querySelector('#drop-zone-eta');
         dropZone.classList.remove('uploading', 'success', 'error', 'warning');
         if (state !== 'idle') dropZone.classList.add(state);
         if (progressFill && (state === 'idle' || state === 'uploading')) progressFill.style.width = '0';
+        if (eta && state !== 'uploading') eta.textContent = '';
 
         if (state === 'uploading') {
             icon?.setAttribute('data-lucide', 'loader-2');
             heading.textContent = filename || '';
             subtext.textContent = t('status_uploading');
+            if (eta) eta.textContent = t('upload_eta_calculating');
         } else if (state === 'success') {
             icon?.setAttribute('data-lucide', 'circle-check');
             heading.textContent = t('status_complete');
@@ -274,7 +278,17 @@
         if (totalChunks === 0) return;
         const pct = Math.floor((uploadedChunks / totalChunks) * 100);
         const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
+        const eta = dropZone.querySelector('#drop-zone-eta');
         if (progressFill) progressFill.style.width = `${pct}%`;
+        if (eta && uploadStartedAt && uploadedChunks > 0 && pct < 100) {
+            const elapsed = (Date.now() - uploadStartedAt) / 1000;
+            const progress = uploadedChunks / totalChunks;
+            const remaining = Math.ceil(elapsed * (1 - progress) / progress);
+            eta.textContent = tpl('status_eta', {time: formatUploadDuration(remaining)});
+        } else if (eta && pct >= 100) {
+            eta.textContent = '';
+        }
+
         processMain.textContent = t('status_uploading');
         processSub.textContent = `${pct}%`;
         if (progressVal) progressVal.textContent = `${pct}%`;
@@ -282,8 +296,14 @@
         if (zoneSubtext) zoneSubtext.textContent = t('status_uploading');
     }
 
+    function formatUploadDuration(seconds) {
+        if (seconds < 60) return `${Math.max(1, seconds)}s`;
+        return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    }
+
     async function runProtocolInBackground() {
         isUploading = true;
+        uploadStartedAt = Date.now();
         uploadComplete = false;
         uploadError = null;
         finalizeEnvelopePayload = null;

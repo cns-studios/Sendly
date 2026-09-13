@@ -2438,7 +2438,8 @@
     function hideErrorBanner() {}
 
     function updateProgress(percent, sub, main) {
-        progressVal.textContent = `${Math.floor(Math.min(100, Math.max(0, percent)))}%`;
+        const boundedPercent = Math.floor(Math.min(100, Math.max(0, percent)));
+        progressVal.textContent = `${boundedPercent}%`;
         if (sub) processSub.textContent = sub;
         if (main) processMain.textContent = main;
     }

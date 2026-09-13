@@ -194,9 +194,12 @@
                     </div>
                     <h3>{{.t.link_drop_heading}}</h3>
                     <p>{{.t.link_drop_subtext}}</p>
-                    <div class="drop-zone-progress" aria-hidden="true">
-                        <div class="drop-zone-progress-fill"></div>
-                        <div class="drop-zone-progress-shimmer"></div>
+                    <div class="drop-zone-progress-row">
+                        <div class="drop-zone-progress" aria-hidden="true">
+                            <div class="drop-zone-progress-fill"></div>
+                            <div class="drop-zone-progress-shimmer"></div>
+                        </div>
+                        <div id="drop-zone-eta" class="drop-zone-eta" aria-live="polite"></div>
                     </div>
                     <div class="drop-zone-badge" aria-live="polite"></div>
                     <div class="drop-zone-mobile">

@@ -151,12 +151,23 @@
             <div id="password-section" class="hidden">
                 <p class="shared-heading">{{.t.shared_heading}}</p>
 
-                <div class="file-info-box">
-                    <p class="file-name-text" id="file-name"></p>
-                    <p class="file-meta-text">
-                        <span id="file-size"></span> &middot; Uploaded <span id="file-created"></span>
-                        <span id="file-expires" style="display:none"></span>
-                    </p>
+                <div class="file-info-box download-card" id="download-card">
+                    <div class="download-card-top">
+                        <div class="download-file-icon"><i data-lucide="file-archive" aria-hidden="true"></i></div>
+                        <div class="download-file-info">
+                            <p class="file-name-text" id="file-name"></p>
+                            <p class="file-meta-text"><span id="file-size"></span><span id="file-created"></span></p>
+                        </div>
+                        <div class="download-card-right">
+                            <span class="download-percent" id="download-percent"></span>
+                        </div>
+                    </div>
+                    <div class="download-bar-track"><div class="download-bar-fill" id="download-bar-fill"></div></div>
+                    <div class="download-status-row" id="download-status-row">
+                        <i data-lucide="cloud-download" aria-hidden="true"></i>
+                        <span>{{.t.shared_ready}}</span>
+                    </div>
+                    <span id="file-expires" hidden></span>
                     <div id="auto-decrypt-section" class="hidden">
                         <button id="download-auto-btn" class="download-btn">{{.t.shared_download}}</button>
                     </div>

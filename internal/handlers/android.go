@@ -671,7 +671,7 @@ func (h *AndroidHandler) CreateEnrollment(c *gin.Context) {
 	if !owned {
 		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Request device does not belong to user", Code: "DEVICE_NOT_AUTHORIZED"})
 		return
-		
+
 	}
 
 	existing, err := h.db.GetPendingEnrollmentForDevice(c.Request.Context(), int64(user.ID), req.RequestDeviceID)
@@ -812,7 +812,7 @@ func (h *AndroidHandler) ApproveEnrollment(c *gin.Context) {
 		return
 	}
 
-	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_approved", enrollmentID, req.ApproverDeviceID)
+	go h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_approved", enrollmentID, req.ApproverDeviceID)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
@@ -859,7 +859,7 @@ func (h *AndroidHandler) RejectEnrollment(c *gin.Context) {
 		return
 	}
 
-	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_rejected", enrollmentID, "")
+	go h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_rejected", enrollmentID, "")
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
