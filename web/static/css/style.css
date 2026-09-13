@@ -1283,7 +1283,8 @@ body.page-shared .download-file-info { min-width: 0; flex: 1; }
 body.page-shared .download-file-info .file-meta-text { margin-bottom: 0; }
 body.page-shared .download-card-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 body.page-shared .download-percent { color: #00814F; font-size: 13px; font-weight: 700; min-width: 34px; text-align: right; }
-body.page-shared .download-bar-track { height: 6px; margin-top: 4px; border-radius: 4px; background: #fff; overflow: hidden; }
+body.page-shared .download-bar-track { display: none; height: 6px; margin-top: 4px; border-radius: 4px; background: #fff; overflow: hidden; }
+body.page-shared .download-card.active .download-bar-track { display: block; }
 body.page-shared .download-bar-fill { height: 100%; width: 0; border-radius: 4px; background: #00AE71; transition: width .2s ease; }
 body.page-shared .download-status-row { display: flex; align-items: center; gap: 6px; color: #595959; font-size: 12px; }
 body.page-shared .download-status-row svg { width: 14px; height: 14px; }
