@@ -70,6 +70,10 @@ func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
+	if h.cfg.CNSAuthServiceKey != "" {
+		req.Header.Set("x-service-key", h.cfg.CNSAuthServiceKey)
+	}
+	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})

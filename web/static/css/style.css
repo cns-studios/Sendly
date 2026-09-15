@@ -2180,19 +2180,19 @@ body.page-link #file-details {
     animation: slideInRight 0.3s ease;
 }
 
-body.page-link .upload-success-header { text-align: center; margin-bottom: 2rem; }
-body.page-link .upload-success-header h1 { margin: 0; font-size: 2.25rem; font-weight: 700; }
-body.page-link .upload-success-header p { margin: .5rem 0 0; color: #777; font-size: .95rem; }
-body.page-link .upload-success-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; width: min(900px, 100%); }
+body.page-link .upload-success-header { text-align: center; margin: 1rem auto 3rem; }
+body.page-link .upload-success-header h1 { margin: 0; font-size: 2.5rem; font-weight: 700; }
+body.page-link .upload-success-header p { margin: .65rem 0 0; color: #777; font-size: 1rem; }
+body.page-link .upload-success-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(3rem, 8vw, 7rem); width: min(1180px, 100%); margin: 0 auto; }
 body.page-link .share-users-panel,
-body.page-link .share-link-panel { background: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 16px; padding: 1.5rem; }
+body.page-link .share-link-panel { min-width: 0; }
 body.page-link .share-users-panel h2,
-body.page-link .share-link-panel h2 { margin: 0 0 1rem; font-size: 1.1rem; }
-body.page-link .share-users-panel h3 { margin: 1.5rem 0 .75rem; font-size: .9rem; }
-body.page-link .share-recipient-row { display: flex; gap: .5rem; }
+body.page-link .share-link-panel h2 { margin: 0 0 1.25rem; font-size: 1.35rem; }
+body.page-link .share-users-panel h3 { margin: 2.25rem 0 .9rem; font-size: 1rem; }
+body.page-link .share-recipient-row { display: flex; gap: .75rem; align-items: stretch; }
 body.page-link .share-recipient-row input,
 body.page-link .share-link-input { min-width: 0; flex: 1; border: 1px solid #C8C8C8; border-radius: 8px; padding: .75rem; font: inherit; }
-body.page-link .share-link-input { width: 100%; box-sizing: border-box; text-overflow: ellipsis; margin-bottom: .75rem; }
+body.page-link .share-link-input { width: 100%; box-sizing: border-box; text-overflow: ellipsis; margin-bottom: 1rem; font-size: 1rem; }
 body.page-link .share-send-button { width: 44px; min-width: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 body.page-link .share-send-button svg { width: 18px; height: 18px; }
 body.page-link .share-recipient-status { min-height: 1.2rem; margin: .5rem 0 0; color: #666; font-size: .8rem; }

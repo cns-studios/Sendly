@@ -579,6 +579,7 @@
         loadRecentShareRecipients().catch(() => {});
 
         uploadSessionId = null;
+        stageEntry.classList.add('hidden');
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.remove('hidden');
