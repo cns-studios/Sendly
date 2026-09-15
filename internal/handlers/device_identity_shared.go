@@ -50,6 +50,14 @@ func handleSharedDeviceRegistration(c *gin.Context, db services.DeviceStore, rec
 			KeyVersion:   result.UserKeyEnvelope.KeyVersion,
 		}
 	}
+	if result.IdentityKeyEnvelope != nil {
+		response.IdentityKeyEnvelope = &models.UserIdentityKeyDeviceEnvelopeResponse{
+			WrappedPrivateKeyB64: base64.StdEncoding.EncodeToString(result.IdentityKeyEnvelope.WrappedPrivateKey),
+			WrapAlg:              result.IdentityKeyEnvelope.WrapAlg,
+			WrapMeta:             result.IdentityKeyEnvelope.WrapMeta,
+			IdentityKeyVersion:   result.IdentityKeyEnvelope.IdentityKeyVersion,
+		}
+	}
 	c.JSON(http.StatusOK, response)
 }
 

@@ -16,6 +16,7 @@ const SecureCrypto = (function() {
 
     const DEVICE_STORAGE_KEY = 'sendly_device_identity_v1';
     const USER_KEY_PREFIX = 'sendly_user_key_v1_';
+    const IDENTITY_KEY_PREFIX = 'sendly_identity_key_v1_';
     const FILE_KEY_PREFIX = 'sendly_file_key_v1_';
 
      
@@ -150,6 +151,25 @@ const SecureCrypto = (function() {
         return value ? fromBase64(value) : null;
     }
 
+    function identityKeyStorageKey(userId) {
+        return `${IDENTITY_KEY_PREFIX}${userId || 'guest'}`;
+    }
+
+    function saveIdentityKey(userId, keyData) {
+        if (!keyData) return;
+        localStorage.setItem(identityKeyStorageKey(userId), JSON.stringify(keyData));
+    }
+
+    function getIdentityKey(userId) {
+        const value = localStorage.getItem(identityKeyStorageKey(userId));
+        if (!value) return null;
+        try {
+            return JSON.parse(value);
+        } catch (_) {
+            return null;
+        }
+    }
+
     function cacheFileKey(fileId, keyString) {
         if (!fileId || !keyString) return;
         sessionStorage.setItem(`${FILE_KEY_PREFIX}${fileId}`, keyString);
@@ -227,6 +247,73 @@ const SecureCrypto = (function() {
         return new Uint8Array(raw);
     }
 
+    async function generateIdentityKeypair() {
+        const keyPair = await crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: 'SHA-256'
+            },
+            true,
+            ['encrypt', 'decrypt']
+        );
+        const publicJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+        const privateJWK = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+        return {
+            keyAlgorithm: 'RSA-OAEP-2048',
+            keyVersion: 1,
+            publicKeyJWK: publicJWK,
+            privateKeyJWK: privateJWK
+        };
+    }
+
+    async function wrapIdentityKeyForDevice(identityPrivateKeyJWK, devicePublicKeyJWK) {
+        const aesKey = await crypto.subtle.generateKey(
+            { name: 'AES-GCM', length: 256 },
+            true,
+            ['encrypt', 'decrypt']
+        );
+        const rawAesKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
+        const wrappedAesKey = await wrapUserKeyForDevice(rawAesKey, devicePublicKeyJWK);
+        const iv = generateRandomBytes(CONFIG.ivLength);
+        const plaintext = new TextEncoder().encode(JSON.stringify(identityPrivateKeyJWK));
+        const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            aesKey,
+            plaintext
+        ));
+        const combined = new Uint8Array(wrappedAesKey.length + iv.length + ciphertext.length);
+        combined.set(wrappedAesKey, 0);
+        combined.set(iv, wrappedAesKey.length);
+        combined.set(ciphertext, wrappedAesKey.length + iv.length);
+        return combined;
+    }
+
+    async function unwrapIdentityKeyForDevice(wrappedBytes, devicePrivateKeyJWK) {
+        if (!wrappedBytes || wrappedBytes.length < 268) {
+            throw new Error('Invalid wrapped identity key payload: insufficient length');
+        }
+        const wrappedAesKey = wrappedBytes.slice(0, 256);
+        const iv = wrappedBytes.slice(256, 268);
+        const ciphertext = wrappedBytes.slice(268);
+
+        const rawAesKey = await unwrapUserKeyForDevice(wrappedAesKey, devicePrivateKeyJWK);
+        const aesKey = await crypto.subtle.importKey(
+            'raw',
+            rawAesKey,
+            { name: 'AES-GCM' },
+            false,
+            ['decrypt']
+        );
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            aesKey,
+            ciphertext
+        );
+        return JSON.parse(new TextDecoder().decode(decrypted));
+    }
+
     function parseEnvelope(envelope) {
         const wrapAlg = String(envelope?.dek_wrap_alg || '').trim().toUpperCase();
         if (!envelope?.wrapped_dek_b64) throw new Error('Missing file key envelope');
@@ -241,7 +328,8 @@ const SecureCrypto = (function() {
         authenticated = !!window.CONFIG?.authenticated,
         deviceIdentity = null,
         userKeyRaw = null,
-        ephemeralPrivateKey = null
+        ephemeralPrivateKey = null,
+        identityPrivateKeyJWK = null
     } = {}) {
         const parsed = parseEnvelope(envelope);
         if (parsed.wrapAlg.startsWith('RAW-DEK')) {
@@ -249,7 +337,10 @@ const SecureCrypto = (function() {
             return parsed.wrappedBytes;
         }
         if (parsed.wrapAlg.startsWith('RSA-OAEP')) {
-            const privateKey = ephemeralPrivateKey || (deviceIdentity && deviceIdentity.privateKeyJWK
+            const privateKey = ephemeralPrivateKey || (identityPrivateKeyJWK
+                ? await crypto.subtle.importKey('jwk', identityPrivateKeyJWK,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'])
+                : null) || (deviceIdentity && deviceIdentity.privateKeyJWK
                 ? await crypto.subtle.importKey('jwk', deviceIdentity.privateKeyJWK,
                     { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'])
                 : null);
@@ -266,6 +357,10 @@ const SecureCrypto = (function() {
         return wrapUserKeyForDevice(dekBytes, publicKeyJWK);
     }
 
+    async function wrapFileDEKForIdentity(dekBytes, identityPublicKeyJWK) {
+        return wrapUserKeyForDevice(dekBytes, identityPublicKeyJWK);
+    }
+
     async function registerAuthenticatedDevice({
         endpoint = '/api/me/devices/register',
         userId = window.CONFIG?.cnsUserId || 0,
@@ -280,6 +375,15 @@ const SecureCrypto = (function() {
         let ukWrapAlg = '';
         let ukWrapMeta = {};
 
+        // Identity keypair state
+        let identityKey = getIdentityKey(userId);
+        let wrappedIdentityPrivateKeyB64 = '';
+        let identityKeyWrapAlg = '';
+        let identityKeyWrapMeta = {};
+        let identityPublicKeyJWK = null;
+        let identityKeyAlgorithm = '';
+        let identityKeyVersion = 1;
+
         if (includeBootstrapEnvelope) {
             if (!userKeyRaw) {
                 bootstrapKey = generateUserKeyRaw();
@@ -288,6 +392,36 @@ const SecureCrypto = (function() {
             wrappedUserKeyB64 = toBase64(await wrapUserKeyForDevice(userKeyRaw, identity.publicKeyJWK));
             ukWrapAlg = 'RSA-OAEP-2048-v1';
             ukWrapMeta = { type: 'self-wrap', device_id: identity.deviceId };
+
+            if (!identityKey) {
+                identityKey = await generateIdentityKeypair();
+            }
+            const wrappedIdKeyBytes = await wrapIdentityKeyForDevice(identityKey.privateKeyJWK, identity.publicKeyJWK);
+            wrappedIdentityPrivateKeyB64 = toBase64(wrappedIdKeyBytes);
+            identityKeyWrapAlg = 'RSA-OAEP-2048+AES-GCM-256-v1';
+            identityKeyWrapMeta = { type: 'self-wrap', device_id: identity.deviceId };
+            identityPublicKeyJWK = identityKey.publicKeyJWK;
+            identityKeyAlgorithm = identityKey.keyAlgorithm || 'RSA-OAEP-2048';
+            identityKeyVersion = identityKey.keyVersion || 1;
+        }
+
+        const reqBody = {
+            device_id: identity.deviceId,
+            device_label: `${username || t('user_default')} device`,
+            public_key_jwk: identity.publicKeyJWK,
+            key_algorithm: identity.keyAlgorithm,
+            key_version: identity.keyVersion,
+            wrapped_user_key_b64: wrappedUserKeyB64,
+            uk_wrap_alg: ukWrapAlg,
+            uk_wrap_meta: ukWrapMeta
+        };
+        if (wrappedIdentityPrivateKeyB64) {
+            reqBody.identity_public_key_jwk = identityPublicKeyJWK;
+            reqBody.identity_key_algorithm = identityKeyAlgorithm;
+            reqBody.identity_key_version = identityKeyVersion;
+            reqBody.wrapped_identity_private_key_b64 = wrappedIdentityPrivateKeyB64;
+            reqBody.identity_key_wrap_alg = identityKeyWrapAlg;
+            reqBody.identity_key_wrap_meta = identityKeyWrapMeta;
         }
 
         const headers = { 'Content-Type': 'application/json' };
@@ -295,16 +429,7 @@ const SecureCrypto = (function() {
         const response = await fetch(endpoint, {
             method: 'POST',
             headers,
-            body: JSON.stringify({
-                device_id: identity.deviceId,
-                device_label: `${username || t('user_default')} device`,
-                public_key_jwk: identity.publicKeyJWK,
-                key_algorithm: identity.keyAlgorithm,
-                key_version: identity.keyVersion,
-                wrapped_user_key_b64: wrappedUserKeyB64,
-                uk_wrap_alg: ukWrapAlg,
-                uk_wrap_meta: ukWrapMeta
-            })
+            body: JSON.stringify(reqBody)
         });
         if (!response.ok) {
             const payload = await response.json().catch(() => ({}));
@@ -315,7 +440,21 @@ const SecureCrypto = (function() {
             userKeyRaw = await unwrapUserKeyForDevice(fromBase64(payload.user_key_envelope.wrapped_uk_b64), identity.privateKeyJWK);
         }
         if (!payload.needs_enrollment && userKeyRaw) saveUserKeyRaw(userId, userKeyRaw);
-        return { identity, userKeyRaw, payload };
+
+        if (!payload.needs_enrollment && (!identityKey || !identityKey.privateKeyJWK) && payload.identity_key_envelope?.wrapped_private_key_b64) {
+            const unwrapPrivJWK = await unwrapIdentityKeyForDevice(
+                fromBase64(payload.identity_key_envelope.wrapped_private_key_b64),
+                identity.privateKeyJWK
+            );
+            identityKey = {
+                keyVersion: payload.identity_key_envelope.identity_key_version || 1,
+                keyAlgorithm: 'RSA-OAEP-2048',
+                privateKeyJWK: unwrapPrivJWK
+            };
+        }
+        if (!payload.needs_enrollment && identityKey) saveIdentityKey(userId, identityKey);
+
+        return { identity, userKeyRaw, identityKey, payload };
     }
 
 
@@ -672,10 +811,16 @@ reject(new Error(t('error_failed_read_file')));
         parseEnvelope,
         unwrapFileDEK,
         wrapFileDEKForDevice,
+        wrapFileDEKForIdentity,
         registerAuthenticatedDevice,
         cacheFileKey,
         getCachedFileKey,
-        removeCachedFileKey
+        removeCachedFileKey,
+        generateIdentityKeypair,
+        wrapIdentityKeyForDevice,
+        unwrapIdentityKeyForDevice,
+        saveIdentityKey,
+        getIdentityKey
     };
 })();
 

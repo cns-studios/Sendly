@@ -375,6 +375,10 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 			opts.DEKWrapNonce = nonce
 		}
 	}
+	if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
+		return
+	}
 	if req.TunnelID != "" {
 		if req.DeviceID == "" {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "device_id is required for authenticated uploads", Code: "DEVICE_ID_REQUIRED"})

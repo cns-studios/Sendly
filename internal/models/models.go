@@ -75,6 +75,43 @@ type UserKeyEnvelope struct {
 	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
 }
 
+type UserIdentityKey struct {
+	CNSUserID    int64           `db:"cns_user_id" json:"cns_user_id"`
+	KeyVersion   int             `db:"key_version" json:"key_version"`
+	PublicKeyJWK json.RawMessage `db:"public_key_jwk" json:"public_key_jwk"`
+	KeyAlgorithm string          `db:"key_algorithm" json:"key_algorithm"`
+	Status       string          `db:"status" json:"status"`
+	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
+	ActivatedAt  sql.NullTime    `db:"activated_at" json:"-"`
+	RetiredAt    sql.NullTime    `db:"retired_at" json:"-"`
+}
+
+type UserIdentityKeyDeviceEnvelope struct {
+	ID                 string          `db:"id" json:"id"`
+	CNSUserID          int64           `db:"cns_user_id" json:"cns_user_id"`
+	DeviceID           string          `db:"device_id" json:"device_id"`
+	IdentityKeyVersion int             `db:"identity_key_version" json:"identity_key_version"`
+	WrappedPrivateKey  []byte          `db:"wrapped_private_key" json:"-"`
+	WrapAlg            string          `db:"wrap_alg" json:"wrap_alg"`
+	WrapMeta           json.RawMessage `db:"wrap_meta" json:"wrap_meta"`
+	CreatedAt          time.Time       `db:"created_at" json:"created_at"`
+}
+
+type FileAccessKeyEnvelope struct {
+	FileID              string         `db:"file_id" json:"file_id"`
+	RecipientCNSUserID  int64          `db:"recipient_cns_user_id" json:"recipient_cns_user_id"`
+	WrappedDEK          []byte         `db:"wrapped_dek" json:"-"`
+	DEKWrapAlg          string         `db:"dek_wrap_alg" json:"dek_wrap_alg"`
+	DEKWrapNonce        []byte         `db:"dek_wrap_nonce" json:"-"`
+	DEKWrapVersion      int            `db:"dek_wrap_version" json:"dek_wrap_version"`
+	RecipientKeyVersion int            `db:"recipient_key_version" json:"recipient_key_version"`
+	AccessKind          string         `db:"access_kind" json:"access_kind"`
+	SourceTunnelID      sql.NullString `db:"source_tunnel_id" json:"source_tunnel_id"`
+	GrantedAt           time.Time      `db:"granted_at" json:"granted_at"`
+	CreatedAt           time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time      `db:"updated_at" json:"updated_at"`
+}
+
 type DeviceEnrollment struct {
 	ID                 string         `db:"id" json:"id"`
 	CNSUserID          int64          `db:"cns_user_id" json:"cns_user_id"`
@@ -166,18 +203,23 @@ type UploadCompleteResponse struct {
 }
 
 type UploadFinalizeRequest struct {
-	SessionID           string `json:"session_id" binding:"required"`
-	Duration            string `json:"duration"`
-	TunnelID            string `json:"tunnel_id"`
-	DeviceID            string `json:"device_id"`
-	WrappedDEKB64       string `json:"wrapped_dek_b64"`
-	PeerWrappedDEKB64   string `json:"peer_wrapped_dek_b64"`
-	DEKWrapAlg          string `json:"dek_wrap_alg"`
-	DEKWrapNonceB64     string `json:"dek_wrap_nonce_b64"`
-	DEKWrapVersion      int    `json:"dek_wrap_version"`
-	PeerDEKWrapAlg      string `json:"peer_dek_wrap_alg"`
-	PeerDEKWrapNonceB64 string `json:"peer_dek_wrap_nonce_b64"`
-	PeerDEKWrapVersion  int    `json:"peer_dek_wrap_version"`
+	SessionID               string `json:"session_id" binding:"required"`
+	Duration                string `json:"duration"`
+	TunnelID                string `json:"tunnel_id"`
+	DeviceID                string `json:"device_id"`
+	WrappedDEKB64           string `json:"wrapped_dek_b64"`
+	PeerWrappedDEKB64       string `json:"peer_wrapped_dek_b64"`
+	DEKWrapAlg              string `json:"dek_wrap_alg"`
+	DEKWrapNonceB64         string `json:"dek_wrap_nonce_b64"`
+	DEKWrapVersion          int    `json:"dek_wrap_version"`
+	PeerDEKWrapAlg          string `json:"peer_dek_wrap_alg"`
+	PeerDEKWrapNonceB64     string `json:"peer_dek_wrap_nonce_b64"`
+	PeerDEKWrapVersion      int    `json:"peer_dek_wrap_version"`
+	IdentityWrappedDEKB64   string `json:"identity_wrapped_dek_b64"`
+	IdentityDEKWrapAlg      string `json:"identity_dek_wrap_alg"`
+	IdentityDEKWrapNonceB64 string `json:"identity_dek_wrap_nonce_b64"`
+	IdentityDEKWrapVersion  int    `json:"identity_dek_wrap_version"`
+	IdentityKeyVersion      int    `json:"identity_key_version"`
 }
 
 type UploadFinalizeResponse struct {
@@ -196,9 +238,26 @@ type RecentUploadsResponse struct {
 }
 
 type FileAccessResponse struct {
-	File            FileMetadata            `json:"file"`
-	FileKeyEnvelope FileKeyEnvelopeResponse `json:"file_key_envelope"`
-	UserKeyEnvelope UserKeyEnvelopeResponse `json:"user_key_envelope"`
+	File                       FileMetadata             `json:"file"`
+	FileKeyEnvelope            FileKeyEnvelopeResponse  `json:"file_key_envelope"`
+	UserKeyEnvelope            UserKeyEnvelopeResponse  `json:"user_key_envelope"`
+	IdentityFileAccessEnvelope *FileKeyEnvelopeResponse `json:"file_access_key_envelope,omitempty"`
+}
+
+type ShareFileRequest struct {
+	RecipientUserID     int64  `json:"recipient_user_id" binding:"required"`
+	WrappedDEK          string `json:"wrapped_dek" binding:"required"`
+	DEKWrapAlg          string `json:"dek_wrap_alg" binding:"required"`
+	DEKWrapNonce        string `json:"dek_wrap_nonce"`
+	RecipientKeyVersion int    `json:"recipient_key_version" binding:"required"`
+}
+
+type SharedFilesResponse struct {
+	Items      []OwnedFileListItem `json:"items"`
+	Page       int                 `json:"page"`
+	PerPage    int                 `json:"per_page"`
+	Total      int                 `json:"total"`
+	TotalPages int                 `json:"total_pages"`
 }
 
 type FileKeyEnvelopeResponse struct {
@@ -215,6 +274,13 @@ type UserKeyEnvelopeResponse struct {
 	KeyVersion   int             `json:"key_version"`
 }
 
+type UserIdentityKeyDeviceEnvelopeResponse struct {
+	WrappedPrivateKeyB64 string          `json:"wrapped_private_key_b64"`
+	WrapAlg              string          `json:"wrap_alg"`
+	WrapMeta             json.RawMessage `json:"wrap_meta"`
+	IdentityKeyVersion   int             `json:"identity_key_version"`
+}
+
 type DeviceRegisterRequest struct {
 	DeviceID          string          `json:"device_id" binding:"required"`
 	DeviceLabel       string          `json:"device_label"`
@@ -224,12 +290,21 @@ type DeviceRegisterRequest struct {
 	WrappedUserKeyB64 string          `json:"wrapped_user_key_b64"`
 	UKWrapAlg         string          `json:"uk_wrap_alg"`
 	UKWrapMeta        json.RawMessage `json:"uk_wrap_meta"`
+
+	// Additive identity keypair fields
+	IdentityPublicKeyJWK         json.RawMessage `json:"identity_public_key_jwk,omitempty"`
+	IdentityKeyAlgorithm         string          `json:"identity_key_algorithm,omitempty"`
+	IdentityKeyVersion           int             `json:"identity_key_version,omitempty"`
+	WrappedIdentityPrivateKeyB64 string          `json:"wrapped_identity_private_key_b64,omitempty"`
+	IdentityKeyWrapAlg           string          `json:"identity_key_wrap_alg,omitempty"`
+	IdentityKeyWrapMeta          json.RawMessage `json:"identity_key_wrap_meta,omitempty"`
 }
 
 type DeviceRegisterResponse struct {
-	DeviceID        string                   `json:"device_id"`
-	NeedsEnrollment bool                     `json:"needs_enrollment"`
-	UserKeyEnvelope *UserKeyEnvelopeResponse `json:"user_key_envelope,omitempty"`
+	DeviceID            string                                 `json:"device_id"`
+	NeedsEnrollment     bool                                   `json:"needs_enrollment"`
+	UserKeyEnvelope     *UserKeyEnvelopeResponse               `json:"user_key_envelope,omitempty"`
+	IdentityKeyEnvelope *UserIdentityKeyDeviceEnvelopeResponse `json:"identity_key_envelope,omitempty"`
 }
 
 type DeviceRenameRequest struct {
@@ -252,6 +327,12 @@ type ApproveEnrollmentRequest struct {
 	WrappedUserKeyB64 string          `json:"wrapped_user_key_b64" binding:"required"`
 	UKWrapAlg         string          `json:"uk_wrap_alg" binding:"required"`
 	UKWrapMeta        json.RawMessage `json:"uk_wrap_meta" binding:"required"`
+
+	// Additive identity keypair envelope fields
+	WrappedIdentityPrivateKeyB64 string          `json:"wrapped_identity_private_key_b64,omitempty"`
+	IdentityKeyWrapAlg           string          `json:"identity_key_wrap_alg,omitempty"`
+	IdentityKeyWrapMeta          json.RawMessage `json:"identity_key_wrap_meta,omitempty"`
+	IdentityKeyVersion           int             `json:"identity_key_version,omitempty"`
 }
 
 type RejectEnrollmentRequest struct {
@@ -353,6 +434,10 @@ var (
 	ErrInvalidDuration          = &AppError{Code: "INVALID_DURATION", Message: "invalid duration specified"}
 	ErrFileTooLarge             = &AppError{Code: "FILE_TOO_LARGE", Message: "file exceeds maximum size limit"}
 	ErrFileNotFound             = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
+	ErrIdentityKeyNotFound      = &AppError{Code: "IDENTITY_KEY_NOT_FOUND", Message: "identity key not found"}
+	ErrDeviceEnvelopeNotFound   = &AppError{Code: "DEVICE_ENVELOPE_NOT_FOUND", Message: "identity key device envelope not found"}
+	ErrFileAccessNotFound       = &AppError{Code: "FILE_ACCESS_NOT_FOUND", Message: "file access grant not found"}
+	ErrRecipientNotReady        = &AppError{Code: "RECIPIENT_NOT_READY", Message: "recipient has not set up sharing yet"}
 	ErrFileExpired              = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}
 	ErrFileDeleted              = &AppError{Code: "FILE_DELETED", Message: "file has been deleted"}
 	ErrDeviceNotFound           = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}

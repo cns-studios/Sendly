@@ -113,15 +113,25 @@ func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 	}
 
 	file, fileEnvelope, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+	identityOnly := false
 	if err != nil {
 		file, fileEnvelope, err = h.db.GetTunnelRecipientFileWithEnvelope(c.Request.Context(), int64(user.ID), deviceID, fileID)
 		if err != nil {
-			status := http.StatusInternalServerError
-			if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
-				status = http.StatusNotFound
+			if grant, grantErr := h.db.GetFileAccessKeyEnvelope(c.Request.Context(), fileID, int64(user.ID)); grantErr == nil && grant.AccessKind == "share" {
+				file, err = h.db.GetFileByID(c.Request.Context(), fileID)
+				if err == nil {
+					fileEnvelope = &models.FileKeyEnvelope{}
+					identityOnly = true
+				}
 			}
-			c.JSON(status, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
-			return
+			if err != nil || file == nil {
+				status := http.StatusInternalServerError
+				if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
+					status = http.StatusNotFound
+				}
+				c.JSON(status, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
+				return
+			}
 		}
 	}
 
@@ -134,8 +144,16 @@ func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 			DEKWrapNonceB64: base64.StdEncoding.EncodeToString(fileEnvelope.DEKWrapNonce),
 		},
 	}
+	if identityEnvelope, identityErr := h.db.GetFileAccessKeyEnvelope(c.Request.Context(), fileID, int64(user.ID)); identityErr == nil {
+		resp.IdentityFileAccessEnvelope = &models.FileKeyEnvelopeResponse{
+			WrappedDEKB64:   base64.StdEncoding.EncodeToString(identityEnvelope.WrappedDEK),
+			DEKWrapAlg:      identityEnvelope.DEKWrapAlg,
+			DEKWrapVersion:  identityEnvelope.DEKWrapVersion,
+			DEKWrapNonceB64: base64.StdEncoding.EncodeToString(identityEnvelope.DEKWrapNonce),
+		}
+	}
 
-	isDirectDeviceWrap := strings.HasPrefix(strings.ToUpper(strings.TrimSpace(fileEnvelope.DEKWrapAlg)), "RSA-OAEP")
+	isDirectDeviceWrap := identityOnly || strings.HasPrefix(strings.ToUpper(strings.TrimSpace(fileEnvelope.DEKWrapAlg)), "RSA-OAEP")
 	if !isDirectDeviceWrap {
 		userEnvelope, userErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), deviceID)
 		if userErr != nil {

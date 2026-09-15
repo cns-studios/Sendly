@@ -267,16 +267,13 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	tier := middleware.GetTier(h.cfg, user)
 
 	var opts *services.FinalizeUploadOptions
+	if user != nil {
+		uid := int64(user.ID)
+		uname := user.Username
+		opts = &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
+	}
 	if req.TunnelID != "" {
-		opts = &services.FinalizeUploadOptions{}
 		if user != nil {
-			uid := int64(user.ID)
-			uname := user.Username
-			opts = &services.FinalizeUploadOptions{
-				OwnerCNSUserID:   &uid,
-				OwnerCNSUserName: &uname,
-			}
-
 			if req.DeviceID == "" {
 				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "device_id is required for authenticated desktop uploads", Code: "DEVICE_ID_REQUIRED"})
 				return
@@ -353,6 +350,17 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	} else {
 		if !tier.IsDurationAllowed(req.Duration) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration not available for your account tier", Code: "DURATION_NOT_ALLOWED"})
+			return
+		}
+
+		if err := applyIdentityFinalizeEnvelope(&models.UploadFinalizeRequest{
+			IdentityWrappedDEKB64:   req.IdentityWrappedDEKB64,
+			IdentityDEKWrapAlg:      req.IdentityDEKWrapAlg,
+			IdentityDEKWrapNonceB64: req.IdentityDEKWrapNonceB64,
+			IdentityDEKWrapVersion:  req.IdentityDEKWrapVersion,
+			IdentityKeyVersion:      req.IdentityKeyVersion,
+		}, opts); err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
 			return
 		}
 	}

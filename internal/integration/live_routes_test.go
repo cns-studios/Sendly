@@ -3,8 +3,16 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -56,8 +64,8 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	recentHandler := handlers.NewRecentUploadsHandler(cfg, db)
 	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, upload, tracker)
 
-	const userID = 991002
-	user := &middleware.CNSUser{ID: userID, Username: "live-owner"}
+	userID := time.Now().UnixNano()
+	user := &middleware.CNSUser{ID: int(userID), Username: "live-owner"}
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
 		c.Set(middleware.CNSUserKey, user)
@@ -73,8 +81,67 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	router.POST("/api/me/devices/register", recentHandler.RegisterDevice)
 	router.POST("/android/me/devices/register", androidHandler.RegisterDevice)
 
+	identityPrivate, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	devicePrivate, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityVersion := 1
+	if err := db.CreateUserIdentityKey(context.Background(), &models.UserIdentityKey{
+		CNSUserID: userID, KeyVersion: identityVersion,
+		PublicKeyJWK: rsaPublicJWK(&identityPrivate.PublicKey), KeyAlgorithm: "RSA-OAEP-2048",
+		Status: "active", CreatedAt: time.Now(), ActivatedAt: sql.NullTime{Time: time.Now(), Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	deviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", userID%1000000000000)
+	if err := db.CreateOrUpdateUserDevice(context.Background(), &models.UserDevice{
+		ID: deviceID, CNSUserID: userID, DeviceLabel: "live owner",
+		PublicKeyJWK: rsaPublicJWK(&devicePrivate.PublicKey), KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	identityPrivateDER, err := x509.MarshalPKCS8PrivateKey(identityPrivate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrappedIdentityPrivate, err := hybridWrap(devicePrivate.PublicKey, identityPrivateDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateUserIdentityKeyDeviceEnvelope(context.Background(), &models.UserIdentityKeyDeviceEnvelope{
+		CNSUserID: userID, DeviceID: deviceID, IdentityKeyVersion: identityVersion,
+		WrappedPrivateKey: wrappedIdentityPrivate, WrapAlg: "RSA-OAEP-2048+AES-GCM-256-v1",
+		WrapMeta: json.RawMessage(`{}`), CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recoveredDER, err := hybridUnwrap(devicePrivate, wrappedIdentityPrivate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveredKey, err := x509.ParsePKCS8PrivateKey(recoveredDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoveredIdentityPrivate := recoveredKey.(*rsa.PrivateKey)
+	dek := make([]byte, 32)
+	if _, err := rand.Read(dek); err != nil {
+		t.Fatal(err)
+	}
+	ciphertext, nonce, err := encryptTestDEK(dek, []byte("identity-backed upload"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	identityWrappedDEK, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &identityPrivate.PublicKey, dek, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	initBody, _ := json.Marshal(models.UploadInitRequest{
-		FileName: "live.txt", FileSize: 11, TotalChunks: 1, ChunkSize: 11,
+		FileName: "live.txt", FileSize: int64(len(ciphertext)), TotalChunks: 1, ChunkSize: int64(len(ciphertext)),
 	})
 	rec := request(router, http.MethodPost, "/api/upload/init", initBody, "application/json")
 	if rec.Code != http.StatusOK {
@@ -90,7 +157,7 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	_ = form.WriteField("session_id", initResp.SessionID)
 	_ = form.WriteField("chunk_index", "0")
 	part, _ := form.CreateFormFile("chunk", "live.txt")
-	_, _ = part.Write([]byte("hello world"))
+	_, _ = part.Write(ciphertext)
 	_ = form.Close()
 	rec = request(router, http.MethodPost, "/api/upload/chunk", chunk.Bytes(), form.FormDataContentType())
 	if rec.Code != http.StatusOK {
@@ -105,10 +172,12 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	waitForAssembly(t, router, initResp.SessionID)
 
 	finalizeBody, _ := json.Marshal(models.UploadFinalizeRequest{
-		SessionID: initResp.SessionID, Duration: "90d",
-		DeviceID:      "00000000-0000-4000-8000-000000000003",
-		WrappedDEKB64: base64.StdEncoding.EncodeToString([]byte("wrapped-dek")),
+		SessionID: initResp.SessionID, Duration: "90d", DeviceID: deviceID,
+		WrappedDEKB64: base64.StdEncoding.EncodeToString(identityWrappedDEK),
 		DEKWrapAlg:    "RSA-OAEP-2048-v1", DEKWrapVersion: 1,
+		IdentityWrappedDEKB64: base64.StdEncoding.EncodeToString(identityWrappedDEK),
+		IdentityDEKWrapAlg:    "RSA-OAEP-2048-v1", IdentityDEKWrapVersion: 1,
+		IdentityKeyVersion: identityVersion,
 	})
 	rec = request(router, http.MethodPost, "/api/upload/finalize", finalizeBody, "application/json")
 	if rec.Code != http.StatusOK {
@@ -118,14 +187,34 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &finalized); err != nil {
 		t.Fatal(err)
 	}
+	if grant, grantErr := db.GetFileAccessKeyEnvelope(context.Background(), finalized.FileID, userID); grantErr != nil {
+		t.Fatalf("owner identity grant missing after finalize: %v", grantErr)
+	} else if len(grant.WrappedDEK) == 0 {
+		t.Fatal("owner identity grant is empty")
+	}
 
 	rec = request(router, http.MethodGet, "/api/me/recent-uploads", nil, "")
 	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(finalized.FileID)) {
 		t.Fatalf("recent uploads status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rec = request(router, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access?device_id=00000000-0000-4000-8000-000000000003", nil, "")
-	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("RSA-OAEP-2048-v1")) {
+	rec = request(router, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access?device_id="+deviceID, nil, "")
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("file_access_key_envelope")) {
 		t.Fatalf("file access status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var accessResp models.FileAccessResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &accessResp); err != nil {
+		t.Fatal(err)
+	}
+	if accessResp.IdentityFileAccessEnvelope == nil {
+		t.Fatal("identity access envelope missing from response")
+	}
+	returnedDEK, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, recoveredIdentityPrivate, mustBase64(accessResp.IdentityFileAccessEnvelope.WrappedDEKB64), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decrypted, err := decryptTestDEK(returnedDEK, ciphertext, nonce)
+	if err != nil || string(decrypted) != "identity-backed upload" {
+		t.Fatalf("identity-wrapped DEK failed to decrypt uploaded file: err=%v plaintext=%q", err, decrypted)
 	}
 
 	register := func(deviceID, wrapped string) []byte {
@@ -379,6 +468,91 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 		t.Fatalf("recipient access status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+func rsaPublicJWK(key *rsa.PublicKey) json.RawMessage {
+	return json.RawMessage(fmt.Sprintf(`{"kty":"RSA","n":"%s","e":"AQAB"}`,
+		base64.RawURLEncoding.EncodeToString(key.N.Bytes())))
+}
+
+func hybridWrap(publicKey rsa.PublicKey, plaintext []byte) ([]byte, error) {
+	aesKey := make([]byte, 32)
+	if _, err := rand.Read(aesKey); err != nil {
+		return nil, err
+	}
+	wrappedKey, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &publicKey, aesKey, nil)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return append(append(append([]byte{}, wrappedKey...), nonce...), gcm.Seal(nil, nonce, plaintext, nil)...), nil
+}
+
+func hybridUnwrap(privateKey *rsa.PrivateKey, wrapped []byte) ([]byte, error) {
+	if len(wrapped) < 268 {
+		return nil, fmt.Errorf("wrapped identity key is too short")
+	}
+	aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, wrapped[:256], nil)
+	if err != nil {
+		return nil, err
+	}
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return gcm.Open(nil, wrapped[256:268], wrapped[268:], nil)
+}
+
+func encryptTestDEK(dek, plaintext []byte) ([]byte, []byte, error) {
+	block, err := aes.NewCipher(dek)
+	if err != nil {
+		return nil, nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, nil, err
+	}
+	return gcm.Seal(nil, nonce, plaintext, nil), nonce, nil
+}
+
+func decryptTestDEK(dek, ciphertext, nonce []byte) ([]byte, error) {
+	block, err := aes.NewCipher(dek)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func mustBase64(value string) []byte {
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		panic(err)
+	}
+	return decoded
+}
+
 func request(router http.Handler, method, path string, body []byte, contentType string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
 	if contentType != "" {

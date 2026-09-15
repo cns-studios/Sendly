@@ -863,6 +863,14 @@
                     dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
                     dek_wrap_version: 1
                 };
+                const identityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
+                if (identityKey?.publicKeyJWK) {
+                    const identityWrapped = await SecureCrypto.wrapFileDEKForIdentity(dekBytes, identityKey.publicKeyJWK);
+                    envelopePayload.identity_wrapped_dek_b64 = SecureCrypto.toBase64(identityWrapped);
+                    envelopePayload.identity_dek_wrap_alg = 'RSA-OAEP-2048-v1';
+                    envelopePayload.identity_dek_wrap_version = 1;
+                    envelopePayload.identity_key_version = identityKey.keyVersion || 1;
+                }
             } else if (ephemeralKeyPair) {
                 const wrapped = await wrapWithPublicKey(dekBytes, ephemeralKeyPair.publicKeyJWK);
                 envelopePayload = {

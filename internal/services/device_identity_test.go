@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,15 +12,20 @@ import (
 )
 
 type memoryDeviceStore struct {
-	devices     map[string]models.UserDevice
-	envelopes   map[string]models.UserKeyEnvelope
-	enrollments map[string]models.DeviceEnrollment
+	devices           map[string]models.UserDevice
+	envelopes         map[string]models.UserKeyEnvelope
+	enrollments       map[string]models.DeviceEnrollment
+	identityKeys      map[string]models.UserIdentityKey
+	identityEnvelopes map[string]models.UserIdentityKeyDeviceEnvelope
 }
 
 func newMemoryDeviceStore() *memoryDeviceStore {
 	return &memoryDeviceStore{
-		devices: map[string]models.UserDevice{}, envelopes: map[string]models.UserKeyEnvelope{},
-		enrollments: map[string]models.DeviceEnrollment{},
+		devices:           map[string]models.UserDevice{},
+		envelopes:         map[string]models.UserKeyEnvelope{},
+		enrollments:       map[string]models.DeviceEnrollment{},
+		identityKeys:      map[string]models.UserIdentityKey{},
+		identityEnvelopes: map[string]models.UserIdentityKeyDeviceEnvelope{},
 	}
 }
 func (m *memoryDeviceStore) CreateOrUpdateUserDevice(_ context.Context, d *models.UserDevice) error {
@@ -97,6 +103,65 @@ func (m *memoryDeviceStore) RejectEnrollment(_ context.Context, _ int64, id stri
 	e := m.enrollments[id]
 	e.Status = models.EnrollmentStatusRejected
 	m.enrollments[id] = e
+	return nil
+}
+
+func (m *memoryDeviceStore) CreateUserIdentityKey(_ context.Context, k *models.UserIdentityKey) error {
+	key := fmt.Sprintf("%d:%d", k.CNSUserID, k.KeyVersion)
+	m.identityKeys[key] = *k
+	return nil
+}
+
+func (m *memoryDeviceStore) GetUserIdentityKey(_ context.Context, userID int64, version int) (*models.UserIdentityKey, error) {
+	key := fmt.Sprintf("%d:%d", userID, version)
+	k, ok := m.identityKeys[key]
+	if !ok {
+		return nil, models.ErrIdentityKeyNotFound
+	}
+	return &k, nil
+}
+
+func (m *memoryDeviceStore) GetActiveUserIdentityKey(_ context.Context, userID int64) (*models.UserIdentityKey, error) {
+	for _, k := range m.identityKeys {
+		if k.CNSUserID == userID && k.Status == "active" {
+			return &k, nil
+		}
+	}
+	return nil, models.ErrIdentityKeyNotFound
+}
+
+func (m *memoryDeviceStore) CreateUserIdentityKeyDeviceEnvelope(_ context.Context, env *models.UserIdentityKeyDeviceEnvelope) error {
+	key := fmt.Sprintf("%d:%s:%d", env.CNSUserID, env.DeviceID, env.IdentityKeyVersion)
+	m.identityEnvelopes[key] = *env
+	return nil
+}
+
+func (m *memoryDeviceStore) GetUserIdentityKeyDeviceEnvelope(_ context.Context, userID int64, deviceID string, version int) (*models.UserIdentityKeyDeviceEnvelope, error) {
+	key := fmt.Sprintf("%d:%s:%d", userID, deviceID, version)
+	env, ok := m.identityEnvelopes[key]
+	if !ok {
+		return nil, models.ErrDeviceEnvelopeNotFound
+	}
+	return &env, nil
+}
+
+func (m *memoryDeviceStore) DeleteUserIdentityKeyDeviceEnvelopesByUser(_ context.Context, userID int64) error {
+	for k, env := range m.identityEnvelopes {
+		if env.CNSUserID == userID {
+			delete(m.identityEnvelopes, k)
+		}
+	}
+	return nil
+}
+
+func (m *memoryDeviceStore) UpdateUserIdentityKeyPublicKey(_ context.Context, userID int64, version int, publicKeyJWK json.RawMessage) error {
+	key := fmt.Sprintf("%d:%d", userID, version)
+	k, ok := m.identityKeys[key]
+	if !ok {
+		return models.ErrIdentityKeyNotFound
+	}
+	k.PublicKeyJWK = publicKeyJWK
+	m.identityKeys[key] = k
 	return nil
 }
 
