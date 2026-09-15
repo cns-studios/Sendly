@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -17,7 +18,7 @@ type Postgres struct {
 	db *sqlx.DB
 }
 
-func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope, recipientEnvelopes []models.FileRecipientKeyEnvelope) error {
+func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope, recipientEnvelopes []models.FileRecipientKeyEnvelope, identityEnvelope *models.FileAccessKeyEnvelope) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -104,6 +105,33 @@ func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File
 				_ = tx.Rollback()
 				return err
 			}
+		}
+	}
+
+	if identityEnvelope != nil {
+		if _, err = tx.ExecContext(ctx, `
+					INSERT INTO file_access_key_envelopes (
+						file_id, recipient_cns_user_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce,
+						dek_wrap_version, recipient_key_version, access_kind, source_tunnel_id,
+						granted_at, created_at, updated_at
+					) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+					ON CONFLICT (file_id, recipient_cns_user_id) DO UPDATE SET
+						wrapped_dek = EXCLUDED.wrapped_dek,
+						dek_wrap_alg = EXCLUDED.dek_wrap_alg,
+						dek_wrap_nonce = EXCLUDED.dek_wrap_nonce,
+						dek_wrap_version = EXCLUDED.dek_wrap_version,
+						recipient_key_version = EXCLUDED.recipient_key_version,
+						access_kind = EXCLUDED.access_kind,
+						source_tunnel_id = EXCLUDED.source_tunnel_id,
+						granted_at = EXCLUDED.granted_at,
+						updated_at = EXCLUDED.updated_at
+				`, identityEnvelope.FileID, identityEnvelope.RecipientCNSUserID,
+			identityEnvelope.WrappedDEK, identityEnvelope.DEKWrapAlg, identityEnvelope.DEKWrapNonce,
+			identityEnvelope.DEKWrapVersion, identityEnvelope.RecipientKeyVersion, identityEnvelope.AccessKind,
+			identityEnvelope.SourceTunnelID, identityEnvelope.GrantedAt, identityEnvelope.CreatedAt,
+			identityEnvelope.UpdatedAt); err != nil {
+			_ = tx.Rollback()
+			return err
 		}
 	}
 
@@ -373,6 +401,11 @@ func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.U
 	}
 
 	if _, err := tx.ExecContext(ctx, `DELETE FROM user_key_envelopes WHERE cns_user_id = $1`, device.CNSUserID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1`, device.CNSUserID); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -653,7 +686,6 @@ func (p *Postgres) GetTunnelFileWithEnvelope(ctx context.Context, tunnelID, file
 	return file, env, nil
 }
 
-
 func (p *Postgres) SaveUserKeyEnvelope(ctx context.Context, envelope *models.UserKeyEnvelope) error {
 	query := `
 		INSERT INTO user_key_envelopes (id, cns_user_id, device_id, wrapped_user_key, uk_wrap_alg, uk_wrap_meta, key_version)
@@ -691,6 +723,174 @@ func (p *Postgres) GetUserKeyEnvelopeForDevice(ctx context.Context, userID int64
 		return nil, err
 	}
 	return &env, nil
+}
+
+func (p *Postgres) CreateUserIdentityKey(ctx context.Context, key *models.UserIdentityKey) error {
+	// Identity key versions are immutable; duplicate (user, version) inserts must fail
+	// loudly rather than replacing key material that may already be in use.
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO user_identity_keys
+			(cns_user_id, key_version, public_key_jwk, key_algorithm, status, created_at, activated_at, retired_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, key.CNSUserID, key.KeyVersion, key.PublicKeyJWK, key.KeyAlgorithm, key.Status,
+		key.CreatedAt, key.ActivatedAt, key.RetiredAt)
+	return err
+}
+
+func (p *Postgres) GetUserIdentityKey(ctx context.Context, userID int64, version int) (*models.UserIdentityKey, error) {
+	var key models.UserIdentityKey
+	err := p.db.GetContext(ctx, &key, `
+		SELECT cns_user_id, key_version, public_key_jwk, key_algorithm, status,
+			created_at, activated_at, retired_at
+		FROM user_identity_keys
+		WHERE cns_user_id = $1 AND key_version = $2
+	`, userID, version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrIdentityKeyNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (p *Postgres) GetActiveUserIdentityKey(ctx context.Context, userID int64) (*models.UserIdentityKey, error) {
+	var key models.UserIdentityKey
+	err := p.db.GetContext(ctx, &key, `
+		SELECT cns_user_id, key_version, public_key_jwk, key_algorithm, status,
+			created_at, activated_at, retired_at
+		FROM user_identity_keys
+		WHERE cns_user_id = $1 AND status = 'active'
+		LIMIT 1
+	`, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrIdentityKeyNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &key, nil
+}
+
+func (p *Postgres) CreateUserIdentityKeyDeviceEnvelope(ctx context.Context, envelope *models.UserIdentityKeyDeviceEnvelope) error {
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO user_identity_key_device_envelopes
+			(id, cns_user_id, device_id, identity_key_version, wrapped_private_key, wrap_alg, wrap_meta, created_at)
+		VALUES (COALESCE(NULLIF($1, '')::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (cns_user_id, device_id, identity_key_version) DO UPDATE SET
+			wrapped_private_key = EXCLUDED.wrapped_private_key,
+			wrap_alg = EXCLUDED.wrap_alg,
+			wrap_meta = EXCLUDED.wrap_meta,
+			created_at = EXCLUDED.created_at
+	`, envelope.ID, envelope.CNSUserID, envelope.DeviceID, envelope.IdentityKeyVersion,
+		envelope.WrappedPrivateKey, envelope.WrapAlg, envelope.WrapMeta, envelope.CreatedAt)
+	return err
+}
+
+func (p *Postgres) GetUserIdentityKeyDeviceEnvelope(ctx context.Context, userID int64, deviceID string, version int) (*models.UserIdentityKeyDeviceEnvelope, error) {
+	var envelope models.UserIdentityKeyDeviceEnvelope
+	err := p.db.GetContext(ctx, &envelope, `
+		SELECT id, cns_user_id, device_id, identity_key_version, wrapped_private_key,
+			wrap_alg, wrap_meta, created_at
+		FROM user_identity_key_device_envelopes
+		WHERE cns_user_id = $1 AND device_id = $2 AND identity_key_version = $3
+	`, userID, deviceID, version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrDeviceEnvelopeNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &envelope, nil
+}
+
+func (p *Postgres) DeleteUserIdentityKeyDeviceEnvelopesByUser(ctx context.Context, userID int64) error {
+	_, err := p.db.ExecContext(ctx, `DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1`, userID)
+	return err
+}
+
+func (p *Postgres) UpdateUserIdentityKeyPublicKey(ctx context.Context, userID int64, version int, publicKeyJWK json.RawMessage) error {
+	_, err := p.db.ExecContext(ctx, `
+		UPDATE user_identity_keys
+		SET public_key_jwk = $1, created_at = NOW(), activated_at = NOW()
+		WHERE cns_user_id = $2 AND key_version = $3
+	`, publicKeyJWK, userID, version)
+	return err
+}
+
+func (p *Postgres) CreateFileAccessKeyEnvelope(ctx context.Context, envelope *models.FileAccessKeyEnvelope) error {
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO file_access_key_envelopes
+			(file_id, recipient_cns_user_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce,
+			 dek_wrap_version, recipient_key_version, access_kind, source_tunnel_id,
+			 granted_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (file_id, recipient_cns_user_id) DO UPDATE SET
+			wrapped_dek = EXCLUDED.wrapped_dek,
+			dek_wrap_alg = EXCLUDED.dek_wrap_alg,
+			dek_wrap_nonce = EXCLUDED.dek_wrap_nonce,
+			dek_wrap_version = EXCLUDED.dek_wrap_version,
+			recipient_key_version = EXCLUDED.recipient_key_version,
+			access_kind = EXCLUDED.access_kind,
+			source_tunnel_id = EXCLUDED.source_tunnel_id,
+			granted_at = EXCLUDED.granted_at,
+			updated_at = EXCLUDED.updated_at
+	`, envelope.FileID, envelope.RecipientCNSUserID, envelope.WrappedDEK,
+		envelope.DEKWrapAlg, envelope.DEKWrapNonce, envelope.DEKWrapVersion,
+		envelope.RecipientKeyVersion, envelope.AccessKind, envelope.SourceTunnelID,
+		envelope.GrantedAt, envelope.CreatedAt, envelope.UpdatedAt)
+	return err
+}
+
+func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, recipientUserID int64) (*models.FileAccessKeyEnvelope, error) {
+	var envelope models.FileAccessKeyEnvelope
+	err := p.db.GetContext(ctx, &envelope, `
+		SELECT file_id, recipient_cns_user_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce,
+			dek_wrap_version, recipient_key_version, access_kind, source_tunnel_id,
+			granted_at, created_at, updated_at
+		FROM file_access_key_envelopes
+		WHERE file_id = $1 AND recipient_cns_user_id = $2
+	`, fileID, recipientUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrFileAccessNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &envelope, nil
+}
+
+func (p *Postgres) GetSharedWithMeFiles(ctx context.Context, userID int64, page, perPage int) ([]models.OwnedFileListItem, int, error) {
+	offset := (page - 1) * perPage
+	var total int
+	if err := p.db.GetContext(ctx, &total, `
+		SELECT COUNT(*)
+		FROM file_access_key_envelopes e
+		JOIN files f ON f.id = e.file_id
+		WHERE e.recipient_cns_user_id = $1
+		  AND e.access_kind = 'share'
+		  AND f.is_deleted = FALSE
+		  AND f.expires_at > NOW()
+	`, userID); err != nil {
+		return nil, 0, err
+	}
+
+	var items []models.OwnedFileListItem
+	if err := p.db.SelectContext(ctx, &items, `
+		SELECT f.id AS file_id, f.original_name AS filename, f.size_bytes,
+			f.created_at, f.expires_at
+		FROM file_access_key_envelopes e
+		JOIN files f ON f.id = e.file_id
+		WHERE e.recipient_cns_user_id = $1
+		  AND e.access_kind = 'share'
+		  AND f.is_deleted = FALSE
+		  AND f.expires_at > NOW()
+		ORDER BY f.created_at DESC
+		LIMIT $2 OFFSET $3
+	`, userID, perPage, offset); err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
 }
 
 func (p *Postgres) UserHasTrustedKeyEnvelope(ctx context.Context, userID int64) (bool, error) {

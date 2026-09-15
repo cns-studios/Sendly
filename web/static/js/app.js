@@ -207,6 +207,7 @@
         if (AUTHENTICATED) {
             ensureDeviceReady().catch(() => {});
             loadRecentUploads().catch(() => {});
+            loadSharedWithMe().catch(() => {});
             loadPendingEnrollments().catch(() => {});
 
             refreshRecentFilesCache();
@@ -348,6 +349,53 @@
             });
             if (recentSearchQuery) {
                 params.set('q', recentSearchQuery);
+            }
+
+            async function loadSharedWithMe() {
+                if (!AUTHENTICATED || !recentSection?.parentElement) return;
+                let section = document.getElementById('shared-with-me-section');
+                if (!section) {
+                    section = document.createElement('section');
+                    section.id = 'shared-with-me-section';
+                    section.className = 'recent-uploads-section';
+                    section.innerHTML = '<h2>Shared with me</h2><div class="file-list" data-shared-list></div>';
+                    recentSection.parentElement.insertBefore(section, recentSection);
+                }
+                const list = section.querySelector('[data-shared-list]');
+                try {
+                    const response = await fetch('/api/me/shared-with-me?page=1&per_page=50', {
+                        headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                    });
+                    if (!response.ok) throw new Error('Failed to load shared files');
+                    const payload = await response.json();
+                    const items = payload.items || [];
+                    list.innerHTML = items.length ? items.map((item) => `
+                        <div class="file-entry" data-file-id="${escapeHtml(item.file_id)}">
+                            <div class="file-entry-left">
+                                <span class="file-name">${escapeHtml(item.filename)}</span>
+                                <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)}</span>
+                            </div>
+                            <div class="file-entry-right">
+                                <button class="shared-download" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${escapeHtml(item.filename)}">Download</button>
+                            </div>
+                        </div>
+                    `).join('') : '<p>No files have been shared with you.</p>';
+                    list.querySelectorAll('.shared-download').forEach((button) => {
+                        button.addEventListener('click', async () => {
+                            button.disabled = true;
+                            try {
+                                await downloadOwnedFile(button.dataset.fileId, button.dataset.fileName, '', button.closest('.file-entry'));
+                            } catch (error) {
+                                showErrorBanner(error.message);
+                            } finally {
+                                button.disabled = false;
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.error(error);
+                    list.innerHTML = '<p>Unable to load shared files.</p>';
+                }
             }
 
             const response = await fetch(`/api/me/recent-uploads?${params.toString()}`, {
@@ -548,23 +596,39 @@
             }
 
             const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, requestPublicKey);
+
+            const approveBody = {
+                approver_device_id: authDeviceIdentity.deviceId,
+                verification_code: activePendingEnrollment.enrollment.verification_code,
+                wrapped_user_key_b64: SecureCrypto.toBase64(wrappedUserKey),
+                uk_wrap_alg: 'RSA-OAEP-2048-v1',
+                uk_wrap_meta: {
+                    type: 'enrollment-approval',
+                    approver_device_id: authDeviceIdentity.deviceId,
+                    request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
+                }
+            };
+
+            const authIdentityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
+            if (authIdentityKey && authIdentityKey.privateKeyJWK) {
+                const wrappedIdKey = await SecureCrypto.wrapIdentityKeyForDevice(authIdentityKey.privateKeyJWK, requestPublicKey);
+                approveBody.wrapped_identity_private_key_b64 = SecureCrypto.toBase64(wrappedIdKey);
+                approveBody.identity_key_wrap_alg = 'RSA-OAEP-2048+AES-GCM-256-v1';
+                approveBody.identity_key_wrap_meta = {
+                    type: 'enrollment-approval',
+                    approver_device_id: authDeviceIdentity.deviceId,
+                    request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
+                };
+                approveBody.identity_key_version = authIdentityKey.keyVersion || 1;
+            }
+
             const response = await fetch(`/api/me/devices/enrollments/${encodeURIComponent(activePendingEnrollment.enrollment.id)}/approve`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': getCookieValue('csrf_token')
                 },
-                body: JSON.stringify({
-                    approver_device_id: authDeviceIdentity.deviceId,
-                    verification_code: activePendingEnrollment.enrollment.verification_code,
-                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedUserKey),
-                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
-                    uk_wrap_meta: {
-                        type: 'enrollment-approval',
-                        approver_device_id: authDeviceIdentity.deviceId,
-                        request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
-                    }
-                })
+                body: JSON.stringify(approveBody)
             });
 
             if (!response.ok) {
@@ -853,6 +917,7 @@
                                 <line x1="12" y1="15" x2="12" y2="3"/>
                             </svg>
                         </button>
+                        <button class="recent-action" data-action="share-user" aria-label="Share with user" title="Share with user" ${locked ? 'disabled' : ''}>↗</button>
                     </div>
                 </div>
             `;
@@ -1280,6 +1345,8 @@
                 if (!copied) {
                     showToast(t('toast_copy_failed'));
                 }
+            } else if (action === 'share-user') {
+                await shareFileWithUser(fileId);
             }
         } catch (error) {
             console.error(error);
@@ -1288,6 +1355,45 @@
                 keepDisabled = true;
                 showErrorBanner(error.message);
                 return;
+            }
+
+            async function shareFileWithUser(fileId) {
+                const recipient = window.prompt('Enter the recipient user ID');
+                if (!recipient || !/^[1-9]\d*$/.test(recipient.trim())) return;
+                const recipientID = Number(recipient.trim());
+                const keyResponse = await fetch(`/api/users/${recipientID}/identity-key`, {
+                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                });
+                const keyPayload = await keyResponse.json().catch(() => ({}));
+                if (!keyResponse.ok) {
+                    if (keyPayload.code === 'RECIPIENT_NOT_READY') {
+                        throw new Error('This person has not set up sharing yet.');
+                    }
+                    throw new Error(keyPayload.error || 'Unable to look up recipient identity key.');
+                }
+                const passphrase = await getOwnedFilePassphrase(fileId);
+                const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
+                    new TextEncoder().encode(passphrase),
+                    keyPayload.public_key_jwk
+                );
+                const shareResponse = await fetch(`/api/file/${encodeURIComponent(fileId)}/share-to-user`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': getCookieValue('csrf_token')
+                    },
+                    body: JSON.stringify({
+                        recipient_user_id: recipientID,
+                        wrapped_dek: SecureCrypto.toBase64(wrapped),
+                        dek_wrap_alg: 'RSA-OAEP-2048-v1',
+                        recipient_key_version: keyPayload.key_version
+                    })
+                });
+                if (!shareResponse.ok) {
+                    const payload = await shareResponse.json().catch(() => ({}));
+                    throw new Error(payload.error || 'Unable to share file.');
+                }
+                showInfoBanner('File shared successfully.');
             }
             showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
         } finally {
@@ -1443,6 +1549,16 @@
         }
 
         const payload = await response.json();
+        const identityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
+        if (payload?.file_access_key_envelope?.wrapped_dek_b64 && identityKey?.privateKeyJWK) {
+            const identityDEK = await SecureCrypto.unwrapFileDEK(payload.file_access_key_envelope, {
+                authenticated: true,
+                identityPrivateKeyJWK: identityKey.privateKeyJWK
+            });
+            const passphrase = new TextDecoder().decode(identityDEK);
+            SecureCrypto.cacheFileKey(fileId, passphrase);
+            return passphrase;
+        }
         let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
         if (AUTHENTICATED && !userKeyRaw && payload?.user_key_envelope?.wrapped_uk_b64) {
             try {
@@ -1973,6 +2089,15 @@
                         dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
                         dek_wrap_version: 1
                     };
+
+                    const identityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
+                    if (identityKey?.publicKeyJWK) {
+                        const identityWrapped = await SecureCrypto.wrapFileDEKForIdentity(dekBytes, identityKey.publicKeyJWK);
+                        finalizeEnvelopePayload.identity_wrapped_dek_b64 = SecureCrypto.toBase64(identityWrapped);
+                        finalizeEnvelopePayload.identity_dek_wrap_alg = 'RSA-OAEP-2048-v1';
+                        finalizeEnvelopePayload.identity_dek_wrap_version = 1;
+                        finalizeEnvelopePayload.identity_key_version = identityKey.keyVersion || 1;
+                    }
 
                     if (activeTunnel?.id) {
                         const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);

@@ -145,7 +145,6 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 		if opts == nil {
 			opts = &services.FinalizeUploadOptions{}
 		}
-
 		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
 		if decodeErr != nil {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -155,6 +154,7 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			})
 			return
 		}
+
 		opts.WrappedDEK = wrappedDEK
 		opts.DEKWrapAlg = req.DEKWrapAlg
 		opts.DEKWrapVersion = req.DEKWrapVersion
@@ -171,6 +171,10 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			}
 			opts.DEKWrapNonce = nonce
 		}
+	}
+	if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
+		return
 	}
 	if req.TunnelID != "" {
 		if opts == nil {
@@ -261,6 +265,30 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func applyIdentityFinalizeEnvelope(req *models.UploadFinalizeRequest, opts *services.FinalizeUploadOptions) error {
+	if req.IdentityWrappedDEKB64 == "" {
+		return nil
+	}
+	if opts == nil {
+		return fmt.Errorf("identity envelope requires an authenticated owner")
+	}
+	wrapped, err := base64.StdEncoding.DecodeString(req.IdentityWrappedDEKB64)
+	if err != nil {
+		return err
+	}
+	opts.IdentityWrappedDEK = wrapped
+	opts.IdentityDEKWrapAlg = req.IdentityDEKWrapAlg
+	opts.IdentityDEKWrapVersion = req.IdentityDEKWrapVersion
+	opts.IdentityKeyVersion = req.IdentityKeyVersion
+	if req.IdentityDEKWrapNonceB64 != "" {
+		opts.IdentityDEKWrapNonce, err = base64.StdEncoding.DecodeString(req.IdentityDEKWrapNonceB64)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *UploadHandler) Chunk(c *gin.Context) {

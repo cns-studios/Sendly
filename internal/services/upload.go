@@ -25,15 +25,20 @@ type Upload struct {
 }
 
 type FinalizeUploadOptions struct {
-	OwnerCNSUserID     *int64
-	OwnerCNSUserName   *string
-	TunnelID           string
-	TunnelExpiresAt    time.Time
-	WrappedDEK         []byte
-	DEKWrapAlg         string
-	DEKWrapNonce       []byte
-	DEKWrapVersion     int
-	RecipientEnvelopes []models.FileRecipientKeyEnvelope
+	OwnerCNSUserID         *int64
+	OwnerCNSUserName       *string
+	TunnelID               string
+	TunnelExpiresAt        time.Time
+	WrappedDEK             []byte
+	DEKWrapAlg             string
+	DEKWrapNonce           []byte
+	DEKWrapVersion         int
+	IdentityWrappedDEK     []byte
+	IdentityDEKWrapAlg     string
+	IdentityDEKWrapNonce   []byte
+	IdentityDEKWrapVersion int
+	IdentityKeyVersion     int
+	RecipientEnvelopes     []models.FileRecipientKeyEnvelope
 }
 
 func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem, tracker *Tracker) *Upload {
@@ -367,7 +372,29 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 	}
 
-	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, recipientEnvelopes); err != nil {
+	var identityEnvelope *models.FileAccessKeyEnvelope
+	if opts != nil && opts.OwnerCNSUserID != nil && len(opts.IdentityWrappedDEK) > 0 {
+		activeKey, err := u.db.GetActiveUserIdentityKey(ctx, *opts.OwnerCNSUserID)
+		if err != nil {
+			return nil, fmt.Errorf("owner identity key unavailable: %w", err)
+		}
+		keyVersion := activeKey.KeyVersion
+		if opts.IdentityKeyVersion > 0 && opts.IdentityKeyVersion != keyVersion {
+			return nil, fmt.Errorf("owner identity key version %d is not active", opts.IdentityKeyVersion)
+		}
+		identityEnvelope = &models.FileAccessKeyEnvelope{
+			FileID: session.FileID, RecipientCNSUserID: *opts.OwnerCNSUserID,
+			WrappedDEK: opts.IdentityWrappedDEK, DEKWrapAlg: opts.IdentityDEKWrapAlg,
+			DEKWrapNonce: opts.IdentityDEKWrapNonce, DEKWrapVersion: opts.IdentityDEKWrapVersion,
+			RecipientKeyVersion: keyVersion, AccessKind: "owner",
+			GrantedAt: time.Now(), CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		}
+		if identityEnvelope.DEKWrapVersion <= 0 {
+			identityEnvelope.DEKWrapVersion = 1
+		}
+	}
+
+	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, recipientEnvelopes, identityEnvelope); err != nil {
 		return nil, fmt.Errorf("error creating file record: %w", err)
 	}
 
