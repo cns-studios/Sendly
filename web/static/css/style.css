@@ -2180,6 +2180,35 @@ body.page-link #file-details {
     animation: slideInRight 0.3s ease;
 }
 
+body.page-link .upload-success-header { text-align: center; margin-bottom: 2rem; }
+body.page-link .upload-success-header h1 { margin: 0; font-size: 2.25rem; font-weight: 700; }
+body.page-link .upload-success-header p { margin: .5rem 0 0; color: #777; font-size: .95rem; }
+body.page-link .upload-success-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; width: min(900px, 100%); }
+body.page-link .share-users-panel,
+body.page-link .share-link-panel { background: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 16px; padding: 1.5rem; }
+body.page-link .share-users-panel h2,
+body.page-link .share-link-panel h2 { margin: 0 0 1rem; font-size: 1.1rem; }
+body.page-link .share-users-panel h3 { margin: 1.5rem 0 .75rem; font-size: .9rem; }
+body.page-link .share-recipient-row { display: flex; gap: .5rem; }
+body.page-link .share-recipient-row input,
+body.page-link .share-link-input { min-width: 0; flex: 1; border: 1px solid #C8C8C8; border-radius: 8px; padding: .75rem; font: inherit; }
+body.page-link .share-link-input { width: 100%; box-sizing: border-box; text-overflow: ellipsis; margin-bottom: .75rem; }
+body.page-link .share-send-button { width: 44px; min-width: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+body.page-link .share-send-button svg { width: 18px; height: 18px; }
+body.page-link .share-recipient-status { min-height: 1.2rem; margin: .5rem 0 0; color: #666; font-size: .8rem; }
+body.page-link .share-recipient-status.is-error { color: #B3261E; }
+body.page-link .share-recipient-status.is-valid { color: #00814F; }
+body.page-link .share-recent-recipients { display: flex; gap: .75rem; min-height: 70px; align-items: flex-start; }
+body.page-link .share-recipient-avatar { border: 0; background: transparent; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: .3rem; color: #333; font-size: .7rem; }
+body.page-link .share-recipient-avatar span { width: 36px; height: 36px; border-radius: 50%; background: #DFF7E8; color: #00814F; display: grid; place-items: center; font-weight: 700; }
+body.page-link .share-recent-empty { color: #888; font-size: .8rem; }
+body.page-link .share-link-panel { display: flex; flex-direction: column; }
+body.page-link .share-link-panel .share-another-file { margin-top: .75rem; }
+body.page-link .share-send-button.is-loading svg { animation: spin 1s linear infinite; }
+@media (max-width: 700px) {
+    body.page-link .upload-success-grid { grid-template-columns: 1fr; }
+}
+
 @keyframes slideInRight {
     from { opacity: 0; transform: translateX(1rem); }
     to { opacity: 1; transform: translateX(0); }

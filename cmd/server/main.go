@@ -146,6 +146,7 @@ func main() {
 	api.Use(middleware.CSRFMiddleware())
 	{
 		api.GET("/limits", pageHandler.Limits)
+		api.GET("/users/lookup", standardRateLimiter.Handler(), recentUploadsHandler.LookupUsers)
 		api.GET("/users/:id/identity-key", standardRateLimiter.Handler(), recentUploadsHandler.GetUserIdentityKey)
 
 		upload := api.Group("/upload")
@@ -173,6 +174,7 @@ func main() {
 		{
 			me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 			me.GET("/shared-with-me", recentUploadsHandler.SharedWithMe)
+			me.GET("/recent-share-recipients", recentUploadsHandler.RecentShareRecipients)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 			me.POST("/tunnels/start", tunnelHandler.Start)
 			me.POST("/tunnels/join", tunnelHandler.Join)

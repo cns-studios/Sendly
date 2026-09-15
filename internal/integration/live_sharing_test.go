@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -92,9 +93,39 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		c.Next()
 	})
 	router.GET("/api/users/:id/identity-key", recent.GetUserIdentityKey)
+	router.GET("/api/users/lookup", recent.LookupUsers)
 	router.POST("/api/file/:id/share-to-user", recent.ShareFileToUser)
 	router.GET("/api/me/shared-with-me", recent.SharedWithMe)
+	router.GET("/api/me/recent-share-recipients", recent.RecentShareRecipients)
 	router.GET("/api/me/files/:id/access", recent.FileAccess)
+
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("q") == "missing-user" {
+			_, _ = w.Write([]byte(`{"items":[]}`))
+			return
+		}
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"items":[{"id":%d,"username":"recipient-user","avatar":""}]}`, recipientID)))
+	}))
+	defer authServer.Close()
+	cfg.CNSAuthURL = authServer.URL
+
+	lookupRequest := httptest.NewRequest(http.MethodGet, "/api/users/lookup?q=recipient", nil)
+	lookupRequest.Header.Set("X-Test-User", fmt.Sprint(ownerID))
+	lookupRequest.AddCookie(&http.Cookie{Name: "auth_token", Value: "live-token"})
+	lookupResponse := httptest.NewRecorder()
+	router.ServeHTTP(lookupResponse, lookupRequest)
+	if lookupResponse.Code != http.StatusOK || !bytes.Contains(lookupResponse.Body.Bytes(), []byte("recipient-user")) {
+		t.Fatalf("user lookup match status=%d body=%s", lookupResponse.Code, lookupResponse.Body.String())
+	}
+	noMatchRequest := httptest.NewRequest(http.MethodGet, "/api/users/lookup?q=missing-user", nil)
+	noMatchRequest.Header.Set("X-Test-User", fmt.Sprint(ownerID))
+	noMatchRequest.AddCookie(&http.Cookie{Name: "auth_token", Value: "live-token"})
+	noMatchResponse := httptest.NewRecorder()
+	router.ServeHTTP(noMatchResponse, noMatchRequest)
+	if noMatchResponse.Code != http.StatusOK || !bytes.Contains(noMatchResponse.Body.Bytes(), []byte(`"items":[]`)) {
+		t.Fatalf("user lookup no-match status=%d body=%s", noMatchResponse.Code, noMatchResponse.Body.String())
+	}
 
 	lookup := requestAs(router, int(ownerID), http.MethodGet, fmt.Sprintf("/api/users/%d/identity-key", recipientID), nil, "")
 	if lookup.Code != http.StatusOK {
@@ -122,6 +153,10 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	shared := requestAs(router, int(ownerID), http.MethodPost, "/api/file/"+fileID+"/share-to-user", shareBody, "application/json")
 	if shared.Code != http.StatusOK {
 		t.Fatalf("share status=%d body=%s", shared.Code, shared.Body.String())
+	}
+	recentRecipients := requestAs(router, int(ownerID), http.MethodGet, "/api/me/recent-share-recipients", nil, "")
+	if recentRecipients.Code != http.StatusOK || !bytes.Contains(recentRecipients.Body.Bytes(), []byte(fmt.Sprintf(`"user_id":%d`, recipientID))) {
+		t.Fatalf("recent recipients status=%d body=%s", recentRecipients.Code, recentRecipients.Body.String())
 	}
 
 	listed := requestAs(router, int(recipientID), http.MethodGet, "/api/me/shared-with-me", nil, "")
