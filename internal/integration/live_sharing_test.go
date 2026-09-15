@@ -44,10 +44,17 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	rdb, err := storage.NewRedis(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rdb.Close()
 	if err := db.RunMigrations(context.Background(), cfg.MigrationsDir); err != nil {
 		t.Fatal(err)
 	}
 	recent := handlers.NewRecentUploadsHandler(cfg, db)
+	cfg.RateLimitMaxPerMinute = 2
+	lookupLimiter := middleware.NewRateLimiter(rdb, cfg.RateLimitMaxPerMinute, time.Minute)
 	ownerID := time.Now().UnixNano() % 1000000000
 	recipientID := ownerID + 1
 	noKeyID := ownerID + 2
@@ -93,7 +100,7 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		c.Next()
 	})
 	router.GET("/api/users/:id/identity-key", recent.GetUserIdentityKey)
-	router.GET("/api/users/lookup", recent.LookupUsers)
+	router.GET("/api/users/lookup", lookupLimiter.Handler(), recent.LookupUsers)
 	router.POST("/api/file/:id/share-to-user", recent.ShareFileToUser)
 	router.GET("/api/me/shared-with-me", recent.SharedWithMe)
 	router.GET("/api/me/recent-share-recipients", recent.RecentShareRecipients)
@@ -101,6 +108,10 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("x-service-key") != "live-service-key" {
+			http.Error(w, "missing service key", http.StatusUnauthorized)
+			return
+		}
 		if r.URL.Query().Get("q") == "missing-user" {
 			_, _ = w.Write([]byte(`{"items":[]}`))
 			return
@@ -109,6 +120,7 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	}))
 	defer authServer.Close()
 	cfg.CNSAuthURL = authServer.URL
+	cfg.CNSAuthServiceKey = "live-service-key"
 
 	lookupRequest := httptest.NewRequest(http.MethodGet, "/api/users/lookup?q=recipient", nil)
 	lookupRequest.Header.Set("X-Test-User", fmt.Sprint(ownerID))
@@ -125,6 +137,16 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	router.ServeHTTP(noMatchResponse, noMatchRequest)
 	if noMatchResponse.Code != http.StatusOK || !bytes.Contains(noMatchResponse.Body.Bytes(), []byte(`"items":[]`)) {
 		t.Fatalf("user lookup no-match status=%d body=%s", noMatchResponse.Code, noMatchResponse.Body.String())
+	}
+	for i := 0; i < 2; i++ {
+		rateRequest := httptest.NewRequest(http.MethodGet, "/api/users/lookup?q=recipient", nil)
+		rateRequest.Header.Set("X-Test-User", fmt.Sprint(ownerID))
+		rateRequest.AddCookie(&http.Cookie{Name: "auth_token", Value: "live-token"})
+		rateResponse := httptest.NewRecorder()
+		router.ServeHTTP(rateResponse, rateRequest)
+		if rateResponse.Code != http.StatusTooManyRequests {
+			t.Fatalf("lookup rate limit attempt %d status=%d body=%s", i+1, rateResponse.Code, rateResponse.Body.String())
+		}
 	}
 
 	lookup := requestAs(router, int(ownerID), http.MethodGet, fmt.Sprintf("/api/users/%d/identity-key", recipientID), nil, "")
