@@ -96,33 +96,18 @@
 
     async function ensureDeviceReady() {
         try {
-            authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-            authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            if (!authUserKeyRaw) {
-                authUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
-            const response = await fetch('/api/me/devices/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({
-                    device_id: authDeviceIdentity.deviceId,
-                    device_label: `${CNS_USERNAME || t('user_default')} device`,
-                    public_key_jwk: authDeviceIdentity.publicKeyJWK,
-                    key_algorithm: authDeviceIdentity.keyAlgorithm,
-                    key_version: authDeviceIdentity.keyVersion,
-                })
+            const result = await SecureCrypto.registerAuthenticatedDevice({
+                userId: CNS_USER_ID,
+                username: CNS_USERNAME,
+                csrfToken: getCookieValue('csrf_token'),
+                includeBootstrapEnvelope: true
             });
-            if (!response.ok) throw new Error('Device registration failed');
-            const payload = await response.json();
+            authDeviceIdentity = result.identity;
+            authUserKeyRaw = result.userKeyRaw;
+            const payload = result.payload;
             if (payload.needs_enrollment) {
                 showErrorBanner(t('toast_device_approve'));
                 return false;
-            }
-            if (payload.user_key_envelope?.wrapped_uk_b64 && !authUserKeyRaw) {
-                const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             }
             return true;
         } catch (error) {

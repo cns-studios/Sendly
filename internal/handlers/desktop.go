@@ -18,10 +18,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-
 type desktopHub struct {
-	mu      sync.Mutex
-	conns   map[string][]*websocket.Conn
+	mu    sync.Mutex
+	conns map[string][]*websocket.Conn
 }
 
 func newDesktopHub() *desktopHub {
@@ -40,8 +39,8 @@ func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileM
 
 	conns := h.conns[apiKeyID]
 	msg := map[string]interface{}{
-		"type":              "new_file",
-		"file":              meta,
+		"type":             "new_file",
+		"file":             meta,
 		"source_device_id": sourceDeviceID,
 	}
 
@@ -55,7 +54,6 @@ func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileM
 	}
 	h.conns[apiKeyID] = alive
 }
-
 
 type DesktopHandler struct {
 	cfg           *config.Config
@@ -91,8 +89,6 @@ func NewDesktopHandler(
 		hub:           newDesktopHub(),
 	}
 }
-
-
 
 func (h *DesktopHandler) VerifyKey(c *gin.Context) {
 	keyValue := c.Query("key")
@@ -157,7 +153,6 @@ func (h *DesktopHandler) OAuthVerify(c *gin.Context) {
 	})
 }
 
-
 func (h *DesktopHandler) UploadInit(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
 	user := middleware.GetCNSUser(c)
@@ -189,7 +184,6 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 		return
 	}
 
-	
 	respBody := gin.H{
 		"session_id":   resp.SessionID,
 		"file_id":      resp.FileID,
@@ -202,7 +196,6 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 
 	c.JSON(http.StatusOK, respBody)
 }
-
 
 func (h *DesktopHandler) UploadChunk(c *gin.Context) {
 	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
@@ -240,7 +233,6 @@ func (h *DesktopHandler) UploadChunk(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "chunk_index": chunkIndex, "uploaded_chunks": uploaded, "total_chunks": total})
 }
 
-
 func (h *DesktopHandler) UploadComplete(c *gin.Context) {
 	var req models.UploadCompleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -262,7 +254,6 @@ func (h *DesktopHandler) UploadComplete(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp)
 }
-
 
 func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
@@ -296,7 +287,7 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 				return
 			}
 
-			if _, trustedErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); trustedErr != nil {
+			if !trustedDevice(c, h.db, int64(user.ID), req.DeviceID) {
 				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "DEVICE_NOT_TRUSTED"})
 				return
 			}
@@ -381,10 +372,9 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 		return
 	}
 
-	
 	if key != nil {
 		if err := h.db.AssociateFileWithKey(c.Request.Context(), baseResp.FileID, key.ID); err != nil {
-		
+
 			fmt.Printf("Warning: failed to associate file %s with key %s: %v\n", baseResp.FileID, key.ID, err)
 		}
 	}
@@ -423,7 +413,7 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 
 	if meta != nil {
 		if channelID != "" {
-				h.hub.notify(channelID, meta.FileName, meta, req.DeviceID)
+			h.hub.notify(channelID, meta.FileName, meta, req.DeviceID)
 		}
 		c.JSON(http.StatusOK, models.DesktopFinalizeResponse{
 			FileID:      baseResp.FileID,
@@ -443,7 +433,6 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	})
 }
 
-
 func (h *DesktopHandler) UploadStatus(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	status, err := h.uploadService.GetAssemblyStatus(c.Request.Context(), sessionID)
@@ -453,7 +442,6 @@ func (h *DesktopHandler) UploadStatus(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"session_id": sessionID, "status": status})
 }
-
 
 func (h *DesktopHandler) ListFiles(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
@@ -494,7 +482,6 @@ func (h *DesktopHandler) ListFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
-
 func (h *DesktopHandler) GetFile(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
 	user := middleware.GetCNSUser(c)
@@ -531,7 +518,6 @@ func (h *DesktopHandler) GetFile(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, file.ToMetadata())
 }
-
 
 func (h *DesktopHandler) DownloadFile(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
@@ -608,8 +594,6 @@ func (h *DesktopHandler) DownloadFile(c *gin.Context) {
 	io.Copy(c.Writer, reader)
 }
 
-
-
 func (h *DesktopHandler) WebSocket(c *gin.Context) {
 	tokenQuery := c.Query("token")
 	if tokenQuery != "" {
@@ -673,7 +657,6 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 
 	h.hub.add("key:"+key.ID, conn)
 
-	
 	go func() {
 		defer conn.Close()
 		for {
