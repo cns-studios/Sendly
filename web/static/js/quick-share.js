@@ -181,6 +181,25 @@
         return new Uint8Array(wrapped);
     }
 
+    async function buildTunnelPeerEnvelope(secretBytes) {
+        if (!AUTHENTICATED || !activeTunnel?.id || !secretBytes) return null;
+        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/peer-wrap-key`, {
+            headers: buildHeaders()
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            if (payload.code === 'PEER_KEY_NOT_REQUIRED') return null;
+            throw new Error(payload.error || 'Failed to fetch tunnel peer key material');
+        }
+        if (!payload.public_key_jwk) return null;
+        const wrapped = await wrapWithPublicKey(secretBytes, payload.public_key_jwk);
+        return {
+            peer_wrapped_dek_b64: SecureCrypto.toBase64(wrapped),
+            peer_dek_wrap_alg: 'RSA-OAEP-2048-v1',
+            peer_dek_wrap_version: 1
+        };
+    }
+
     async function unwrapWithPrivateKey(wrappedBytes, privateKey) {
         const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedBytes);
         return new Uint8Array(raw);
@@ -870,6 +889,13 @@
                     envelopePayload.identity_dek_wrap_alg = 'RSA-OAEP-2048-v1';
                     envelopePayload.identity_dek_wrap_version = 1;
                     envelopePayload.identity_key_version = identityKey.keyVersion || 1;
+                }
+                if (activeTunnel?.peer_cns_user_id && activeTunnel.peer_cns_user_id !== CNS_USER_ID) {
+                    const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
+                    if (!peerEnvelope) {
+                        throw new Error('Cross-account tunnel upload requires a peer key envelope. Peer may not be ready yet.');
+                    }
+                    Object.assign(envelopePayload, peerEnvelope);
                 }
             } else if (ephemeralKeyPair) {
                 const wrapped = await wrapWithPublicKey(dekBytes, ephemeralKeyPair.publicKeyJWK);

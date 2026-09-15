@@ -276,6 +276,7 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	router.POST("/api/me/tunnels/start", tunnelHandler.Start)
 	router.POST("/api/me/tunnels/join", tunnelHandler.Join)
 	router.POST("/api/me/tunnels/:id/confirm", tunnelHandler.Confirm)
+	router.GET("/api/me/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 	router.POST("/api/upload/init", uploadHandler.Init)
 	router.POST("/api/upload/chunk", uploadHandler.Chunk)
 	router.POST("/api/upload/complete", uploadHandler.Complete)
@@ -392,6 +393,7 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	router.POST("/api/me/tunnels/start", tunnelHandler.Start)
 	router.POST("/api/me/tunnels/join", tunnelHandler.Join)
 	router.POST("/api/me/tunnels/:id/confirm", tunnelHandler.Confirm)
+	router.GET("/api/me/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 	router.POST("/api/upload/init", uploadHandler.Init)
 	router.POST("/api/upload/chunk", uploadHandler.Chunk)
 	router.POST("/api/upload/complete", uploadHandler.Complete)
@@ -403,6 +405,16 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 
 	initiatorDevice := "00000000-0000-4000-8000-000000000021"
 	peerDevice := "00000000-0000-4000-8000-000000000022"
+	peerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.CreateOrUpdateUserDevice(context.Background(), &models.UserDevice{
+		ID: peerDevice, CNSUserID: 991004, DeviceLabel: "live peer",
+		PublicKeyJWK: rsaPublicJWK(&peerKey.PublicKey), KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	startBody, _ := json.Marshal(models.TunnelStartRequest{Duration: "10m", DeviceID: initiatorDevice})
 	rec := requestAs(router, 991003, http.MethodPost, "/api/me/tunnels/start", startBody, "application/json")
 	if rec.Code != http.StatusOK {
@@ -410,7 +422,11 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	}
 	var started models.TunnelStartResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &started)
-	joinBody, _ := json.Marshal(models.TunnelJoinRequest{Code: started.Tunnel.Code, DeviceID: peerDevice})
+	joinBody, _ := json.Marshal(models.TunnelJoinRequest{
+		Code: started.Tunnel.Code, DeviceID: peerDevice,
+		PublicKeyJWK: rsaPublicJWK(&peerKey.PublicKey),
+		KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+	})
 	rec = requestAs(router, 991004, http.MethodPost, "/api/me/tunnels/join", joinBody, "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("join status=%d body=%s", rec.Code, rec.Body.String())
@@ -424,6 +440,19 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	rec = requestAs(router, 991004, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("peer confirm status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	peerKeyResp := requestAs(router, 991003, http.MethodGet,
+		"/api/me/tunnels/"+started.Tunnel.ID+"/peer-wrap-key", nil, "")
+	if peerKeyResp.Code != http.StatusOK {
+		t.Fatalf("peer key status=%d body=%s", peerKeyResp.Code, peerKeyResp.Body.String())
+	}
+	var peerKeyPayload models.TunnelPeerWrapKeyResponse
+	if err := json.Unmarshal(peerKeyResp.Body.Bytes(), &peerKeyPayload); err != nil {
+		t.Fatal(err)
+	}
+	peerWrapped, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &peerKey.PublicKey, []byte("peer-dek"), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	initBody, _ := json.Marshal(models.UploadInitRequest{FileName: "cross-account.txt", FileSize: 5, TotalChunks: 1, ChunkSize: 5, TunnelID: started.Tunnel.ID})
@@ -454,7 +483,7 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 		SessionID: initResp.SessionID, TunnelID: started.Tunnel.ID,
 		WrappedDEKB64: base64.StdEncoding.EncodeToString([]byte("owner-dek")),
 		DEKWrapAlg:    "RSA-OAEP-2048-v1", DEKWrapVersion: 1,
-		PeerWrappedDEKB64: base64.StdEncoding.EncodeToString([]byte("peer-dek")),
+		PeerWrappedDEKB64: base64.StdEncoding.EncodeToString(peerWrapped),
 		PeerDEKWrapAlg:    "RSA-OAEP-2048-v1", PeerDEKWrapVersion: 1,
 	})
 	rec = requestAs(router, 991003, http.MethodPost, "/api/upload/finalize", finalizeBody, "application/json")
@@ -464,8 +493,20 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	var finalized models.UploadFinalizeResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &finalized)
 	rec = requestAs(router, 991004, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access?device_id="+peerDevice, nil, "")
-	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("cGVlci1kZWs=")) {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("recipient access status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var access models.FileAccessResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &access); err != nil {
+		t.Fatal(err)
+	}
+	storedPeerWrapped, err := base64.StdEncoding.DecodeString(access.FileKeyEnvelope.WrappedDEKB64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decrypted, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, peerKey, storedPeerWrapped, nil)
+	if err != nil || string(decrypted) != "peer-dek" {
+		t.Fatalf("peer envelope did not round-trip: %v", err)
 	}
 }
 

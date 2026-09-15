@@ -248,18 +248,32 @@
             </div>
 
             <div id="stage-output" class="hidden form-section">
-                <div class="output-header">
-                    <div class="success-badge">
-                        {{.t.link_success_badge}}
-                    </div>
+                <div class="upload-success-header">
+                    <h1>{{.t.uploaded_title}}</h1>
+                    <p id="uploaded-file-meta"></p>
                 </div>
-
-                <div class="info-box">
-                    <p id="out-expiry-label" class="info-text">{{.t.link_storage_policy}}</p>
+                <div class="upload-success-grid">
+                    {{if .authenticated}}
+                    <section class="share-users-panel" aria-labelledby="share-users-title">
+                        <h2 id="share-users-title">{{.t.share_users_title}}</h2>
+                        <div class="share-recipient-row">
+                            <input id="share-recipient-input" type="text" autocomplete="off" placeholder="{{.t.share_recipient_placeholder}}" aria-describedby="share-recipient-status">
+                            <button id="share-recipient-send" class="btn-accent share-send-button" type="button" aria-label="{{.t.share_send}}" title="{{.t.share_send}}">
+                                <i data-lucide="send"></i>
+                            </button>
+                        </div>
+                        <p id="share-recipient-status" class="share-recipient-status" aria-live="polite"></p>
+                        <h3>{{.t.share_recent_title}}</h3>
+                        <div id="share-recent-recipients" class="share-recent-recipients"></div>
+                    </section>
+                    {{end}}
+                    <section class="share-link-panel" aria-labelledby="share-link-title">
+                        <h2 id="share-link-title">{{.t.share_link_title}}</h2>
+                        <input id="share-link-input" class="share-link-input" type="text" readonly aria-label="{{.t.share_link_title}}">
+                        <button id="share-link-copy" class="btn-accent btn-large" type="button">{{.t.share_copy}}</button>
+                        <button id="share-another-file" class="btn btn-secondary btn-large" type="button">{{.t.share_another}}</button>
+                    </section>
                 </div>
-                <button onclick="location.reload()" class="btn btn-secondary btn-large" style="margin-top: auto;">
-                    {{.t.link_start_over}}
-                </button>
             </div>
 
         </div>

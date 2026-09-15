@@ -32,6 +32,7 @@
     let authDeviceIdentity = null;
     let authUserKeyRaw = null;
     let lastShareUrl = '';
+    let uploadedFileID = '';
     let idleCopyDone = false;
     let idleCopyBannerShown = false;
 
@@ -47,6 +48,14 @@
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
     const outExpiryLabel = document.getElementById('out-expiry-label');
+    const uploadedFileMeta = document.getElementById('uploaded-file-meta');
+    const shareRecipientInput = document.getElementById('share-recipient-input');
+    const shareRecipientSend = document.getElementById('share-recipient-send');
+    const shareRecipientStatus = document.getElementById('share-recipient-status');
+    const shareRecentRecipients = document.getElementById('share-recent-recipients');
+    const shareLinkInput = document.getElementById('share-link-input');
+    const shareLinkCopy = document.getElementById('share-link-copy');
+    const shareAnotherFile = document.getElementById('share-another-file');
     const shareUrlModal = document.getElementById('share-url-modal');
     const shareUrlText = document.getElementById('shareUrlText');
     const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
@@ -55,6 +64,15 @@
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
+    let recipientLookupTimer = null;
+    let recipientMatches = [];
+    let shareInFlight = false;
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[char]));
+    }
 
     function getCookieValue(name) {
         const value = `; ${document.cookie}`;
@@ -123,6 +141,13 @@
         dropZone.addEventListener('drop', handleDrop);
         fileInput.addEventListener('change', handleFileSelect);
         finalizeBtn.addEventListener('click', handleFinalize);
+        shareRecipientInput?.addEventListener('input', handleRecipientInput);
+        shareRecipientSend?.addEventListener('click', () => {
+            const match = recipientMatches[0];
+            if (match) shareFileWithUser(match);
+        });
+        shareLinkCopy?.addEventListener('click', copyUploadedLink);
+        shareAnotherFile?.addEventListener('click', resetUpload);
 
         shareUrlModal?.addEventListener('click', (e) => {
             if (e.target === shareUrlModal) hideShareUrlModal();
@@ -137,6 +162,124 @@
         });
 
         shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
+    }
+
+    function setRecipientStatus(message, type = '') {
+        if (!shareRecipientStatus) return;
+        shareRecipientStatus.textContent = message;
+        shareRecipientStatus.className = `share-recipient-status${type ? ` is-${type}` : ''}`;
+    }
+
+    async function handleRecipientInput() {
+        const query = shareRecipientInput.value.trim();
+        recipientMatches = [];
+        shareRecipientSend.disabled = true;
+        setRecipientStatus(query.length < 3 ? '' : t('share_checking'));
+        if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
+        if (query.length < 3) return;
+        recipientLookupTimer = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/users/lookup?q=${encodeURIComponent(query)}`, {
+                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(payload.error || t('share_lookup_failed'));
+                recipientMatches = payload.items || [];
+                const match = recipientMatches[0];
+                if (!match) {
+                    setRecipientStatus(t('share_no_user'), 'error');
+                } else if (Number(match.user_id) === Number(CNS_USER_ID)) {
+                    recipientMatches = [];
+                    setRecipientStatus(t('share_self_error'), 'error');
+                } else {
+                    setRecipientStatus(tpl('share_user_found', {name: match.username}), 'valid');
+                    shareRecipientSend.disabled = false;
+                }
+            } catch (error) {
+                setRecipientStatus(error.message, 'error');
+            }
+        }, 300);
+    }
+
+    async function shareFileWithUser(recipient) {
+        if (shareInFlight || !recipient || !generatedPassword) return;
+        shareInFlight = true;
+        shareRecipientSend.disabled = true;
+        shareRecipientSend.classList.add('is-loading');
+        setRecipientStatus(t('share_sending'));
+        try {
+            let keyPayload;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const keyResponse = await fetch(`/api/users/${encodeURIComponent(recipient.user_id)}/identity-key`, {
+                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                });
+                keyPayload = await keyResponse.json().catch(() => ({}));
+                if (!keyResponse.ok) {
+                    if (keyPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
+                    throw new Error(keyPayload.error || t('share_failed'));
+                }
+                const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
+                    new TextEncoder().encode(generatedPassword), keyPayload.public_key_jwk
+                );
+                const response = await fetch(`/api/file/${encodeURIComponent(uploadedFileID)}/share-to-user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
+                    body: JSON.stringify({
+                        recipient_user_id: Number(recipient.user_id),
+                        wrapped_dek: SecureCrypto.toBase64(wrapped),
+                        dek_wrap_alg: 'RSA-OAEP-2048-v1',
+                        recipient_key_version: keyPayload.key_version
+                    })
+                });
+                if (response.ok) {
+                    setRecipientStatus(t('share_success'), 'valid');
+                    shareRecipientSend.innerHTML = '<i data-lucide="check"></i>';
+                    if (window.lucide?.createIcons) lucide.createIcons();
+                    setTimeout(() => { shareRecipientSend.innerHTML = '<i data-lucide="send"></i>'; if (window.lucide?.createIcons) lucide.createIcons(); }, 2000);
+                    return;
+                }
+                const errorPayload = await response.json().catch(() => ({}));
+                if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH' && attempt === 0) continue;
+                if (errorPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
+                if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH') throw new Error(t('share_key_changed'));
+                throw new Error(errorPayload.error || t('share_failed'));
+            }
+        } catch (error) {
+            setRecipientStatus(error.message, 'error');
+            showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
+        } finally {
+            shareInFlight = false;
+            shareRecipientSend.classList.remove('is-loading');
+            shareRecipientSend.disabled = recipientMatches.length === 0;
+        }
+    }
+
+    async function copyUploadedLink() {
+        if (!shareLinkInput?.value) return;
+        const ok = await copyToClipboard(shareLinkInput.value, true);
+        if (ok) {
+            shareLinkCopy.textContent = t('share_copied');
+            setTimeout(() => { shareLinkCopy.textContent = t('share_copy'); }, 2000);
+        }
+    }
+
+    async function loadRecentShareRecipients() {
+        if (!shareRecentRecipients || !AUTHENTICATED) return;
+        shareRecentRecipients.innerHTML = `<span class="share-recent-empty">${t('share_loading')}</span>`;
+        try {
+            const response = await fetch('/api/me/recent-share-recipients', { headers: { 'X-CSRF-Token': getCookieValue('csrf_token') } });
+            const payload = await response.json();
+            const items = payload.items || [];
+            shareRecentRecipients.innerHTML = items.length ? items.map((item) => `
+                <button class="share-recipient-avatar" type="button" data-user-id="${item.user_id}" data-username="${escapeHtml(item.username)}">
+                    <span>${escapeHtml((item.username || '?').slice(0, 2).toUpperCase())}</span>${escapeHtml(item.username)}
+                </button>`).join('') : `<span class="share-recent-empty">${t('share_recent_empty')}</span>`;
+            shareRecentRecipients.querySelectorAll('[data-user-id]').forEach((button) => button.addEventListener('click', () => shareFileWithUser({
+                user_id: button.dataset.userId, username: button.dataset.username
+            })));
+        } catch (error) {
+            shareRecentRecipients.innerHTML = `<span class="share-recent-empty">${t('share_lookup_failed')}</span>`;
+        }
     }
 
     function handleZoneClick(e) {
@@ -428,22 +571,17 @@
         if (response.file_id && generatedPassword) SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         lastShareUrl = fullShareUrl;
-
-        setDropZoneState('success', selectedFile?.name);
-        const zoneIcon = dropZone.querySelector('.drop-zone-icon');
-        const zoneHeading = dropZone.querySelector('h3');
-        const zoneSubtext = dropZone.querySelector('p');
-        zoneIcon.setAttribute('data-lucide', 'circle-check-big');
-        zoneHeading.textContent = t('status_complete');
-        zoneSubtext.textContent = t('state_click_share_link');
-        if (window.lucide && lucide.createIcons) lucide.createIcons();
+        uploadedFileID = response.file_id || '';
+        if (uploadedFileMeta) {
+            uploadedFileMeta.textContent = `${selectedFile?.name || ''} · ${SecureCrypto.formatFileSize(selectedFile?.size || 0)}`;
+        }
+        if (shareLinkInput) shareLinkInput.value = fullShareUrl;
+        loadRecentShareRecipients().catch(() => {});
 
         uploadSessionId = null;
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
-        stageOutput.classList.add('hidden');
-
-        showShareUrlModal(fullShareUrl);
+        stageOutput.classList.remove('hidden');
     }
 
     function setupIdleCopy(text) {
@@ -579,7 +717,7 @@
 
     function resetUpload() {
         clearPendingCountdown();
-        selectedFile = null; generatedPassword = null;
+        selectedFile = null; generatedPassword = null; uploadedFileID = '';
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;

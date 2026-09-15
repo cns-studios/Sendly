@@ -860,6 +860,24 @@ func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, 
 	return &envelope, nil
 }
 
+func (p *Postgres) GetRecentShareRecipientIDs(ctx context.Context, ownerUserID int64, limit int) ([]int64, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 8
+	}
+	var ids []int64
+	err := p.db.SelectContext(ctx, &ids, `
+		SELECT recipient_cns_user_id
+		FROM file_access_key_envelopes
+		WHERE access_kind = 'share' AND file_id IN (
+			SELECT id FROM files WHERE owner_cns_user_id = $1
+		)
+		GROUP BY recipient_cns_user_id
+		ORDER BY MAX(granted_at) DESC
+		LIMIT $2
+	`, ownerUserID, limit)
+	return ids, err
+}
+
 func (p *Postgres) GetSharedWithMeFiles(ctx context.Context, userID int64, page, perPage int) ([]models.OwnedFileListItem, int, error) {
 	offset := (page - 1) * perPage
 	var total int

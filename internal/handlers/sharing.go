@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"encoding/base64"
+	"encoding/json"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +22,7 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
 		return
 	}
+
 	targetID, err := strconv.ParseInt(strings.TrimSpace(c.Param("id")), 10, 64)
 	if err != nil || targetID <= 0 {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid user id", Code: "INVALID_USER_ID"})
@@ -37,6 +41,84 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 		"public_key_jwk": key.PublicKeyJWK,
 		"key_version":    key.KeyVersion,
 	})
+}
+
+func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	query := strings.TrimSpace(c.Query("q"))
+	if len([]rune(query)) < 3 {
+		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}})
+		return
+	}
+	if h.cfg.CNSAuthURL == "" {
+		c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{Error: "User lookup unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
+		return
+	}
+	token, err := c.Cookie("auth_token")
+	if err != nil || token == "" {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet,
+		strings.TrimSuffix(h.cfg.CNSAuthURL, "/")+"/api/users/lookup?q="+url.QueryEscape(query), nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		return
+	}
+	var payload struct {
+		Items []struct {
+			ID       int64  `json:"id"`
+			Username string `json:"username"`
+			Avatar   string `json:"avatar,omitempty"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		return
+	}
+	items := make([]gin.H, 0, len(payload.Items))
+	for _, item := range payload.Items {
+		items = append(items, gin.H{"user_id": item.ID, "username": item.Username, "avatar": item.Avatar})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (h *RecentUploadsHandler) RecentShareRecipients(c *gin.Context) {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	ids, err := h.db.GetRecentShareRecipientIDs(c.Request.Context(), int64(user.ID), 8)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch recent recipients", Code: "RECENT_RECIPIENTS_FAILED"})
+		return
+	}
+	items := make([]gin.H, 0, len(ids))
+	for _, id := range ids {
+		items = append(items, gin.H{"user_id": id, "username": strconv.FormatInt(id, 10)})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
 func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {
