@@ -227,6 +227,97 @@ const SecureCrypto = (function() {
         return new Uint8Array(raw);
     }
 
+    function parseEnvelope(envelope) {
+        const wrapAlg = String(envelope?.dek_wrap_alg || '').trim().toUpperCase();
+        if (!envelope?.wrapped_dek_b64) throw new Error('Missing file key envelope');
+        return {
+            wrappedBytes: fromBase64(envelope.wrapped_dek_b64),
+            wrapAlg,
+            nonceBytes: envelope.dek_wrap_nonce_b64 ? fromBase64(envelope.dek_wrap_nonce_b64) : new Uint8Array()
+        };
+    }
+
+    async function unwrapFileDEK(envelope, {
+        authenticated = !!window.CONFIG?.authenticated,
+        deviceIdentity = null,
+        userKeyRaw = null,
+        ephemeralPrivateKey = null
+    } = {}) {
+        const parsed = parseEnvelope(envelope);
+        if (parsed.wrapAlg.startsWith('RAW-DEK')) {
+            if (authenticated) throw new Error('Raw file keys are not valid for authenticated access');
+            return parsed.wrappedBytes;
+        }
+        if (parsed.wrapAlg.startsWith('RSA-OAEP')) {
+            const privateKey = ephemeralPrivateKey || (deviceIdentity && deviceIdentity.privateKeyJWK
+                ? await crypto.subtle.importKey('jwk', deviceIdentity.privateKeyJWK,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'])
+                : null);
+            if (!privateKey) throw new Error('No private key available for file envelope');
+            const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, parsed.wrappedBytes);
+            return new Uint8Array(raw);
+        }
+        if (!authenticated) throw new Error('Unsupported key envelope for guest decryption');
+        if (!userKeyRaw) throw new Error('Missing user key for file envelope');
+        return unwrapSecretWithUserKey(parsed.wrappedBytes, parsed.nonceBytes, userKeyRaw);
+    }
+
+    async function wrapFileDEKForDevice(dekBytes, publicKeyJWK) {
+        return wrapUserKeyForDevice(dekBytes, publicKeyJWK);
+    }
+
+    async function registerAuthenticatedDevice({
+        endpoint = '/api/me/devices/register',
+        userId = window.CONFIG?.cnsUserId || 0,
+        username = window.CONFIG?.cnsUsername || '',
+        csrfToken = '',
+        includeBootstrapEnvelope = true
+    } = {}) {
+        const identity = await getOrCreateDeviceIdentity();
+        let userKeyRaw = getUserKeyRaw(userId);
+        let bootstrapKey = null;
+        let wrappedUserKeyB64 = '';
+        let ukWrapAlg = '';
+        let ukWrapMeta = {};
+
+        if (includeBootstrapEnvelope) {
+            if (!userKeyRaw) {
+                bootstrapKey = generateUserKeyRaw();
+                userKeyRaw = bootstrapKey;
+            }
+            wrappedUserKeyB64 = toBase64(await wrapUserKeyForDevice(userKeyRaw, identity.publicKeyJWK));
+            ukWrapAlg = 'RSA-OAEP-2048-v1';
+            ukWrapMeta = { type: 'self-wrap', device_id: identity.deviceId };
+        }
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                device_id: identity.deviceId,
+                device_label: `${username || t('user_default')} device`,
+                public_key_jwk: identity.publicKeyJWK,
+                key_algorithm: identity.keyAlgorithm,
+                key_version: identity.keyVersion,
+                wrapped_user_key_b64: wrappedUserKeyB64,
+                uk_wrap_alg: ukWrapAlg,
+                uk_wrap_meta: ukWrapMeta
+            })
+        });
+        if (!response.ok) {
+            const payload = await response.json().catch(() => ({}));
+            throw new Error(payload.error || 'Device registration failed');
+        }
+        const payload = await response.json().catch(() => ({}));
+        if (!payload.needs_enrollment && !userKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
+            userKeyRaw = await unwrapUserKeyForDevice(fromBase64(payload.user_key_envelope.wrapped_uk_b64), identity.privateKeyJWK);
+        }
+        if (!payload.needs_enrollment && userKeyRaw) saveUserKeyRaw(userId, userKeyRaw);
+        return { identity, userKeyRaw, payload };
+    }
+
 
     async function encrypt(data, password) {
         const salt = generateRandomBytes(CONFIG.saltLength);
@@ -578,6 +669,10 @@ reject(new Error(t('error_failed_read_file')));
         unwrapSecretWithUserKey,
         wrapUserKeyForDevice,
         unwrapUserKeyForDevice,
+        parseEnvelope,
+        unwrapFileDEK,
+        wrapFileDEKForDevice,
+        registerAuthenticatedDevice,
         cacheFileKey,
         getCachedFileKey,
         removeCachedFileKey

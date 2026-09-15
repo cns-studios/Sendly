@@ -288,63 +288,20 @@
     }
 
     async function registerCurrentDevice(allowEnrollmentRequest = true, endpoint = '/api/me/devices/register') {
-        authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-        authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-
-        let bootstrapUserKeyRaw = null;
-        let wrappedUserKeyB64 = '';
-        let ukWrapAlg = '';
-        let ukWrapMeta = {};
-
-        if (allowEnrollmentRequest) {
-            if (!authUserKeyRaw) {
-                bootstrapUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-                authUserKeyRaw = bootstrapUserKeyRaw;
-            }
-
-            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, authDeviceIdentity.publicKeyJWK);
-            wrappedUserKeyB64 = SecureCrypto.toBase64(wrappedUserKey);
-            ukWrapAlg = 'RSA-OAEP-2048-v1';
-            ukWrapMeta = { type: 'self-wrap', device_id: authDeviceIdentity.deviceId };
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                device_id: authDeviceIdentity.deviceId,
-                device_label: `${CNS_USERNAME || t('user_default')} device`,
-                public_key_jwk: authDeviceIdentity.publicKeyJWK,
-                key_algorithm: authDeviceIdentity.keyAlgorithm,
-                key_version: authDeviceIdentity.keyVersion,
-                wrapped_user_key_b64: wrappedUserKeyB64,
-                uk_wrap_alg: ukWrapAlg,
-                uk_wrap_meta: ukWrapMeta
-            })
+        const result = await SecureCrypto.registerAuthenticatedDevice({
+            endpoint,
+            userId: CNS_USER_ID,
+            username: CNS_USERNAME,
+            csrfToken: getCookieValue('csrf_token'),
+            includeBootstrapEnvelope: allowEnrollmentRequest
         });
-
-        if (!response.ok) {
-            const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Device registration failed');
-        }
-
-        const payload = await response.json().catch(() => ({}));
+        authDeviceIdentity = result.identity;
+        authUserKeyRaw = result.userKeyRaw;
+        const payload = result.payload;
         isDeviceUntrusted = !!payload.needs_enrollment;
         setRecoveryActionVisible(isDeviceUntrusted);
 
         if (!payload.needs_enrollment) {
-            if (!authUserKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
-                const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-            }
-
-            if (!authUserKeyRaw && bootstrapUserKeyRaw) {
-                authUserKeyRaw = bootstrapUserKeyRaw;
-            }
-
             if (authUserKeyRaw) {
                 SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             }
@@ -1464,31 +1421,19 @@
                 });
                 if (fallbackRes.ok) {
                     const payload = await fallbackRes.json();
-                    const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
-                    const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
-                    let dekBytes;
-                    if (dekWrapAlg.startsWith('RAW-DEK')) {
-                        dekBytes = wrappedDEK;
-                    } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
-                        if (!AUTHENTICATED) {
-                            if (!ephemeralKeyPair) throw new Error('Ephemeral key not available for guest decryption.');
-                            const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
-                            dekBytes = new Uint8Array(raw);
-                        } else {
-                            dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
-                        }
-                    } else {
-                        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-                        if (!userKeyRaw) {
-                            const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
-                            if (!wrappedUKB64) throw new Error('Unable to access decryption key for this file on this device.');
-                            const wrappedUK = SecureCrypto.fromBase64(wrappedUKB64);
-                            userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-                        }
-                        const nonce = payload.file_key_envelope.dek_wrap_nonce_b64 ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64) : new Uint8Array();
-                        dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
+                    let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+                    if (!userKeyRaw && payload?.user_key_envelope?.wrapped_uk_b64) {
+                        userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(
+                            SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64),
+                            authDeviceIdentity.privateKeyJWK
+                        );
+                        SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
                     }
+                    const dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
+                        authenticated: true,
+                        deviceIdentity: authDeviceIdentity,
+                        userKeyRaw
+                    });
                     const passphrase = new TextDecoder().decode(dekBytes);
                     SecureCrypto.cacheFileKey(fileId, passphrase);
                     return passphrase;
@@ -1498,63 +1443,35 @@
         }
 
         const payload = await response.json();
-        const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
-        const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
-        let dekBytes;
-
-        if (dekWrapAlg.startsWith('RAW-DEK')) {
-            dekBytes = wrappedDEK;
-        } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
-            if (ephemeralKeyPair?.privateKey) {
-                try {
-                    const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
-                    dekBytes = new Uint8Array(raw);
-                } catch (error) {
-                    throw new Error('Failed to decrypt file key with ephemeral key.');
-                }
-            } else if (!AUTHENTICATED) {
-                throw new Error('Ephemeral key not available for guest decryption.');
-            } else {
-                try {
-                    dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
-                } catch (error) {
-                    const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                    lockedError.code = 'FILE_LOCKED';
-                    throw lockedError;
-                }
-            }
-        } else {
-            if (!AUTHENTICATED) {
-                throw new Error('Unsupported key envelope for guest decryption.');
-            }
-            let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            if (!userKeyRaw) {
-                const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
-                if (!wrappedUKB64) {
-                    throw new Error('Unable to access decryption key for this file on this device.');
-                }
-
-                const wrappedUK = SecureCrypto.fromBase64(wrappedUKB64);
-                try {
-                    userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                } catch (error) {
-                    const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                    lockedError.code = 'FILE_LOCKED';
-                    throw lockedError;
-                }
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-            }
-
-            const nonce = payload.file_key_envelope.dek_wrap_nonce_b64
-                ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64)
-                : new Uint8Array();
+        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
+        if (AUTHENTICATED && !userKeyRaw && payload?.user_key_envelope?.wrapped_uk_b64) {
             try {
-                dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
+                userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(
+                    SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64),
+                    authDeviceIdentity.privateKeyJWK
+                );
+                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
             } catch (error) {
                 const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
                 lockedError.code = 'FILE_LOCKED';
                 throw lockedError;
             }
+        }
+        let dekBytes;
+        try {
+            dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
+                authenticated: AUTHENTICATED,
+                deviceIdentity: authDeviceIdentity,
+                userKeyRaw,
+                ephemeralPrivateKey: ephemeralKeyPair?.privateKey
+            });
+        } catch (error) {
+            if (AUTHENTICATED && !isLockedFileError(error)) {
+                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
+                lockedError.code = 'FILE_LOCKED';
+                throw lockedError;
+            }
+            throw error;
         }
         const passphrase = new TextDecoder().decode(dekBytes);
         SecureCrypto.cacheFileKey(fileId, passphrase);

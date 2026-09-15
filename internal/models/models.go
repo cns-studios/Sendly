@@ -42,14 +42,14 @@ type FileKeyEnvelope struct {
 }
 
 type FileRecipientKeyEnvelope struct {
-	FileID            string    `db:"file_id" json:"file_id"`
-	RecipientCNSUserID int64    `db:"recipient_cns_user_id" json:"recipient_cns_user_id"`
-	RecipientDeviceID string    `db:"recipient_device_id" json:"recipient_device_id"`
-	WrappedDEK        []byte    `db:"wrapped_dek" json:"-"`
-	DEKWrapAlg        string    `db:"dek_wrap_alg" json:"dek_wrap_alg"`
-	DEKWrapNonce      []byte    `db:"dek_wrap_nonce" json:"-"`
-	DEKWrapVersion    int       `db:"dek_wrap_version" json:"dek_wrap_version"`
-	CreatedAt         time.Time `db:"created_at" json:"created_at"`
+	FileID             string    `db:"file_id" json:"file_id"`
+	RecipientCNSUserID int64     `db:"recipient_cns_user_id" json:"recipient_cns_user_id"`
+	RecipientDeviceID  string    `db:"recipient_device_id" json:"recipient_device_id"`
+	WrappedDEK         []byte    `db:"wrapped_dek" json:"-"`
+	DEKWrapAlg         string    `db:"dek_wrap_alg" json:"dek_wrap_alg"`
+	DEKWrapNonce       []byte    `db:"dek_wrap_nonce" json:"-"`
+	DEKWrapVersion     int       `db:"dek_wrap_version" json:"dek_wrap_version"`
+	CreatedAt          time.Time `db:"created_at" json:"created_at"`
 }
 
 type UserDevice struct {
@@ -166,15 +166,15 @@ type UploadCompleteResponse struct {
 }
 
 type UploadFinalizeRequest struct {
-	SessionID       string `json:"session_id" binding:"required"`
-	Duration        string `json:"duration"`
-	TunnelID        string `json:"tunnel_id"`
-	DeviceID        string `json:"device_id"`
-	WrappedDEKB64   string `json:"wrapped_dek_b64"`
+	SessionID           string `json:"session_id" binding:"required"`
+	Duration            string `json:"duration"`
+	TunnelID            string `json:"tunnel_id"`
+	DeviceID            string `json:"device_id"`
+	WrappedDEKB64       string `json:"wrapped_dek_b64"`
 	PeerWrappedDEKB64   string `json:"peer_wrapped_dek_b64"`
-	DEKWrapAlg      string `json:"dek_wrap_alg"`
-	DEKWrapNonceB64 string `json:"dek_wrap_nonce_b64"`
-	DEKWrapVersion  int    `json:"dek_wrap_version"`
+	DEKWrapAlg          string `json:"dek_wrap_alg"`
+	DEKWrapNonceB64     string `json:"dek_wrap_nonce_b64"`
+	DEKWrapVersion      int    `json:"dek_wrap_version"`
 	PeerDEKWrapAlg      string `json:"peer_dek_wrap_alg"`
 	PeerDEKWrapNonceB64 string `json:"peer_dek_wrap_nonce_b64"`
 	PeerDEKWrapVersion  int    `json:"peer_dek_wrap_version"`
@@ -350,20 +350,25 @@ func (e *AppError) Error() string {
 }
 
 var (
-	ErrInvalidDuration    = &AppError{Code: "INVALID_DURATION", Message: "invalid duration specified"}
-	ErrFileTooLarge       = &AppError{Code: "FILE_TOO_LARGE", Message: "file exceeds maximum size limit"}
-	ErrFileNotFound       = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
-	ErrFileExpired        = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}
-	ErrFileDeleted        = &AppError{Code: "FILE_DELETED", Message: "file has been deleted"}
-	ErrDeviceNotFound     = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}
-	ErrSessionNotFound    = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
-	ErrSessionExpired     = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}
-	ErrUploadNotPending   = &AppError{Code: "UPLOAD_NOT_PENDING", Message: "upload is no longer pending"}
-	ErrInvalidChunk       = &AppError{Code: "INVALID_CHUNK", Message: "invalid chunk index"}
-	ErrChunkAlreadyExists = &AppError{Code: "CHUNK_EXISTS", Message: "chunk already uploaded"}
-	ErrUploadIncomplete   = &AppError{Code: "UPLOAD_INCOMPLETE", Message: "not all chunks have been uploaded"}
-	ErrRateLimited        = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
-	ErrInvalidCode        = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
+	ErrInvalidDuration          = &AppError{Code: "INVALID_DURATION", Message: "invalid duration specified"}
+	ErrFileTooLarge             = &AppError{Code: "FILE_TOO_LARGE", Message: "file exceeds maximum size limit"}
+	ErrFileNotFound             = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
+	ErrFileExpired              = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}
+	ErrFileDeleted              = &AppError{Code: "FILE_DELETED", Message: "file has been deleted"}
+	ErrDeviceNotFound           = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}
+	ErrWrappedUserKeyRequired   = &AppError{Code: "WRAPPED_UK_REQUIRED", Message: "wrapped user key is required"}
+	ErrDeviceNotAuthorized      = &AppError{Code: "DEVICE_NOT_AUTHORIZED", Message: "device does not belong to user"}
+	ErrApproverNotTrusted       = &AppError{Code: "APPROVER_NOT_TRUSTED", Message: "approver device is not trusted"}
+	ErrEnrollmentNotPending     = &AppError{Code: "ENROLLMENT_NOT_PENDING", Message: "enrollment is no longer pending"}
+	ErrVerificationCodeMismatch = &AppError{Code: "VERIFICATION_CODE_MISMATCH", Message: "verification code mismatch"}
+	ErrSessionNotFound          = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
+	ErrSessionExpired           = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}
+	ErrUploadNotPending         = &AppError{Code: "UPLOAD_NOT_PENDING", Message: "upload is no longer pending"}
+	ErrInvalidChunk             = &AppError{Code: "INVALID_CHUNK", Message: "invalid chunk index"}
+	ErrChunkAlreadyExists       = &AppError{Code: "CHUNK_EXISTS", Message: "chunk already uploaded"}
+	ErrUploadIncomplete         = &AppError{Code: "UPLOAD_INCOMPLETE", Message: "not all chunks have been uploaded"}
+	ErrRateLimited              = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
+	ErrInvalidCode              = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
 )
 
 func GenerateID(length int) string {

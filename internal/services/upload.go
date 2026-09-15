@@ -25,14 +25,14 @@ type Upload struct {
 }
 
 type FinalizeUploadOptions struct {
-	OwnerCNSUserID   *int64
-	OwnerCNSUserName *string
-	TunnelID         string
-	TunnelExpiresAt  time.Time
-	WrappedDEK       []byte
-	DEKWrapAlg       string
-	DEKWrapNonce     []byte
-	DEKWrapVersion   int
+	OwnerCNSUserID     *int64
+	OwnerCNSUserName   *string
+	TunnelID           string
+	TunnelExpiresAt    time.Time
+	WrappedDEK         []byte
+	DEKWrapAlg         string
+	DEKWrapNonce       []byte
+	DEKWrapVersion     int
 	RecipientEnvelopes []models.FileRecipientKeyEnvelope
 }
 
@@ -362,6 +362,9 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 	var recipientEnvelopes []models.FileRecipientKeyEnvelope
 	if opts != nil {
 		recipientEnvelopes = opts.RecipientEnvelopes
+		for i := range recipientEnvelopes {
+			recipientEnvelopes[i].FileID = session.FileID
+		}
 	}
 
 	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, recipientEnvelopes); err != nil {
