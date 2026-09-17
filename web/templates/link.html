@@ -111,8 +111,8 @@
             <h2 id="share-url-title" class="share-url-title">{{.t.link_share_title}}</h2>
             <p id="shareUrlText" class="share-url-text"></p>
             <div class="share-url-actions">
-                <button id="shareUrlDiscardBtn" type="button" class="btn-share-discard">{{.t.link_share_discard}}</button>
-                <button id="shareUrlCopyBtn" type="button" class="btn-share-copy">{{.t.link_share_copy}}</button>
+                <button id="shareUrlDiscardBtn" type="button" class="btn btn-secondary btn-large">{{.t.link_share_discard}}</button>
+                <button id="shareUrlCopyBtn" type="button" class="btn btn-accent btn-large">{{.t.link_share_copy}}</button>
             </div>
         </div>
     </div>
@@ -242,38 +242,101 @@
                     </p>
                 </div>
 
-                <button id="finalize-btn" class="btn-accent btn-large">
+                <button id="finalize-btn" class="btn btn-accent btn-large">
                     {{.t.link_pending_upload_btn}}
                 </button>
             </div>
 
             <div id="stage-output" class="hidden form-section">
-                <div class="upload-success-header">
-                    <h1>{{.t.uploaded_title}}</h1>
-                    <p id="uploaded-file-meta"></p>
+                <!-- SUCCESS STAGE: Exact design from spec -->
+                <div class="success-stage" role="img" aria-label="{{.t.uploaded_title}}">
+                    <div class="success-ring" aria-hidden="true"></div>
+                    <div class="spark" aria-hidden="true"></div>
+                    <div class="spark" aria-hidden="true"></div>
+                    <div class="spark" aria-hidden="true"></div>
+                    <div class="spark" aria-hidden="true"></div>
+                    <div class="spark" aria-hidden="true"></div>
+                    <div class="success-mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 12.5L9.5 18L20 6"/>
+                        </svg>
+                    </div>
                 </div>
-                <div class="upload-success-grid">
-                    {{if .authenticated}}
-                    <section class="share-users-panel" aria-labelledby="share-users-title">
-                        <h2 id="share-users-title">{{.t.share_users_title}}</h2>
-                        <div class="share-recipient-row">
-                            <input id="share-recipient-input" type="text" autocomplete="off" placeholder="{{.t.share_recipient_placeholder}}" aria-describedby="share-recipient-status">
-                            <button id="share-recipient-send" class="btn-accent share-send-button" type="button" aria-label="{{.t.share_send}}" title="{{.t.share_send}}">
-                                <i data-lucide="send"></i>
-                            </button>
+
+                <h1 class="headline">{{.t.uploaded_title}}</h1>
+                <p class="subhead" id="upload-subhead">{{.t.link_upload_subhead}}</p>
+
+                <!-- FILE METADATA CARD -->
+                <div class="card file-card">
+                    <div class="file-row">
+                        <div class="file-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                            </svg>
                         </div>
-                        <p id="share-recipient-status" class="share-recipient-status" aria-live="polite"></p>
-                        <h3>{{.t.share_recent_title}}</h3>
-                        <div id="share-recent-recipients" class="share-recent-recipients"></div>
-                    </section>
-                    {{end}}
-                    <section class="share-link-panel" aria-labelledby="share-link-title">
-                        <h2 id="share-link-title">{{.t.share_link_title}}</h2>
-                        <input id="share-link-input" class="share-link-input" type="text" readonly aria-label="{{.t.share_link_title}}">
-                        <button id="share-link-copy" class="btn-accent btn-large" type="button">{{.t.share_copy}}</button>
-                        <button id="share-another-file" class="btn btn-secondary btn-large" type="button">{{.t.share_another}}</button>
-                    </section>
+                        <div class="file-meta">
+                            <div class="file-meta-name" id="upload-file-name"></div>
+                            <div class="file-meta-sub" id="upload-file-meta">
+                                <span id="upload-file-size"></span><span class="dot" aria-hidden="true">•</span><span id="upload-file-type"></span>
+                            </div>
+                        </div>
+                        <div class="expiry-pill" id="upload-expiry-pill"></div>
+                    </div>
                 </div>
+
+                <!-- SHARE LINK CARD -->
+                <div class="card link-card">
+                    <div class="card-label">{{.t.share_link_title}}</div>
+                    <div class="link-row">
+                        <input type="text" class="link-field" id="share-link-input" readonly aria-label="{{.t.share_link_title}}" spellcheck="false">
+                        <button class="copy-btn" id="share-link-copy" type="button" aria-label="{{.t.share_copy}}">
+                            <span class="copy-btn-inner">
+                                <span class="copy-label-default">
+                                    <i data-lucide="copy" aria-hidden="true"></i>
+                                    <span>{{.t.share_copy}}</span>
+                                </span>
+                                <span class="copy-label-done">
+                                    <i data-lucide="check" aria-hidden="true"></i>
+                                    <span>{{.t.share_copied}}</span>
+                                </span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+
+                {{if .authenticated}}
+                <!-- SEND TO USER CARD (authenticated only) -->
+                <div class="card send-card">
+                    <div class="card-label">{{.t.share_users_title}}</div>
+                    <div class="send-row">
+                        <div class="user-input-wrap">
+                            <i data-lucide="search" class="user-input-icon" aria-hidden="true"></i>
+                            <input type="text" class="user-input" id="share-recipient-input" placeholder="{{.t.share_recipient_placeholder}}" autocomplete="off" aria-describedby="share-recipient-status" aria-autocomplete="list" aria-controls="share-suggest-list">
+                            <ul class="suggest-list" id="share-suggest-list" role="listbox" aria-label="{{.t.share_user_suggestions}}"></ul>
+                        </div>
+                        <button class="send-btn" id="share-recipient-send" type="button" disabled aria-label="{{.t.share_send}}">{{.t.share_send}}</button>
+                    </div>
+                    <p id="share-recipient-status" class="share-recipient-status" aria-live="polite"></p>
+                    <div class="sent-chips" id="share-sent-chips" aria-live="polite"></div>
+                </div>
+                {{else}}
+                <!-- AUTH NUDGE for unauthenticated users -->
+                <div class="card auth-nudge-card">
+                    <div class="auth-nudge-content">
+                        <i data-lucide="user-plus" class="auth-nudge-icon" aria-hidden="true"></i>
+                        <div class="auth-nudge-text-wrap">
+                            <strong>{{.t.auth_nudge_login}}</strong>
+                            <p>{{.t.link_auth_nudge}}</p>
+                        </div>
+                    </div>
+                    <a href="{{.authLoginURL}}" class="btn btn-accent auth-nudge-btn" style="margin-top: 12px; width: 100%;">{{.t.auth_nudge_login}}</a>
+                </div>
+                {{end}}
+
+                <!-- DONE BUTTON -->
+                <button id="share-another-file" class="done-btn" type="button">{{.t.share_another}}</button>
+
             </div>
 
         </div>
@@ -356,7 +419,6 @@
                     e.preventDefault();
                     focusItem(focusIndex - 1);
                 } else if (e.key === 'Tab' && isOpen) {
-                    // Let focus move naturally, but close if leaving menu
                     setTimeout(function() {
                         if (!menu.contains(document.activeElement) && document.activeElement !== trigger) {
                             closeMenu();
@@ -380,16 +442,12 @@
                 });
             });
 
-            // Close on click outside
             document.addEventListener('click', function(e) {
                 if (isOpen && !trigger.contains(e.target) && !menu.contains(e.target)) {
                     closeMenu();
                 }
             });
 
-            // Ensure Lucide icons in menu are initialized when menu opens (menu is server-rendered,
-            // so global DOMContentLoaded already handles it, but this is a safety net for
-            // any edge case where icons weren't initialized yet)
             var iconsInitialized = false;
             var originalOpenMenu = openMenu;
             openMenu = function() {
@@ -405,7 +463,6 @@
         function buildInitialsAvatar(username) {
             if (!username) username = '?';
             var initials = username.trim().split(/\s+/).map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
-            // Deterministic color from username - WCAG AA compliant (≥4.5:1 against white)
             var hash = 0;
             for (var i = 0; i < username.length; i++) {
                 hash = username.charCodeAt(i) + ((hash << 5) - hash);
@@ -421,7 +478,6 @@
             return span;
         }
 
-        // Hydrate initials placeholders on page load
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.account-menu-avatar-placeholder').forEach(function(el) {
                 var username = el.closest('[data-username]')?.dataset.username || '';

@@ -49,10 +49,16 @@
     const processSub = document.getElementById('process-sub');
     const outExpiryLabel = document.getElementById('out-expiry-label');
     const uploadedFileMeta = document.getElementById('uploaded-file-meta');
+    const uploadFileName = document.getElementById('upload-file-name');
+    const uploadFileSize = document.getElementById('upload-file-size');
+    const uploadFileType = document.getElementById('upload-file-type');
+    const uploadExpiryPill = document.getElementById('upload-expiry-pill');
+    const uploadSubhead = document.getElementById('upload-subhead');
     const shareRecipientInput = document.getElementById('share-recipient-input');
     const shareRecipientSend = document.getElementById('share-recipient-send');
     const shareRecipientStatus = document.getElementById('share-recipient-status');
-    const shareRecentRecipients = document.getElementById('share-recent-recipients');
+    const shareSuggestList = document.getElementById('share-suggest-list');
+    const shareSentChips = document.getElementById('share-sent-chips');
     const shareLinkInput = document.getElementById('share-link-input');
     const shareLinkCopy = document.getElementById('share-link-copy');
     const shareAnotherFile = document.getElementById('share-another-file');
@@ -67,6 +73,7 @@
     let recipientLookupTimer = null;
     let recipientMatches = [];
     let shareInFlight = false;
+    let selectedRecipient = null;
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -143,11 +150,17 @@
         finalizeBtn.addEventListener('click', handleFinalize);
         shareRecipientInput?.addEventListener('input', handleRecipientInput);
         shareRecipientSend?.addEventListener('click', () => {
-            const match = recipientMatches[0];
-            if (match) shareFileWithUser(match);
+            if (selectedRecipient) shareFileWithUser(selectedRecipient);
         });
         shareLinkCopy?.addEventListener('click', copyUploadedLink);
         shareAnotherFile?.addEventListener('click', resetUpload);
+
+        // Close suggestions on click outside
+        document.addEventListener('click', (e) => {
+            if (shareSuggestList && !e.target.closest('.user-input-wrap')) {
+                shareSuggestList.classList.remove('open');
+            }
+        });
 
         shareUrlModal?.addEventListener('click', (e) => {
             if (e.target === shareUrlModal) hideShareUrlModal();
@@ -170,13 +183,77 @@
         shareRecipientStatus.className = `share-recipient-status${type ? ` is-${type}` : ''}`;
     }
 
+    // Render suggestion list from recent recipients + search results
+    function renderSuggestions(query, recentUsers) {
+        const q = query.trim().toLowerCase();
+        if (!q) {
+            shareSuggestList.classList.remove('open');
+            shareSuggestList.innerHTML = '';
+            return;
+        }
+
+        // First try recent users
+        let matches = recentUsers.filter(u =>
+            u.username.toLowerCase().includes(q)
+        ).slice(0, 4);
+
+        // If not enough, also include server lookup results
+        if (matches.length < 4) {
+            const serverMatches = recipientMatches.filter(u =>
+                u.username.toLowerCase().includes(q)
+            );
+            for (const u of serverMatches) {
+                if (!matches.find(m => m.user_id === u.user_id)) {
+                    matches.push(u);
+                }
+                if (matches.length >= 4) break;
+            }
+        }
+
+        if (matches.length === 0) {
+            shareSuggestList.classList.remove('open');
+            shareSuggestList.innerHTML = '';
+            return;
+        }
+
+        shareSuggestList.innerHTML = matches.map(u => `
+            <li class="suggest-item" role="option" data-user-id="${u.user_id}" data-username="${escapeHtml(u.username)}">
+                <div class="suggest-avatar">${escapeHtml((u.username || '?').slice(0, 2).toUpperCase())}</div>
+                <div>
+                    <div class="suggest-name">${escapeHtml(u.username)}</div>
+                    <div class="suggest-handle">@${escapeHtml(u.username)}</div>
+                </div>
+            </li>
+        `).join('');
+        shareSuggestList.classList.add('open');
+
+        shareSuggestList.querySelectorAll('.suggest-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const userId = item.dataset.userId;
+                const username = item.dataset.username;
+                selectRecipient({ user_id: userId, username: username });
+            });
+        });
+    }
+
+    function selectRecipient(u) {
+        selectedRecipient = u;
+        shareRecipientInput.value = u.username;
+        shareSuggestList.classList.remove('open');
+        shareRecipientSend.disabled = false;
+        setRecipientStatus('');
+    }
+
     async function handleRecipientInput() {
         const query = shareRecipientInput.value.trim();
         recipientMatches = [];
         shareRecipientSend.disabled = true;
         setRecipientStatus(query.length < 3 ? '' : t('share_checking'));
         if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
-        if (query.length < 3) return;
+        if (query.length < 3) {
+            renderSuggestions(query, []);
+            return;
+        }
         recipientLookupTimer = setTimeout(async () => {
             try {
                 const response = await fetch(`/api/users/lookup?q=${encodeURIComponent(query)}`, {
@@ -185,16 +262,7 @@
                 const payload = await response.json().catch(() => ({}));
                 if (!response.ok) throw new Error(payload.error || t('share_lookup_failed'));
                 recipientMatches = payload.items || [];
-                const match = recipientMatches[0];
-                if (!match) {
-                    setRecipientStatus(t('share_no_user'), 'error');
-                } else if (Number(match.user_id) === Number(CNS_USER_ID)) {
-                    recipientMatches = [];
-                    setRecipientStatus(t('share_self_error'), 'error');
-                } else {
-                    setRecipientStatus(tpl('share_user_found', {name: match.username}), 'valid');
-                    shareRecipientSend.disabled = false;
-                }
+                renderSuggestions(query, []);
             } catch (error) {
                 setRecipientStatus(error.message, 'error');
             }
@@ -233,9 +301,13 @@
                 });
                 if (response.ok) {
                     setRecipientStatus(t('share_success'), 'valid');
-                    shareRecipientSend.innerHTML = '<i data-lucide="check"></i>';
-                    if (window.lucide?.createIcons) lucide.createIcons();
-                    setTimeout(() => { shareRecipientSend.innerHTML = '<i data-lucide="send"></i>'; if (window.lucide?.createIcons) lucide.createIcons(); }, 2000);
+                    // Add sent chip
+                    addSentChip(recipient);
+                    // Clear input
+                    shareRecipientInput.value = '';
+                    selectedRecipient = null;
+                    shareRecipientSend.disabled = true;
+                    shareRecipientSend.classList.remove('is-loading');
                     return;
                 }
                 const errorPayload = await response.json().catch(() => ({}));
@@ -250,35 +322,47 @@
         } finally {
             shareInFlight = false;
             shareRecipientSend.classList.remove('is-loading');
-            shareRecipientSend.disabled = recipientMatches.length === 0;
+            shareRecipientSend.disabled = true;
         }
+    }
+
+    function addSentChip(recipient) {
+        if (!shareSentChips) return;
+        const chip = document.createElement('div');
+        chip.className = 'sent-chip';
+        chip.innerHTML = `
+            <span class="chip-avatar">${escapeHtml((recipient.username || '?').slice(0, 2).toUpperCase())}</span>
+            Sent to @${escapeHtml(recipient.username)}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        `;
+        shareSentChips.appendChild(chip);
     }
 
     async function copyUploadedLink() {
         if (!shareLinkInput?.value) return;
         const ok = await copyToClipboard(shareLinkInput.value, true);
         if (ok) {
-            shareLinkCopy.textContent = t('share_copied');
-            setTimeout(() => { shareLinkCopy.textContent = t('share_copy'); }, 2000);
+            shareLinkCopy.setAttribute('aria-label', t('share_copied'));
+            shareLinkCopy.classList.add('copied');
+            // Flash the link field
+            shareLinkInput.classList.add('flash');
+            setTimeout(() => {
+                shareLinkCopy.setAttribute('aria-label', t('share_copy'));
+                shareLinkCopy.classList.remove('copied');
+                shareLinkInput.classList.remove('flash');
+            }, 1800);
         }
     }
 
+    // Load recent share recipients for the suggestion dropdown
     async function loadRecentShareRecipients() {
-        if (!shareRecentRecipients || !AUTHENTICATED) return;
-        shareRecentRecipients.innerHTML = `<span class="share-recent-empty">${t('share_loading')}</span>`;
+        if (!AUTHENTICATED) return;
         try {
             const response = await fetch('/api/me/recent-share-recipients', { headers: { 'X-CSRF-Token': getCookieValue('csrf_token') } });
             const payload = await response.json();
-            const items = payload.items || [];
-            shareRecentRecipients.innerHTML = items.length ? items.map((item) => `
-                <button class="share-recipient-avatar" type="button" data-user-id="${item.user_id}" data-username="${escapeHtml(item.username)}">
-                    <span>${escapeHtml((item.username || '?').slice(0, 2).toUpperCase())}</span>${escapeHtml(item.username)}
-                </button>`).join('') : `<span class="share-recent-empty">${t('share_recent_empty')}</span>`;
-            shareRecentRecipients.querySelectorAll('[data-user-id]').forEach((button) => button.addEventListener('click', () => shareFileWithUser({
-                user_id: button.dataset.userId, username: button.dataset.username
-            })));
+            return payload.items || [];
         } catch (error) {
-            shareRecentRecipients.innerHTML = `<span class="share-recent-empty">${t('share_lookup_failed')}</span>`;
+            return [];
         }
     }
 
@@ -572,17 +656,37 @@
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         lastShareUrl = fullShareUrl;
         uploadedFileID = response.file_id || '';
-        if (uploadedFileMeta) {
-            uploadedFileMeta.textContent = `${selectedFile?.name || ''} · ${SecureCrypto.formatFileSize(selectedFile?.size || 0)}`;
+
+        // Populate file metadata
+        if (uploadFileName) uploadFileName.textContent = selectedFile?.name || '';
+        if (uploadFileSize) uploadFileSize.textContent = SecureCrypto.formatFileSize(selectedFile?.size || 0);
+        if (uploadFileType) {
+            const ext = selectedFile?.name?.split('.').pop()?.toUpperCase() || 'FILE';
+            uploadFileType.textContent = ext + ' document';
         }
+        if (uploadExpiryPill) uploadExpiryPill.textContent = tpl('link_expires_in', {retention: RETENTION_LABEL});
+        if (uploadSubhead) uploadSubhead.textContent = t('link_upload_subhead');
+
+        // Populate share link
         if (shareLinkInput) shareLinkInput.value = fullShareUrl;
-        loadRecentShareRecipients().catch(() => {});
+
+        // Load recent recipients for suggestions (only for authenticated users)
+        if (AUTHENTICATED) {
+            loadRecentShareRecipients().catch(() => {});
+        }
 
         uploadSessionId = null;
         stageEntry.classList.add('hidden');
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.remove('hidden');
+
+        // Trigger animations on stage output elements
+        requestAnimationFrame(() => {
+            stageOutput.querySelectorAll('.card').forEach((card, i) => {
+                card.style.animationDelay = `${0.30 + i * 0.08}s`;
+            });
+        });
     }
 
     function setupIdleCopy(text) {
