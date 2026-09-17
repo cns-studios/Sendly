@@ -76,17 +76,17 @@ func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service is unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service is unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 	if err != nil {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service is unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
 		return
 	}
 	var payload struct {
@@ -97,7 +97,7 @@ func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service returned an invalid response", Code: "USER_LOOKUP_INVALID_RESPONSE"})
 		return
 	}
 	items := make([]gin.H, 0, len(payload.Items))
