@@ -309,20 +309,33 @@
                 <!-- SEND TO USER CARD (authenticated only) -->
                 <div class="card send-card">
                     <div class="card-label">{{.t.share_users_title}}</div>
+                    <div class="recent-recipients hidden" id="share-recent-recipients">
+                        <div class="recent-recipients-label">{{.t.share_recent_title}}</div>
+                        <div class="recent-recipients-row" id="share-recent-list" role="list"></div>
+                    </div>
                     <div class="send-row">
-                        <div class="user-input-wrap">
-                            <i data-lucide="search" class="user-input-icon" aria-hidden="true"></i>
-                            <i data-lucide="loader-2" class="user-input-icon spinner" aria-hidden="true"></i>
-                            <span class="not-found-indicator" tabindex="0" role="img" aria-label="{{.t.share_user_not_found}}" data-tooltip="{{.t.share_user_not_found}}">
-                                <i data-lucide="x-circle" class="user-input-icon not-found" aria-hidden="true"></i>
+                        <div class="user-input-wrap" data-state="idle">
+                            <span class="user-input-lead" aria-hidden="true">
+                                <i data-lucide="search" class="user-input-lead-icon"></i>
+                                <span class="user-input-lead-avatar"></span>
                             </span>
-                            <input type="text" class="user-input" id="share-recipient-input" placeholder="{{.t.share_recipient_placeholder}}" autocomplete="off" aria-describedby="share-recipient-status" aria-autocomplete="list" aria-controls="share-suggest-list">
+                            <input type="text" class="user-input" id="share-recipient-input" placeholder="{{.t.share_recipient_placeholder}}" autocomplete="off" spellcheck="false" aria-describedby="share-recipient-status" aria-autocomplete="list" aria-controls="share-suggest-list" role="combobox" aria-expanded="false">
+                            <span class="user-input-status">
+                                <i data-lucide="loader-circle" class="user-input-status-icon is-searching" aria-hidden="true"></i>
+                                <i data-lucide="circle-check" class="user-input-status-icon is-found" aria-hidden="true"></i>
+                                <span class="user-input-status-icon is-not-found" tabindex="0" role="img" aria-label="{{.t.share_user_not_found}}" data-tooltip="{{.t.share_user_not_found}}">
+                                    <i data-lucide="circle-x" aria-hidden="true"></i>
+                                </span>
+                            </span>
                             <ul class="suggest-list" id="share-suggest-list" role="listbox" aria-label="{{.t.share_user_suggestions}}"></ul>
                         </div>
-                        <button class="send-btn" id="share-recipient-send" type="button" disabled aria-label="{{.t.share_send}}">{{.t.share_send}}</button>
+                        <button class="send-btn" id="share-recipient-send" type="button" disabled>
+                            <span class="send-btn-label">{{.t.share_send}}</span>
+                            <i data-lucide="loader-circle" class="send-btn-spinner" aria-hidden="true"></i>
+                        </button>
                     </div>
-                    <p id="share-recipient-status" class="share-recipient-status" aria-live="polite"></p>
-                    <div class="sent-chips" id="share-sent-chips" aria-live="polite"></div>
+                    <p id="share-recipient-status" class="sr-only" aria-live="polite"></p>
+                    <div class="sent-chips" id="share-sent-chips"></div>
                 </div>
                 {{else}}
                 <!-- AUTH NUDGE for unauthenticated users -->

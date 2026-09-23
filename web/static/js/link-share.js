@@ -74,6 +74,11 @@
     let recipientMatches = [];
     let shareInFlight = false;
     let selectedRecipient = null;
+    let recentRecipients = [];
+    let currentSuggestions = [];
+    let suggestActiveIndex = -1;
+    let lookupSeq = 0;
+    const sentRecipientIds = new Set();
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -149,6 +154,10 @@
         fileInput.addEventListener('change', handleFileSelect);
         finalizeBtn.addEventListener('click', handleFinalize);
         shareRecipientInput?.addEventListener('input', handleRecipientInput);
+        shareRecipientInput?.addEventListener('keydown', handleRecipientKeydown);
+        shareRecipientInput?.addEventListener('focus', () => {
+            if (!selectedRecipient && shareRecipientInput.value.trim()) renderSuggestions(shareRecipientInput.value);
+        });
         shareRecipientSend?.addEventListener('click', () => {
             if (selectedRecipient) shareFileWithUser(selectedRecipient);
         });
@@ -158,7 +167,7 @@
         // Close suggestions on click outside
         document.addEventListener('click', (e) => {
             if (shareSuggestList && !e.target.closest('.user-input-wrap')) {
-                shareSuggestList.classList.remove('open');
+                closeSuggestions();
             }
         });
 
@@ -177,111 +186,198 @@
         shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
     }
 
-    function setRecipientStatus(message, type = '') {
-        if (!shareRecipientStatus) return;
-        shareRecipientStatus.textContent = message;
-        shareRecipientStatus.className = `share-recipient-status${type ? ` is-${type}` : ''}`;
+    function announceRecipientStatus(message) {
+        if (shareRecipientStatus) shareRecipientStatus.textContent = message;
     }
 
-    // Render suggestion list from recent recipients + search results
-    function renderSuggestions(query, recentUsers) {
+    function recipientInputWrap() {
+        return shareRecipientInput?.closest('.user-input-wrap') || null;
+    }
+
+    // The input has four visual states, driven by data-state on its wrapper:
+    // idle (search icon), searching (spinner), found (check + avatar) and
+    // not-found (red x with tooltip).
+    function setRecipientInputState(state) {
+        const wrap = recipientInputWrap();
+        if (wrap) wrap.dataset.state = state;
+    }
+
+    function userAvatar(user, size) {
+        return window.buildUserAvatar(user?.username || '?', user?.avatar_url || '', size);
+    }
+
+    function setLeadAvatar(user) {
+        const wrap = recipientInputWrap();
+        const slot = wrap?.querySelector('.user-input-lead-avatar');
+        if (!slot) return;
+        slot.replaceChildren();
+        if (user) slot.appendChild(userAvatar(user, 20));
+        wrap.classList.toggle('has-avatar', !!user);
+    }
+
+    function sameUser(a, b) {
+        return !!a && !!b && String(a.user_id) === String(b.user_id);
+    }
+
+    function closeSuggestions() {
+        suggestActiveIndex = -1;
+        shareSuggestList?.classList.remove('open');
+        shareRecipientInput?.setAttribute('aria-expanded', 'false');
+        shareRecipientInput?.removeAttribute('aria-activedescendant');
+    }
+
+    // Suggestions merge the user's recent recipients (instant, local) with
+    // server lookup results, recent ones first.
+    function suggestionMatches(query) {
         const q = query.trim().toLowerCase();
-        if (!q) {
-            shareSuggestList.classList.remove('open');
-            shareSuggestList.innerHTML = '';
+        if (!q) return [];
+        const matches = recentRecipients.filter(u => u.username.toLowerCase().includes(q));
+        for (const u of recipientMatches) {
+            if (matches.length >= 5) break;
+            if (!matches.some(m => sameUser(m, u))) matches.push(u);
+        }
+        return matches.slice(0, 5);
+    }
+
+    function renderSuggestions(query) {
+        if (!shareSuggestList) return;
+        currentSuggestions = suggestionMatches(query);
+        suggestActiveIndex = -1;
+        if (currentSuggestions.length === 0) {
+            shareSuggestList.replaceChildren();
+            closeSuggestions();
             return;
         }
-
-        // First try recent users
-        let matches = recentUsers.filter(u =>
-            u.username.toLowerCase().includes(q)
-        ).slice(0, 4);
-
-        // If not enough, also include server lookup results
-        if (matches.length < 4) {
-            const serverMatches = recipientMatches.filter(u =>
-                u.username.toLowerCase().includes(q)
-            );
-            for (const u of serverMatches) {
-                if (!matches.find(m => m.user_id === u.user_id)) {
-                    matches.push(u);
-                }
-                if (matches.length >= 4) break;
+        shareSuggestList.replaceChildren(...currentSuggestions.map((u, i) => {
+            const item = document.createElement('li');
+            item.className = 'suggest-item';
+            item.id = `share-suggest-${i}`;
+            item.setAttribute('role', 'option');
+            const avatar = document.createElement('span');
+            avatar.className = 'suggest-avatar';
+            avatar.appendChild(userAvatar(u, 28));
+            const name = document.createElement('span');
+            name.className = 'suggest-name';
+            name.textContent = u.username;
+            item.append(avatar, name);
+            if (sentRecipientIds.has(String(u.user_id))) {
+                item.insertAdjacentHTML('beforeend', '<svg class="suggest-sent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>');
             }
-        }
-
-        if (matches.length === 0) {
-            shareSuggestList.classList.remove('open');
-            shareSuggestList.innerHTML = '';
-            return;
-        }
-
-        shareSuggestList.innerHTML = matches.map(u => `
-            <li class="suggest-item" role="option" data-user-id="${u.user_id}" data-username="${escapeHtml(u.username)}">
-                <div class="suggest-avatar">${escapeHtml((u.username || '?').slice(0, 2).toUpperCase())}</div>
-                <div>
-                    <div class="suggest-name">${escapeHtml(u.username)}</div>
-                    <div class="suggest-handle">@${escapeHtml(u.username)}</div>
-                </div>
-            </li>
-        `).join('');
-        shareSuggestList.classList.add('open');
-
-        shareSuggestList.querySelectorAll('.suggest-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const userId = item.dataset.userId;
-                const username = item.dataset.username;
-                selectRecipient({ user_id: userId, username: username });
+            // mousedown (not click) so the input doesn't blur first
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectRecipient(u);
             });
-        });
+            return item;
+        }));
+        shareSuggestList.classList.add('open');
+        shareRecipientInput?.setAttribute('aria-expanded', 'true');
+    }
+
+    function setActiveSuggestion(index) {
+        const items = shareSuggestList?.querySelectorAll('.suggest-item') || [];
+        if (!items.length) return;
+        suggestActiveIndex = (index + items.length) % items.length;
+        items.forEach((item, i) => item.classList.toggle('active', i === suggestActiveIndex));
+        shareRecipientInput.setAttribute('aria-activedescendant', items[suggestActiveIndex].id);
+    }
+
+    function handleRecipientKeydown(e) {
+        const open = shareSuggestList?.classList.contains('open');
+        if (e.key === 'ArrowDown' && open) {
+            e.preventDefault();
+            setActiveSuggestion(suggestActiveIndex + 1);
+        } else if (e.key === 'ArrowUp' && open) {
+            e.preventDefault();
+            setActiveSuggestion(suggestActiveIndex - 1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (open && suggestActiveIndex >= 0) {
+                selectRecipient(currentSuggestions[suggestActiveIndex]);
+            } else if (selectedRecipient && !shareRecipientSend.disabled) {
+                shareFileWithUser(selectedRecipient);
+            }
+        } else if (e.key === 'Escape' && open) {
+            closeSuggestions();
+        }
     }
 
     function selectRecipient(u) {
+        if (!u) return;
+        cancelPendingLookup();
         selectedRecipient = u;
         shareRecipientInput.value = u.username;
-        shareSuggestList.classList.remove('open');
-        shareRecipientSend.disabled = false;
-        setRecipientStatus('');
+        setRecipientInputState('found');
+        setLeadAvatar(u);
+        closeSuggestions();
+        shareRecipientSend.disabled = shareInFlight;
+        highlightRecentRecipient(u);
+        announceRecipientStatus(tpl('share_user_found', {name: u.username}));
     }
 
-    async function handleRecipientInput() {
-        const query = shareRecipientInput.value.trim();
-        recipientMatches = [];
+    function clearSelectedRecipient() {
         selectedRecipient = null;
         shareRecipientSend.disabled = true;
-        const inputWrap = shareRecipientInput?.closest('.user-input-wrap');
-        inputWrap?.classList.remove('not-found');
+        setLeadAvatar(null);
+        highlightRecentRecipient(null);
+    }
+
+    function cancelPendingLookup() {
+        if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
+        recipientLookupTimer = null;
+        lookupSeq++;
+    }
+
+    function handleRecipientInput() {
+        const query = shareRecipientInput.value.trim();
+        cancelPendingLookup();
+        recipientMatches = [];
+        clearSelectedRecipient();
+        announceRecipientStatus('');
+
         if (query.length < 3) {
-            inputWrap?.classList.remove('searching');
-            renderSuggestions(query, []);
+            setRecipientInputState('idle');
+            renderSuggestions(query);
             return;
         }
-        // Show spinner
-        inputWrap?.classList.add('searching');
-        if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
+
+        // Exact match among recent recipients: select immediately, no lookup.
+        const recentExact = recentRecipients.find(u => u.username.toLowerCase() === query.toLowerCase());
+        if (recentExact) {
+            selectRecipient(recentExact);
+            return;
+        }
+
+        setRecipientInputState('searching');
+        renderSuggestions(query);
+        const seq = lookupSeq;
         recipientLookupTimer = setTimeout(async () => {
             try {
                 const response = await fetch(`/api/users/lookup?q=${encodeURIComponent(query)}`, {
                     headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
                 });
                 const payload = await response.json().catch(() => ({}));
+                if (seq !== lookupSeq) return; // a newer keystroke superseded this lookup
                 if (!response.ok) throw new Error(payload.error || t('share_lookup_failed'));
                 recipientMatches = payload.items || [];
-                renderSuggestions(query, []);
 
-                // An exact username match unlocks sending without requiring a
-                // click on the suggestion list; a query with no matches at all
-                // shows the not-found icon instead of inline status text.
                 const exactMatch = recipientMatches.find(u => u.username.toLowerCase() === query.toLowerCase());
                 if (exactMatch) {
                     selectRecipient(exactMatch);
-                } else if (recipientMatches.length === 0) {
-                    inputWrap?.classList.add('not-found');
+                    return;
+                }
+                renderSuggestions(query);
+                if (currentSuggestions.length === 0) {
+                    setRecipientInputState('not-found');
+                    announceRecipientStatus(t('share_user_not_found'));
+                } else {
+                    setRecipientInputState('idle');
                 }
             } catch (error) {
+                if (seq !== lookupSeq) return;
                 console.error('User lookup failed:', error);
-            } finally {
-                inputWrap?.classList.remove('searching');
+                setRecipientInputState('idle');
+                showErrorBanner(t('share_lookup_failed'));
             }
         }, 300);
     }
@@ -291,7 +387,8 @@
         shareInFlight = true;
         shareRecipientSend.disabled = true;
         shareRecipientSend.classList.add('is-loading');
-        setRecipientStatus(t('share_sending'));
+        shareRecipientInput.disabled = true;
+        announceRecipientStatus(t('share_sending'));
         try {
             let keyPayload;
             for (let attempt = 0; attempt < 2; attempt++) {
@@ -317,14 +414,7 @@
                     })
                 });
                 if (response.ok) {
-                    setRecipientStatus(t('share_success'), 'valid');
-                    // Add sent chip
-                    addSentChip(recipient);
-                    // Clear input
-                    shareRecipientInput.value = '';
-                    selectedRecipient = null;
-                    shareRecipientSend.disabled = true;
-                    shareRecipientSend.classList.remove('is-loading');
+                    handleShareSuccess(recipient);
                     return;
                 }
                 const errorPayload = await response.json().catch(() => ({}));
@@ -334,25 +424,97 @@
                 throw new Error(errorPayload.error || t('share_failed'));
             }
         } catch (error) {
-            setRecipientStatus(error.message, 'error');
-            showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
+            announceRecipientStatus(error.message);
+            showErrorBanner(error.message);
         } finally {
             shareInFlight = false;
             shareRecipientSend.classList.remove('is-loading');
-            shareRecipientSend.disabled = true;
+            shareRecipientInput.disabled = false;
+            // Keep a failed recipient selected so the user can simply retry.
+            shareRecipientSend.disabled = !selectedRecipient;
         }
+    }
+
+    function handleShareSuccess(recipient) {
+        const key = String(recipient.user_id);
+        const alreadySent = sentRecipientIds.has(key);
+        sentRecipientIds.add(key);
+        if (!alreadySent) addSentChip(recipient);
+        if (!recentRecipients.some(u => sameUser(u, recipient))) {
+            recentRecipients.unshift(recipient);
+        }
+        shareRecipientInput.value = '';
+        setRecipientInputState('idle');
+        clearSelectedRecipient();
+        renderRecentRecipients();
+        announceRecipientStatus(tpl('share_sent_to', {name: recipient.username}));
+        showToast(tpl(alreadySent ? 'share_already_sent' : 'share_sent_to', {name: recipient.username}));
     }
 
     function addSentChip(recipient) {
         if (!shareSentChips) return;
         const chip = document.createElement('div');
         chip.className = 'sent-chip';
-        chip.innerHTML = `
-            <span class="chip-avatar">${escapeHtml((recipient.username || '?').slice(0, 2).toUpperCase())}</span>
-            Sent to @${escapeHtml(recipient.username)}
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-        `;
+        const avatar = document.createElement('span');
+        avatar.className = 'chip-avatar';
+        avatar.appendChild(userAvatar(recipient, 18));
+        const label = document.createElement('span');
+        label.textContent = tpl('share_sent_to', {name: recipient.username});
+        chip.append(avatar, label);
+        chip.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>');
         shareSentChips.appendChild(chip);
+    }
+
+    // Recent recipients render as avatar tiles (name beneath) above the
+    // search input; clicking one selects that user as the recipient.
+    function renderRecentRecipients() {
+        const box = document.getElementById('share-recent-recipients');
+        const list = document.getElementById('share-recent-list');
+        if (!box || !list) return;
+        if (!recentRecipients.length) {
+            box.classList.add('hidden');
+            return;
+        }
+        list.replaceChildren(...recentRecipients.slice(0, 8).map(u => {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = 'recent-recipient';
+            tile.dataset.userId = String(u.user_id);
+            tile.title = u.username;
+            tile.setAttribute('role', 'listitem');
+            tile.setAttribute('aria-pressed', sameUser(u, selectedRecipient) ? 'true' : 'false');
+            if (sentRecipientIds.has(String(u.user_id))) tile.classList.add('is-sent');
+            if (sameUser(u, selectedRecipient)) tile.classList.add('is-selected');
+            const avatar = document.createElement('span');
+            avatar.className = 'recent-recipient-avatar';
+            avatar.appendChild(userAvatar(u, 44));
+            avatar.insertAdjacentHTML('beforeend', '<span class="recent-recipient-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>');
+            const name = document.createElement('span');
+            name.className = 'recent-recipient-name';
+            name.textContent = u.username;
+            tile.append(avatar, name);
+            tile.addEventListener('click', () => {
+                if (shareInFlight) return;
+                if (sameUser(u, selectedRecipient)) {
+                    shareRecipientInput.value = '';
+                    setRecipientInputState('idle');
+                    clearSelectedRecipient();
+                    return;
+                }
+                selectRecipient(u);
+                shareRecipientSend.focus();
+            });
+            return tile;
+        }));
+        box.classList.remove('hidden');
+    }
+
+    function highlightRecentRecipient(user) {
+        document.querySelectorAll('#share-recent-list .recent-recipient').forEach(tile => {
+            const selected = !!user && tile.dataset.userId === String(user.user_id);
+            tile.classList.toggle('is-selected', selected);
+            tile.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
     }
 
     async function copyUploadedLink() {
@@ -371,15 +533,16 @@
         }
     }
 
-    // Load recent share recipients for the suggestion dropdown
     async function loadRecentShareRecipients() {
         if (!AUTHENTICATED) return;
         try {
             const response = await fetch('/api/me/recent-share-recipients', { headers: { 'X-CSRF-Token': getCookieValue('csrf_token') } });
+            if (!response.ok) return;
             const payload = await response.json();
-            return payload.items || [];
+            recentRecipients = payload.items || [];
+            renderRecentRecipients();
         } catch (error) {
-            return [];
+            console.error('Failed to load recent recipients:', error);
         }
     }
 
@@ -687,10 +850,8 @@
         // Populate share link
         if (shareLinkInput) shareLinkInput.value = fullShareUrl;
 
-        // Load recent recipients for suggestions (only for authenticated users)
-        if (AUTHENTICATED) {
-            loadRecentShareRecipients().catch(() => {});
-        }
+        // Refresh recent recipients so the tiles reflect the latest shares
+        if (AUTHENTICATED) loadRecentShareRecipients();
 
         uploadSessionId = null;
         stageEntry.classList.add('hidden');
@@ -884,6 +1045,7 @@
         setupTOSGate();
         try { await SecureCrypto.loadWordList(); } catch (error) { console.error('Word list failed:', error); }
         setupEventListeners();
+        loadRecentShareRecipients();
     }
 
     const style = document.createElement('style');
