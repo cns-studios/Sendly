@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="{{.locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <meta name="description" content="{{.description}}">
+    <meta name="robots" content="{{if .noindex}}noindex, nofollow{{else}}index, follow{{end}}">
+    <link rel="canonical" href="{{.canonicalURL}}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Sendly">
+    <meta property="og:title" content="{{.title}}">
+    <meta property="og:description" content="{{.description}}">
+    <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Sendly - Upload and Share Files Securely">
+    <meta property="og:url" content="{{.canonicalURL}}">
+    <meta property="og:locale" content="{{.ogLocale}}">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="de_DE">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{.title}}">
+    <meta name="twitter:description" content="{{.description}}">
+    <meta name="twitter:image" content="{{.ogImage}}">
+    <meta name="twitter:image:alt" content="Sendly - Upload and Share Files Securely">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/avatar.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Preconnect to external resources -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+
+    <!-- Mobile & PWA Meta -->
+    <meta name="theme-color" content="#00AE71">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sendly">
+    <link rel="apple-touch-icon" href="/static/images/bun.png">
+
+    <!-- DNS Prefetch for external domains -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
+<link rel="icon" type="image/png" href="/static/favicon.png">
+</head>
+<body class="page-link page-transfers">
+
+    <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
+        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
+        <span id="notification-text" class="notification-text"></span>
+    </div>
+
+    <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
+                <nav class="quicklinks">
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
+                </nav>
+            </div>
+            {{template "account_menu" .}}
+        </header>
+    </div>
+
+    <div class="main-content">
+        <div class="link-content-wrapper transfers-wrapper">
+            <h1 class="headline">{{.t.transfers_heading}}</h1>
+            <p class="subhead">{{.t.transfers_subhead}}</p>
+
+            <div id="transfers-device-notice" class="card transfers-notice hidden" role="status">
+                <i data-lucide="shield-alert" class="transfers-notice-icon" aria-hidden="true"></i>
+                <div class="transfers-notice-text">
+                    <strong>{{.t.transfers_device_untrusted_title}}</strong>
+                    <p>{{.t.transfers_device_untrusted}}</p>
+                </div>
+                <a href="/" class="transfers-notice-link">{{.t.transfers_device_open_home}}</a>
+            </div>
+
+            <section class="transfers-section" aria-labelledby="transfers-pending-title">
+                <div class="transfers-section-head">
+                    <h2 id="transfers-pending-title" class="transfers-section-title">{{.t.transfers_pending_title}}</h2>
+                    <span id="transfers-pending-count" class="transfers-count hidden" aria-live="polite"></span>
+                </div>
+                <div id="transfers-pending-list" class="transfers-list" aria-busy="true"></div>
+            </section>
+
+            <section class="transfers-section" aria-labelledby="transfers-history-title">
+                <div class="transfers-section-head">
+                    <h2 id="transfers-history-title" class="transfers-section-title">{{.t.transfers_history_title}}</h2>
+                </div>
+                <div id="transfers-history-list" class="transfers-list" aria-busy="true"></div>
+                <button id="transfers-history-more" type="button" class="done-btn transfers-more hidden">{{.t.transfers_load_more}}</button>
+            </section>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
+    </footer>
+    <script>
+        window.CONFIG = {{.configJSON}};
+        document.addEventListener("DOMContentLoaded", function() {
+            if (window.lucide && lucide.createIcons) lucide.createIcons();
+        });
+    </script>
+    <script src="/static/js/crypto.js"></script>
+    <script src="/static/js/transfers.js"></script>
+</body>
+</html>

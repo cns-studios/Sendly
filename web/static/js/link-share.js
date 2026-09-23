@@ -418,6 +418,11 @@
                     return;
                 }
                 const errorPayload = await response.json().catch(() => ({}));
+                if (errorPayload.code === 'TRANSFER_EXISTS') {
+                    // A file goes to each person only once; treat it as already sent.
+                    handleShareSuccess(recipient, true);
+                    return;
+                }
                 if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH' && attempt === 0) continue;
                 if (errorPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
                 if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH') throw new Error(t('share_key_changed'));
@@ -435,11 +440,11 @@
         }
     }
 
-    function handleShareSuccess(recipient) {
+    function handleShareSuccess(recipient, alreadyTransferred = false) {
         const key = String(recipient.user_id);
-        const alreadySent = sentRecipientIds.has(key);
+        const alreadySent = alreadyTransferred || sentRecipientIds.has(key);
         sentRecipientIds.add(key);
-        if (!alreadySent) addSentChip(recipient);
+        if (!shareSentChips?.querySelector(`[data-user-id="${key}"]`)) addSentChip(recipient);
         if (!recentRecipients.some(u => sameUser(u, recipient))) {
             recentRecipients.unshift(recipient);
         }
@@ -448,13 +453,14 @@
         clearSelectedRecipient();
         renderRecentRecipients();
         announceRecipientStatus(tpl('share_sent_to', {name: recipient.username}));
-        showToast(tpl(alreadySent ? 'share_already_sent' : 'share_sent_to', {name: recipient.username}));
+        showToast(tpl(alreadySent ? 'share_already_sent' : 'share_sent_pending', {name: recipient.username}));
     }
 
     function addSentChip(recipient) {
         if (!shareSentChips) return;
         const chip = document.createElement('div');
         chip.className = 'sent-chip';
+        chip.dataset.userId = String(recipient.user_id);
         const avatar = document.createElement('span');
         avatar.className = 'chip-avatar';
         avatar.appendChild(userAvatar(recipient, 18));
