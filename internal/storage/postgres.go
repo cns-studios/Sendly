@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"sendly/internal/config"
@@ -1120,6 +1121,9 @@ func (p *Postgres) UpsertUser(ctx context.Context, user *models.User) error {
 	return err
 }
 
+// likeEscaper escapes LIKE metacharacters so user input matches literally.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
 // SearchUsersByUsername finds active local users whose username contains
 // query (case-insensitive), for the in-app share-recipient picker. This
 // reads Sendly's own cache rather than CNS, since CNS has no username
@@ -1129,10 +1133,10 @@ func (p *Postgres) SearchUsersByUsername(ctx context.Context, query string, limi
 	err := p.db.SelectContext(ctx, &users, `
 		SELECT cns_user_id, username, avatar_url
 		FROM users
-		WHERE status = $1 AND username ILIKE $2
+		WHERE status = $1 AND username ILIKE $2 ESCAPE '\'
 		ORDER BY username
 		LIMIT $3
-	`, models.UserStatusActive, "%"+query+"%", limit)
+	`, models.UserStatusActive, "%"+likeEscaper.Replace(query)+"%", limit)
 	if err != nil {
 		return nil, err
 	}
