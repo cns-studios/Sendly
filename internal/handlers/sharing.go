@@ -67,7 +67,7 @@ func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 		if match.CNSUserID == int64(user.ID) {
 			continue
 		}
-		items = append(items, gin.H{"user_id": match.CNSUserID, "username": match.Username})
+		items = append(items, shareUserJSON(match))
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
@@ -78,16 +78,21 @@ func (h *RecentUploadsHandler) RecentShareRecipients(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
 		return
 	}
-	ids, err := h.db.GetRecentShareRecipientIDs(c.Request.Context(), int64(user.ID), 8)
+	recipients, err := h.db.GetRecentShareRecipients(c.Request.Context(), int64(user.ID), 8)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch recent recipients", Code: "RECENT_RECIPIENTS_FAILED"})
 		return
 	}
-	items := make([]gin.H, 0, len(ids))
-	for _, id := range ids {
-		items = append(items, gin.H{"user_id": id, "username": strconv.FormatInt(id, 10)})
+	items := make([]gin.H, 0, len(recipients))
+	for _, recipient := range recipients {
+		items = append(items, shareUserJSON(recipient))
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+// shareUserJSON is the user shape the share-recipient picker renders.
+func shareUserJSON(u models.User) gin.H {
+	return gin.H{"user_id": u.CNSUserID, "username": u.Username, "avatar_url": u.AvatarURL.String}
 }
 
 func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {

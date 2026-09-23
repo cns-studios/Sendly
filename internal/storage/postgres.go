@@ -860,22 +860,30 @@ func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, 
 	return &envelope, nil
 }
 
-func (p *Postgres) GetRecentShareRecipientIDs(ctx context.Context, ownerUserID int64, limit int) ([]int64, error) {
+// GetRecentShareRecipients returns the users ownerUserID most recently shared
+// files with, newest first, joined against the local user cache so callers
+// can render a username and avatar. Recipients missing from the cache (or
+// deactivated there) are skipped: there is nothing useful to display for them.
+func (p *Postgres) GetRecentShareRecipients(ctx context.Context, ownerUserID int64, limit int) ([]models.User, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 8
 	}
-	var ids []int64
-	err := p.db.SelectContext(ctx, &ids, `
-		SELECT recipient_cns_user_id
-		FROM file_access_key_envelopes
-		WHERE access_kind = 'share' AND file_id IN (
-			SELECT id FROM files WHERE owner_cns_user_id = $1
-		)
-		GROUP BY recipient_cns_user_id
-		ORDER BY MAX(granted_at) DESC
-		LIMIT $2
-	`, ownerUserID, limit)
-	return ids, err
+	var users []models.User
+	err := p.db.SelectContext(ctx, &users, `
+		SELECT u.cns_user_id, u.username, u.avatar_url
+		FROM (
+			SELECT e.recipient_cns_user_id, MAX(e.granted_at) AS last_shared_at
+			FROM file_access_key_envelopes e
+			JOIN files f ON f.id = e.file_id
+			WHERE e.access_kind = 'share' AND f.owner_cns_user_id = $1
+			GROUP BY e.recipient_cns_user_id
+		) r
+		JOIN users u ON u.cns_user_id = r.recipient_cns_user_id
+		WHERE u.status = $2
+		ORDER BY r.last_shared_at DESC
+		LIMIT $3
+	`, ownerUserID, models.UserStatusActive, limit)
+	return users, err
 }
 
 func (p *Postgres) GetSharedWithMeFiles(ctx context.Context, userID int64, page, perPage int) ([]models.OwnedFileListItem, int, error) {
@@ -1119,7 +1127,7 @@ func (p *Postgres) UpsertUser(ctx context.Context, user *models.User) error {
 func (p *Postgres) SearchUsersByUsername(ctx context.Context, query string, limit int) ([]models.User, error) {
 	var users []models.User
 	err := p.db.SelectContext(ctx, &users, `
-		SELECT cns_user_id, username
+		SELECT cns_user_id, username, avatar_url
 		FROM users
 		WHERE status = $1 AND username ILIKE $2
 		ORDER BY username
