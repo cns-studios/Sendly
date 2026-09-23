@@ -4139,3 +4139,268 @@ body.page-quickshare #fileListEmpty {
     font-family: 'Arimo', sans-serif;
     font-size: 16px;
 }
+
+/* ── Account menu: transfers badge ── */
+.account-menu-avatar { position: relative; }
+.account-menu-dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #FF3B30;
+    box-shadow: 0 0 0 2px #fff;
+}
+.account-menu-dot[hidden],
+.account-menu-badge[hidden] { display: none; }
+.account-menu-badge {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #FF3B30;
+    color: #fff;
+    font-family: 'Arimo', sans-serif;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+/* ── Transfers page (reuses the link page's card styles via .page-link) ── */
+body.page-transfers .main-content { align-items: flex-start; }
+body.page-transfers .transfers-wrapper { max-width: 620px; align-items: stretch; }
+body.page-transfers .headline,
+body.page-transfers .subhead { text-align: center; }
+
+body.page-transfers .transfers-section { margin-top: 36px; }
+body.page-transfers .transfers-section-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+    opacity: 0;
+    animation: riseIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.25s forwards;
+}
+body.page-transfers .transfers-section-title {
+    margin: 0;
+    font-family: 'Arimo', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #7A7A7A;
+}
+body.page-transfers .transfers-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #FF3B30;
+    color: #fff;
+    font-family: 'Arimo', sans-serif;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+}
+body.page-transfers .transfers-list .card { margin-top: 12px; }
+
+/* Transfer card */
+body.page-transfers .transfer-card {
+    position: relative;
+    overflow: hidden;
+    transition: box-shadow 0.25s ease, transform 0.25s ease, opacity 0.25s ease, height 0.28s ease, margin 0.28s ease, padding 0.28s ease;
+}
+body.page-transfers .transfer-card.is-muted .file-icon { background: #F2F2F4; }
+body.page-transfers .transfer-card.is-muted .file-icon svg { color: #9A9A9A; }
+body.page-transfers .transfer-card.is-muted .file-meta-name { color: #595959; }
+body.page-transfers .transfer-card.is-leaving {
+    opacity: 0;
+    transform: scale(0.98);
+    margin-top: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+body.page-transfers .transfer-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #F0F0F2;
+}
+body.page-transfers .transfer-sender {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+body.page-transfers .transfer-sender-avatar { display: flex; flex-shrink: 0; }
+body.page-transfers .transfer-sender-text {
+    font-family: 'Arimo', sans-serif;
+    font-size: 12.5px;
+    color: #7A7A7A;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+body.page-transfers .transfer-sender-text strong { color: #1a1a1f; font-weight: 600; }
+
+body.page-transfers .transfer-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+body.page-transfers .transfer-btn {
+    position: relative;
+    height: 36px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Arimo', sans-serif;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+}
+body.page-transfers .transfer-btn:hover:not(:disabled) { transform: translateY(-1px); }
+body.page-transfers .transfer-btn:active:not(:disabled) { transform: translateY(0) scale(0.97); }
+body.page-transfers .transfer-btn:disabled { cursor: not-allowed; opacity: 0.55; }
+body.page-transfers .transfer-btn:focus-visible { outline: 2px solid #007AFF; outline-offset: 2px; }
+body.page-transfers .transfer-btn-label { display: inline-flex; align-items: center; gap: 6px; }
+body.page-transfers .transfer-btn-label svg { width: 15px; height: 15px; }
+body.page-transfers .transfer-btn-spinner { position: absolute; width: 17px; height: 17px; opacity: 0; }
+body.page-transfers .transfer-btn.is-loading { opacity: 1; cursor: progress; }
+body.page-transfers .transfer-btn.is-loading .transfer-btn-label { opacity: 0; }
+body.page-transfers .transfer-btn.is-loading .transfer-btn-spinner { opacity: 1; animation: spin 0.8s linear infinite; }
+
+body.page-transfers .transfer-btn.is-accept { background: #007AFF; color: #fff; }
+body.page-transfers .transfer-btn.is-accept:hover:not(:disabled) { background: #0068D6; }
+body.page-transfers .transfer-btn.is-decline { background: #F5F5F7; color: #3C3C3C; }
+body.page-transfers .transfer-btn.is-decline:hover:not(:disabled) { background: #ECECEF; }
+body.page-transfers .transfer-btn.is-decline.is-confirming { background: #FFE9E7; color: #D70015; }
+body.page-transfers .transfer-btn.is-download { background: #000; color: #fff; }
+body.page-transfers .transfer-btn.is-download:hover:not(:disabled) { opacity: 0.85; }
+
+body.page-transfers .transfer-status {
+    flex-shrink: 0;
+    font-family: 'Arimo', sans-serif;
+    font-weight: 500;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+body.page-transfers .transfer-status.is-accepted { color: #00827B; background: #E6FBEE; }
+body.page-transfers .transfer-status.is-declined { color: #8A8A8E; background: #F2F2F4; }
+body.page-transfers .transfer-status.is-expired { color: #A15C00; background: #FFF4E0; }
+
+/* Download progress: thin bar along the card's bottom edge */
+body.page-transfers .transfer-progress {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: transparent;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+body.page-transfers .transfer-card.is-downloading .transfer-progress { opacity: 1; background: #EEF4FF; }
+body.page-transfers .transfer-progress-fill {
+    width: 0;
+    height: 100%;
+    background: #007AFF;
+    transition: width 0.2s ease;
+}
+
+/* Empty / error states */
+body.page-transfers .transfers-empty {
+    margin-top: 12px;
+    padding: 28px 20px;
+    border: 1.5px dashed #E0E0E4;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    text-align: center;
+    font-family: 'Arimo', sans-serif;
+    opacity: 0;
+    animation: riseIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+}
+body.page-transfers .transfers-empty-icon { width: 26px; height: 26px; color: #B0B0B6; margin-bottom: 4px; }
+body.page-transfers .transfers-empty strong { font-size: 14px; color: #3C3C3C; font-weight: 600; }
+body.page-transfers .transfers-empty p { margin: 0; font-size: 13px; color: #8A8A8E; }
+body.page-transfers .transfers-empty.is-error .transfers-empty-icon { color: #FF3B30; }
+body.page-transfers .transfers-retry {
+    margin-top: 8px;
+    height: 34px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 10px;
+    background: #000;
+    color: #fff;
+    font-family: 'Arimo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+body.page-transfers .transfers-more { display: block; margin: 16px auto 0; opacity: 1; animation: none; }
+body.page-transfers .transfers-more.hidden { display: none; }
+
+/* Device not approved notice */
+body.page-transfers .transfers-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #FFF8EC;
+    margin-top: 24px;
+}
+body.page-transfers .transfers-notice.hidden { display: none; }
+body.page-transfers .transfers-notice-icon { width: 24px; height: 24px; color: #C27400; flex-shrink: 0; }
+body.page-transfers .transfers-notice-text { flex: 1; min-width: 0; font-family: 'Arimo', sans-serif; }
+body.page-transfers .transfers-notice-text strong { font-size: 14px; color: #1a1a1f; }
+body.page-transfers .transfers-notice-text p { margin: 2px 0 0; font-size: 12.5px; color: #6B5A3A; line-height: 1.45; }
+body.page-transfers .transfers-notice-link {
+    flex-shrink: 0;
+    font-family: 'Arimo', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #007AFF;
+    text-decoration: none;
+}
+
+/* Loading skeletons */
+body.page-transfers .transfer-skeleton { pointer-events: none; }
+body.page-transfers .sk {
+    border-radius: 6px;
+    background: linear-gradient(90deg, #F0F0F2 0%, #F7F7F9 50%, #F0F0F2 100%);
+    background-size: 200% 100%;
+    animation: skShimmer 1.2s ease-in-out infinite;
+}
+body.page-transfers .sk-icon { width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0; }
+body.page-transfers .sk-line { height: 11px; width: 70%; }
+body.page-transfers .sk-line + .sk-line { margin-top: 8px; }
+body.page-transfers .sk-line.short { width: 35%; }
+body.page-transfers .sk-line.medium { width: 45%; }
+@keyframes skShimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+}
+
+@media (max-width: 620px) {
+    body.page-transfers .transfer-card .file-row { flex-wrap: wrap; row-gap: 8px; }
+    body.page-transfers .transfer-card .file-meta { flex-basis: calc(100% - 58px); }
+    body.page-transfers .transfer-card .expiry-pill,
+    body.page-transfers .transfer-card .transfer-status { margin-left: 58px; }
+    body.page-transfers .transfer-footer { flex-direction: column; align-items: stretch; }
+    body.page-transfers .transfer-actions { justify-content: stretch; }
+    body.page-transfers .transfer-actions .transfer-btn { flex: 1; }
+    body.page-transfers .transfers-notice { flex-wrap: wrap; }
+}

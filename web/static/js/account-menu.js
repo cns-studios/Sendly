@@ -84,4 +84,65 @@
             window.SendlyOpenUploadedFiles();
         });
     }
+
+    // ── Transfers badge ──
+    // Pending (unanswered) transfers show as a red counter on the Transfers
+    // item and a dot on the avatar. The count arrives live over the existing
+    // per-user device socket (transfers_updated events) and is re-broadcast
+    // as a 'sendly:transfers-updated' window event for the transfers page.
+    var badge = document.getElementById('account-menu-transfers-badge');
+    var dot = document.getElementById('account-menu-dot');
+    var baseLabel = trigger.getAttribute('aria-label') || '';
+    var labelTemplate = (window.CONFIG && window.CONFIG.t && window.CONFIG.t.menu_transfers_pending_label) || '{count} new transfers';
+
+    function setTransferCount(count) {
+        count = Math.max(0, count | 0);
+        if (badge) {
+            badge.textContent = count > 99 ? '99+' : String(count);
+            badge.hidden = count === 0;
+        }
+        if (dot) dot.hidden = count === 0;
+        trigger.setAttribute('aria-label', count ? baseLabel + ', ' + labelTemplate.replace('{count}', count) : baseLabel);
+        window.dispatchEvent(new CustomEvent('sendly:transfers-updated', { detail: { count: count } }));
+    }
+
+    function refreshCount() {
+        return fetch('/api/me/transfers/pending-count', { credentials: 'same-origin' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (payload) { if (payload && typeof payload.count === 'number') setTransferCount(payload.count); })
+            .catch(function () {});
+    }
+
+    var socket = null;
+    var retryDelay = 2000;
+    function connectSocket() {
+        if (!('WebSocket' in window)) return;
+        var scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        try {
+            socket = new WebSocket(scheme + '//' + window.location.host + '/api/me/devices/ws');
+        } catch (e) {
+            return;
+        }
+        socket.addEventListener('open', function () { retryDelay = 2000; });
+        socket.addEventListener('message', function (event) {
+            var data;
+            try { data = JSON.parse(event.data); } catch (e) { return; }
+            if (data && data.type === 'transfers_updated' && typeof data.pending_count === 'number') {
+                setTransferCount(data.pending_count);
+            }
+        });
+        socket.addEventListener('close', function () {
+            // Reconnect with backoff, and resync in case we missed an event.
+            setTimeout(function () { connectSocket(); refreshCount(); }, retryDelay);
+            retryDelay = Math.min(retryDelay * 2, 30000);
+        });
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refreshCount();
+    });
+
+    window.SendlyTransfers = { refreshCount: refreshCount };
+    refreshCount();
+    connectSocket();
 }());
