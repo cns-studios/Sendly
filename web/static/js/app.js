@@ -207,7 +207,6 @@
         if (AUTHENTICATED) {
             ensureDeviceReady().catch(() => {});
             loadRecentUploads().catch(() => {});
-            loadSharedWithMe().catch(() => {});
             loadPendingEnrollments().catch(() => {});
 
             refreshRecentFilesCache();
@@ -349,53 +348,6 @@
             });
             if (recentSearchQuery) {
                 params.set('q', recentSearchQuery);
-            }
-
-            async function loadSharedWithMe() {
-                if (!AUTHENTICATED || !recentSection?.parentElement) return;
-                let section = document.getElementById('shared-with-me-section');
-                if (!section) {
-                    section = document.createElement('section');
-                    section.id = 'shared-with-me-section';
-                    section.className = 'recent-uploads-section';
-                    section.innerHTML = '<h2>Shared with me</h2><div class="file-list" data-shared-list></div>';
-                    recentSection.parentElement.insertBefore(section, recentSection);
-                }
-                const list = section.querySelector('[data-shared-list]');
-                try {
-                    const response = await fetch('/api/me/shared-with-me?page=1&per_page=50', {
-                        headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-                    });
-                    if (!response.ok) throw new Error('Failed to load shared files');
-                    const payload = await response.json();
-                    const items = payload.items || [];
-                    list.innerHTML = items.length ? items.map((item) => `
-                        <div class="file-entry" data-file-id="${escapeHtml(item.file_id)}">
-                            <div class="file-entry-left">
-                                <span class="file-name">${escapeHtml(item.filename)}</span>
-                                <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)}</span>
-                            </div>
-                            <div class="file-entry-right">
-                                <button class="shared-download" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${escapeHtml(item.filename)}">Download</button>
-                            </div>
-                        </div>
-                    `).join('') : '<p>No files have been shared with you.</p>';
-                    list.querySelectorAll('.shared-download').forEach((button) => {
-                        button.addEventListener('click', async () => {
-                            button.disabled = true;
-                            try {
-                                await downloadOwnedFile(button.dataset.fileId, button.dataset.fileName, '', button.closest('.file-entry'));
-                            } catch (error) {
-                                showErrorBanner(error.message);
-                            } finally {
-                                button.disabled = false;
-                            }
-                        });
-                    });
-                } catch (error) {
-                    console.error(error);
-                    list.innerHTML = '<p>Unable to load shared files.</p>';
-                }
             }
 
             const response = await fetch(`/api/me/recent-uploads?${params.toString()}`, {
