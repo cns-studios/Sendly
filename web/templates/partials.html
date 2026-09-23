@@ -1,0 +1,38 @@
+{{/* Shared header account menu. Rendered in every page header via
+     {{template "account_menu" .}}; behaviour lives in /static/js/account-menu.js. */}}
+{{define "account_menu"}}
+{{if .authenticated}}
+<button type="button"
+        class="account-menu-trigger"
+        id="account-menu-trigger"
+        aria-haspopup="true"
+        aria-expanded="false"
+        aria-controls="account-menu"
+        aria-label="{{.t.header_account_menu_label}}">
+    <span class="account-menu-avatar" data-username="{{.username}}">
+        <img src="{{.userAvatar}}" alt="" class="account-menu-avatar-img" width="24" height="24" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar(this.parentNode.dataset.username));">
+    </span>
+    <span class="account-menu-username" title="{{.username}}">{{.username}}</span>
+    <i data-lucide="chevron-down" class="account-menu-chevron" aria-hidden="true"></i>
+</button>
+
+<div class="account-menu" id="account-menu" role="menu" aria-labelledby="account-menu-trigger">
+    <a href="/#uploaded-files" role="menuitem" class="account-menu-item" data-menu-action="uploaded-files">
+        <i data-lucide="files" aria-hidden="true"></i>
+        <span>{{.t.menu_uploaded_files}}</span>
+    </a>
+    <div class="account-menu-divider" role="separator"></div>
+    <a href="{{.accountURL}}" role="menuitem" class="account-menu-item">
+        <i data-lucide="user" aria-hidden="true"></i>
+        <span>{{.t.header_your_account}}</span>
+    </a>
+    <a href="/auth/logout" role="menuitem" class="account-menu-item">
+        <i data-lucide="log-out" aria-hidden="true"></i>
+        <span>{{.t.header_logout}}</span>
+    </a>
+</div>
+<script src="/static/js/account-menu.js" defer></script>
+{{else}}
+<a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
+{{end}}
+{{end}}

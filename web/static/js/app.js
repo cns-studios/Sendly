@@ -212,6 +212,14 @@
             refreshRecentFilesCache();
             if (recentFilesCacheTimer) clearInterval(recentFilesCacheTimer);
             recentFilesCacheTimer = setInterval(refreshRecentFilesCache, 60000);
+
+            // The account menu's "Uploaded files" item opens the popup in
+            // place here, and links to /#uploaded-files from other pages.
+            window.SendlyOpenUploadedFiles = openRecentFilesPopup;
+            if (window.location.hash === '#uploaded-files') {
+                history.replaceState(null, '', window.location.pathname + window.location.search);
+                openRecentFilesPopup();
+            }
         }
     }
 
