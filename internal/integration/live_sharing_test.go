@@ -122,6 +122,10 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	cfg.CNSAuthURL = authServer.URL
 	cfg.CNSAuthServiceKey = "live-service-key"
 
+	// Lookup searches Sendly's local user cache, not CNS.
+	if err := db.UpsertUser(context.Background(), &models.User{CNSUserID: recipientID, Username: "recipient-user", Status: models.UserStatusActive}); err != nil {
+		t.Fatal(err)
+	}
 	lookupRequest := httptest.NewRequest(http.MethodGet, "/api/users/lookup?q=recipient", nil)
 	lookupRequest.Header.Set("X-Test-User", fmt.Sprint(ownerID))
 	lookupRequest.AddCookie(&http.Cookie{Name: "auth_token", Value: "live-token"})
