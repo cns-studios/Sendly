@@ -454,6 +454,7 @@ var (
 	ErrUploadIncomplete         = &AppError{Code: "UPLOAD_INCOMPLETE", Message: "not all chunks have been uploaded"}
 	ErrRateLimited              = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
 	ErrInvalidCode              = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
+	ErrUserNotFound             = &AppError{Code: "USER_NOT_FOUND", Message: "user not found in local cache"}
 )
 
 func GenerateID(length int) string {

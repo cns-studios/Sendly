@@ -71,6 +71,12 @@ func main() {
 	defer uploadService.Stop()
 	log.Println("Upload service started")
 
+	cnsClient := services.NewCNSClient(cfg)
+	userCache := services.NewUserCache(cfg, db, cnsClient)
+	userCache.Start()
+	defer userCache.Stop()
+	log.Println("User cache reconciliation service started")
+
 	if cfg.IsProd() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -92,6 +98,7 @@ func main() {
 
 	router.Use(ipMiddleware.Handler())
 	router.Use(cnsAuth)
+	router.Use(middleware.UserCacheSyncMiddleware(userCache))
 	router.Use(middleware.LocaleMiddleware())
 
 	pageHandler := handlers.NewPageHandler(cfg, translator, db)

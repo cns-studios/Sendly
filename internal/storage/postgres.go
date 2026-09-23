@@ -1076,3 +1076,75 @@ func (p *Postgres) TouchExpiredEnrollments(ctx context.Context, userID int64) er
 	_, err := p.db.ExecContext(ctx, query, models.EnrollmentStatusExpired, userID, models.EnrollmentStatusPending)
 	return err
 }
+
+// GetUser returns the local cache row for a CNS user, or ErrUserNotFound if
+// this service has never provisioned/synced them.
+func (p *Postgres) GetUser(ctx context.Context, cnsUserID int64) (*models.User, error) {
+	var user models.User
+	err := p.db.GetContext(ctx, &user, `
+		SELECT cns_user_id, username, avatar_url, status, created_at, last_synced_at, deactivated_at
+		FROM users
+		WHERE cns_user_id = $1
+	`, cnsUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrUserNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// UpsertUser creates or refreshes the local cache row for a CNS user. Status
+// transitions back to active and deactivated_at is cleared whenever a sync
+// succeeds, since a successful CNS profile fetch means the user is provisioned.
+func (p *Postgres) UpsertUser(ctx context.Context, user *models.User) error {
+	_, err := p.db.ExecContext(ctx, `
+		INSERT INTO users (cns_user_id, username, avatar_url, status, created_at, last_synced_at, deactivated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW(), NULL)
+		ON CONFLICT (cns_user_id) DO UPDATE SET
+			username = EXCLUDED.username,
+			avatar_url = EXCLUDED.avatar_url,
+			status = EXCLUDED.status,
+			last_synced_at = NOW(),
+			deactivated_at = NULL
+	`, user.CNSUserID, user.Username, user.AvatarURL, user.Status)
+	return err
+}
+
+// SearchUsersByUsername finds active local users whose username contains
+// query (case-insensitive), for the in-app share-recipient picker. This
+// reads Sendly's own cache rather than CNS, since CNS has no username
+// search endpoint for services to call.
+func (p *Postgres) SearchUsersByUsername(ctx context.Context, query string, limit int) ([]models.User, error) {
+	var users []models.User
+	err := p.db.SelectContext(ctx, &users, `
+		SELECT cns_user_id, username
+		FROM users
+		WHERE status = $1 AND username ILIKE $2
+		ORDER BY username
+		LIMIT $3
+	`, models.UserStatusActive, "%"+query+"%", limit)
+	if err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// DeactivateStaleUsers marks locally-cached users inactive if they haven't
+// synced with CNS since staleBefore. This is the reconciliation fallback:
+// CNS has no webhooks and no service-scoped "check user X" call, so there is
+// no way to proactively re-verify a user without their own bearer token. A
+// user who goes quiet simply ages out locally, and flips back to active the
+// next time they make an authenticated request and resync.
+func (p *Postgres) DeactivateStaleUsers(ctx context.Context, staleBefore time.Time) (int64, error) {
+	result, err := p.db.ExecContext(ctx, `
+		UPDATE users
+		SET status = $1, deactivated_at = NOW()
+		WHERE status = $2 AND last_synced_at < $3
+	`, models.UserStatusInactive, models.UserStatusActive, staleBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
