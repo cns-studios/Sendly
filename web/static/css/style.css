@@ -232,6 +232,20 @@ body.page-index {
     object-fit: cover;
     width: 24px;
     height: 24px;
+    display: block;
+}
+
+.account-menu-username {
+    max-width: 180px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.account-menu-chevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
 }
 
 .account-menu-trigger[aria-expanded="true"] + .account-menu {
@@ -243,8 +257,9 @@ body.page-index {
 }
 
 .account-menu {
+    display: none;
     position: absolute;
-    top: calc(100% + 8px);
+    top: 100%;
     right: 0;
     margin-top: 0 !important;
     background: #fff !important;
@@ -300,12 +315,23 @@ body.page-index {
         transform: translateY(0) scale(1);
     }
 }
-.account-menu-item i[data-lucide] {
+.account-menu-item i[data-lucide],
+.account-menu-item svg.lucide {
+    width: 18px;
+    height: 18px;
     color: #666;
     flex-shrink: 0;
 }
+.account-menu-item > span:first-of-type { flex: 1; }
+.account-menu-divider {
+    height: 1px;
+    background: #ececef;
+    margin: 6px 4px;
+}
 .account-menu-item:hover i[data-lucide],
-.account-menu-item:focus i[data-lucide] {
+.account-menu-item:focus i[data-lucide],
+.account-menu-item:hover svg.lucide,
+.account-menu-item:focus svg.lucide {
     color: #333;
 }
 
@@ -2664,6 +2690,7 @@ body.page-link .recent-recipients-row::-webkit-scrollbar { display: none; }
 
 body.page-link .recent-recipient {
     flex: 0 0 64px;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
