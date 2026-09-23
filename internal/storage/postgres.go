@@ -843,14 +843,23 @@ func (p *Postgres) CreateFileAccessKeyEnvelope(ctx context.Context, envelope *mo
 	return err
 }
 
+// GetFileAccessKeyEnvelope returns the identity-wrapped DEK a user may use
+// for a file: their own 'owner' envelope, or a transfer ('share') envelope
+// once that transfer has been accepted. Pending transfers are withheld and
+// declined ones have no envelope left, so both return ErrFileAccessNotFound.
 func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, recipientUserID int64) (*models.FileAccessKeyEnvelope, error) {
 	var envelope models.FileAccessKeyEnvelope
 	err := p.db.GetContext(ctx, &envelope, `
-		SELECT file_id, recipient_cns_user_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce,
-			dek_wrap_version, recipient_key_version, access_kind, source_tunnel_id,
-			granted_at, created_at, updated_at
-		FROM file_access_key_envelopes
-		WHERE file_id = $1 AND recipient_cns_user_id = $2
+		SELECT e.file_id, e.recipient_cns_user_id, e.wrapped_dek, e.dek_wrap_alg, e.dek_wrap_nonce,
+			e.dek_wrap_version, e.recipient_key_version, e.access_kind, e.source_tunnel_id,
+			e.granted_at, e.created_at, e.updated_at
+		FROM file_access_key_envelopes e
+		WHERE e.file_id = $1 AND e.recipient_cns_user_id = $2
+		  AND (e.access_kind = 'owner' OR EXISTS (
+			SELECT 1 FROM file_transfers t
+			WHERE t.file_id = e.file_id AND t.recipient_cns_user_id = e.recipient_cns_user_id
+			  AND t.status = 'accepted'
+		  ))
 	`, fileID, recipientUserID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, models.ErrFileAccessNotFound
@@ -861,8 +870,8 @@ func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, 
 	return &envelope, nil
 }
 
-// GetRecentShareRecipients returns the users ownerUserID most recently shared
-// files with, newest first, joined against the local user cache so callers
+// GetRecentShareRecipients returns the users ownerUserID most recently sent
+// transfers to, newest first, joined against the local user cache so callers
 // can render a username and avatar. Recipients missing from the cache (or
 // deactivated there) are skipped: there is nothing useful to display for them.
 func (p *Postgres) GetRecentShareRecipients(ctx context.Context, ownerUserID int64, limit int) ([]models.User, error) {
@@ -873,11 +882,10 @@ func (p *Postgres) GetRecentShareRecipients(ctx context.Context, ownerUserID int
 	err := p.db.SelectContext(ctx, &users, `
 		SELECT u.cns_user_id, u.username, u.avatar_url
 		FROM (
-			SELECT e.recipient_cns_user_id, MAX(e.granted_at) AS last_shared_at
-			FROM file_access_key_envelopes e
-			JOIN files f ON f.id = e.file_id
-			WHERE e.access_kind = 'share' AND f.owner_cns_user_id = $1
-			GROUP BY e.recipient_cns_user_id
+			SELECT recipient_cns_user_id, MAX(created_at) AS last_shared_at
+			FROM file_transfers
+			WHERE sender_cns_user_id = $1
+			GROUP BY recipient_cns_user_id
 		) r
 		JOIN users u ON u.cns_user_id = r.recipient_cns_user_id
 		WHERE u.status = $2
@@ -892,10 +900,10 @@ func (p *Postgres) GetSharedWithMeFiles(ctx context.Context, userID int64, page,
 	var total int
 	if err := p.db.GetContext(ctx, &total, `
 		SELECT COUNT(*)
-		FROM file_access_key_envelopes e
-		JOIN files f ON f.id = e.file_id
-		WHERE e.recipient_cns_user_id = $1
-		  AND e.access_kind = 'share'
+		FROM file_transfers t
+		JOIN files f ON f.id = t.file_id
+		WHERE t.recipient_cns_user_id = $1
+		  AND t.status = 'accepted'
 		  AND f.is_deleted = FALSE
 		  AND f.expires_at > NOW()
 	`, userID); err != nil {
@@ -906,10 +914,10 @@ func (p *Postgres) GetSharedWithMeFiles(ctx context.Context, userID int64, page,
 	if err := p.db.SelectContext(ctx, &items, `
 		SELECT f.id AS file_id, f.original_name AS filename, f.size_bytes,
 			f.created_at, f.expires_at
-		FROM file_access_key_envelopes e
-		JOIN files f ON f.id = e.file_id
-		WHERE e.recipient_cns_user_id = $1
-		  AND e.access_kind = 'share'
+		FROM file_transfers t
+		JOIN files f ON f.id = t.file_id
+		WHERE t.recipient_cns_user_id = $1
+		  AND t.status = 'accepted'
 		  AND f.is_deleted = FALSE
 		  AND f.expires_at > NOW()
 		ORDER BY f.created_at DESC

@@ -140,6 +140,7 @@ func main() {
 	router.GET("/data-encryption", pageHandler.DataEncryption)
 	router.GET("/help", pageHandler.HelpPage)
 	router.GET("/shared/:id", pageHandler.SharedFile)
+	router.GET("/transfers", pageHandler.Transfers)
 
 	auth := router.Group("/auth")
 	{
@@ -182,6 +183,10 @@ func main() {
 			me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 			me.GET("/shared-with-me", recentUploadsHandler.SharedWithMe)
 			me.GET("/recent-share-recipients", recentUploadsHandler.RecentShareRecipients)
+			me.GET("/transfers", recentUploadsHandler.ListTransfers)
+			me.GET("/transfers/pending-count", recentUploadsHandler.PendingTransferCount)
+			me.POST("/transfers/:file_id/accept", recentUploadsHandler.AcceptTransfer)
+			me.POST("/transfers/:file_id/decline", recentUploadsHandler.DeclineTransfer)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 			me.POST("/tunnels/start", tunnelHandler.Start)
 			me.POST("/tunnels/join", tunnelHandler.Join)

@@ -58,8 +58,10 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	ownerID := time.Now().UnixNano() % 1000000000
 	recipientID := ownerID + 1
 	noKeyID := ownerID + 2
+	declinerID := ownerID + 3
 	_, _ = liveSharingIdentity(t, db, ownerID, fmt.Sprintf("00000000-0000-4000-8000-%012d", ownerID%1000000000000))
 	recipientKey, recipientDevice := liveSharingIdentity(t, db, recipientID, fmt.Sprintf("00000000-0000-4000-8000-%012d", recipientID%1000000000000))
+	_, declinerDevice := liveSharingIdentity(t, db, declinerID, fmt.Sprintf("00000000-0000-4000-8000-%012d", declinerID%1000000000000))
 	fileID := models.GenerateID(20)
 	dek := make([]byte, 32)
 	if _, err := rand.Read(dek); err != nil {
@@ -105,6 +107,10 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	router.GET("/api/me/shared-with-me", recent.SharedWithMe)
 	router.GET("/api/me/recent-share-recipients", recent.RecentShareRecipients)
 	router.GET("/api/me/files/:id/access", recent.FileAccess)
+	router.GET("/api/me/transfers", recent.ListTransfers)
+	router.GET("/api/me/transfers/pending-count", recent.PendingTransferCount)
+	router.POST("/api/me/transfers/:file_id/accept", recent.AcceptTransfer)
+	router.POST("/api/me/transfers/:file_id/decline", recent.DeclineTransfer)
 
 	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -185,6 +191,42 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		t.Fatalf("recent recipients status=%d body=%s", recentRecipients.Code, recentRecipients.Body.String())
 	}
 
+	// A new transfer is pending: listed for the recipient, but its key is withheld.
+	pending := requestAs(router, int(recipientID), http.MethodGet, "/api/me/transfers?view=pending", nil, "")
+	if pending.Code != http.StatusOK || !bytes.Contains(pending.Body.Bytes(), []byte(fileID)) || !bytes.Contains(pending.Body.Bytes(), []byte(`"status":"pending"`)) {
+		t.Fatalf("pending transfers status=%d body=%s", pending.Code, pending.Body.String())
+	}
+	if count := requestAs(router, int(recipientID), http.MethodGet, "/api/me/transfers/pending-count", nil, ""); !bytes.Contains(count.Body.Bytes(), []byte(`"count":1`)) {
+		t.Fatalf("pending count before accept body=%s", count.Body.String())
+	}
+	if listed := requestAs(router, int(recipientID), http.MethodGet, "/api/me/shared-with-me", nil, ""); bytes.Contains(listed.Body.Bytes(), []byte(fileID)) {
+		t.Fatalf("pending transfer appeared in shared-with-me: body=%s", listed.Body.String())
+	}
+	if early := requestAs(router, int(recipientID), http.MethodGet, "/api/me/files/"+fileID+"/access?device_id="+recipientDevice, nil, ""); early.Code == http.StatusOK {
+		t.Fatalf("pending transfer handed out its key: body=%s", early.Body.String())
+	}
+	if dup := requestAs(router, int(ownerID), http.MethodPost, "/api/file/"+fileID+"/share-to-user", shareBody, "application/json"); dup.Code != http.StatusConflict || !bytes.Contains(dup.Body.Bytes(), []byte("TRANSFER_EXISTS")) {
+		t.Fatalf("duplicate transfer status=%d body=%s", dup.Code, dup.Body.String())
+	}
+	if other := requestAs(router, int(ownerID), http.MethodPost, "/api/me/transfers/"+fileID+"/accept", nil, ""); other.Code != http.StatusNotFound {
+		t.Fatalf("sender accepted a transfer not addressed to them: status=%d body=%s", other.Code, other.Body.String())
+	}
+
+	accepted := requestAs(router, int(recipientID), http.MethodPost, "/api/me/transfers/"+fileID+"/accept", nil, "")
+	if accepted.Code != http.StatusOK {
+		t.Fatalf("accept status=%d body=%s", accepted.Code, accepted.Body.String())
+	}
+	if again := requestAs(router, int(recipientID), http.MethodPost, "/api/me/transfers/"+fileID+"/decline", nil, ""); again.Code != http.StatusConflict {
+		t.Fatalf("answering twice status=%d body=%s", again.Code, again.Body.String())
+	}
+	if count := requestAs(router, int(recipientID), http.MethodGet, "/api/me/transfers/pending-count", nil, ""); !bytes.Contains(count.Body.Bytes(), []byte(`"count":0`)) {
+		t.Fatalf("pending count after accept body=%s", count.Body.String())
+	}
+	history := requestAs(router, int(recipientID), http.MethodGet, "/api/me/transfers?view=history", nil, "")
+	if !bytes.Contains(history.Body.Bytes(), []byte(`"status":"accepted"`)) || !bytes.Contains(history.Body.Bytes(), []byte(fmt.Sprintf(`"sender_user_id":%d`, ownerID))) {
+		t.Fatalf("transfer history body=%s", history.Body.String())
+	}
+
 	listed := requestAs(router, int(recipientID), http.MethodGet, "/api/me/shared-with-me", nil, "")
 	if listed.Code != http.StatusOK || !bytes.Contains(listed.Body.Bytes(), []byte(fileID)) {
 		t.Fatalf("shared list status=%d body=%s", listed.Code, listed.Body.String())
@@ -212,6 +254,50 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	decrypted, err := decryptTestDEK(recoveredDEK, stored[12:], stored[:12])
 	if err != nil || string(decrypted) != string(plaintext) {
 		t.Fatalf("shared file decryption failed: err=%v plaintext=%q", err, decrypted)
+	}
+
+	// Declining revokes the key: no access, and the same file can't be re-sent to that user.
+	declinerLookup := requestAs(router, int(ownerID), http.MethodGet, fmt.Sprintf("/api/users/%d/identity-key", declinerID), nil, "")
+	var declinerPublic struct {
+		PublicKeyJWK json.RawMessage `json:"public_key_jwk"`
+		KeyVersion   int             `json:"key_version"`
+	}
+	if err := json.Unmarshal(declinerLookup.Body.Bytes(), &declinerPublic); err != nil {
+		t.Fatal(err)
+	}
+	declinerPublicKey, err := parseRSAJWK(declinerPublic.PublicKeyJWK)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declinerWrapped, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, declinerPublicKey, dek, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declinerBody, _ := json.Marshal(models.ShareFileRequest{
+		RecipientUserID: declinerID, WrappedDEK: base64.StdEncoding.EncodeToString(declinerWrapped),
+		DEKWrapAlg: "RSA-OAEP-2048-v1", RecipientKeyVersion: declinerPublic.KeyVersion,
+	})
+	if sent := requestAs(router, int(ownerID), http.MethodPost, "/api/file/"+fileID+"/share-to-user", declinerBody, "application/json"); sent.Code != http.StatusOK {
+		t.Fatalf("second recipient share status=%d body=%s", sent.Code, sent.Body.String())
+	}
+	if declined := requestAs(router, int(declinerID), http.MethodPost, "/api/me/transfers/"+fileID+"/decline", nil, ""); declined.Code != http.StatusOK {
+		t.Fatalf("decline status=%d body=%s", declined.Code, declined.Body.String())
+	}
+	if revoked := requestAs(router, int(declinerID), http.MethodGet, "/api/me/files/"+fileID+"/access?device_id="+declinerDevice, nil, ""); revoked.Code == http.StatusOK {
+		t.Fatalf("declined transfer still handed out a key: body=%s", revoked.Body.String())
+	}
+	if _, err := db.GetFileAccessKeyEnvelope(context.Background(), fileID, declinerID); err != models.ErrFileAccessNotFound {
+		t.Fatalf("declined recipient envelope still present: err=%v", err)
+	}
+	if resend := requestAs(router, int(ownerID), http.MethodPost, "/api/file/"+fileID+"/share-to-user", declinerBody, "application/json"); resend.Code != http.StatusConflict {
+		t.Fatalf("re-send after decline status=%d body=%s", resend.Code, resend.Body.String())
+	}
+	if declinedHistory := requestAs(router, int(declinerID), http.MethodGet, "/api/me/transfers?view=history", nil, ""); !bytes.Contains(declinedHistory.Body.Bytes(), []byte(`"status":"declined"`)) {
+		t.Fatalf("declined history body=%s", declinedHistory.Body.String())
+	}
+	// The first recipient's accepted access is unaffected by someone else declining.
+	if still := requestAs(router, int(recipientID), http.MethodGet, "/api/me/files/"+fileID+"/access?device_id="+recipientDevice, nil, ""); still.Code != http.StatusOK {
+		t.Fatalf("accepted recipient lost access: status=%d body=%s", still.Code, still.Body.String())
 	}
 
 	noKeyLookup := requestAs(router, int(ownerID), http.MethodGet, fmt.Sprintf("/api/users/%d/identity-key", noKeyID), nil, "")

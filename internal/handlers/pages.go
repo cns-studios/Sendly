@@ -461,3 +461,44 @@ func userIDOrZero(user *middleware.CNSUser) int {
 	}
 	return user.ID
 }
+
+// Transfers renders the received-transfers page. It is only meaningful for a
+// signed-in user, so anonymous visitors are sent to log in first.
+func (h *PageHandler) Transfers(c *gin.Context) {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		if h.cfg.CNSAuthURL != "" {
+			c.Redirect(http.StatusFound, "/auth/login")
+		} else {
+			c.Redirect(http.StatusFound, "/")
+		}
+		return
+	}
+	setCSRFTokenCookie(c)
+	accountURL := strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	configJSON, err := json.Marshal(map[string]interface{}{
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": true,
+		"cnsUserId":     user.ID,
+		"cnsUsername":   user.Username,
+		"tosVersion":    h.cfg.TOSVersion,
+		"t":             translations,
+	})
+	if err != nil {
+		configJSON = []byte("{}")
+	}
+	h.render(c, "transfers.html", gin.H{
+		"title":         translations["title_transfers"],
+		"description":   translations["desc_transfers"],
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": true,
+		"authLoginURL":  "/auth/login",
+		"username":      user.Username,
+		"userAvatar":    user.Avatar,
+		"accountURL":    accountURL,
+		"noindex":       true,
+		"configJSON":    template.JS(string(configJSON)),
+	})
+}
