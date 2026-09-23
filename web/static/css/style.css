@@ -674,6 +674,18 @@ body.page-index {
 }
 
 /* ── Utility ── */
+.sr-only {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 .hidden {
     display: none !important;
 }
@@ -2512,7 +2524,7 @@ body.page-link .user-input {
     background: #F5F5F7;
     border: 1px solid #E4E3E3;
     border-radius: 10px;
-    padding: 11px 14px 11px 36px;
+    padding: 11px 36px 11px 38px;
     font-family: 'Arimo', sans-serif;
     font-size: 13.5px;
     color: #000;
@@ -2525,77 +2537,86 @@ body.page-link .user-input:focus {
     background: #fff;
 }
 
-/* Search icon + loading spinner + "not found" indicator, all stacked at the
-   same absolute position inside the input, toggled by classes on .user-input-wrap */
-body.page-link .user-input-icon {
+/* Leading slot: search icon, swapped for the recipient's avatar once one is
+   selected. Trailing slot: a single status icon for the current data-state
+   on .user-input-wrap (searching / found / not-found). */
+body.page-link .user-input-lead,
+body.page-link .user-input-status {
     position: absolute;
-    left: 12px;
     top: 50%;
     transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+body.page-link .user-input-lead { left: 10px; }
+body.page-link .user-input-status { right: 10px; }
+
+body.page-link .user-input-lead-icon {
     width: 15px;
     height: 15px;
     color: #9A9A9A;
-    pointer-events: none;
     transition: opacity 0.15s ease, transform 0.15s ease;
 }
 
-body.page-link .user-input-wrap.searching .user-input-icon,
-body.page-link .user-input-wrap.not-found .user-input-icon {
-    opacity: 0;
-    transform: translateY(-50%) scale(0.8);
-}
-
-body.page-link .user-input-icon.spinner {
-    opacity: 0;
-    width: 16px;
-    height: 16px;
-    color: #007AFF;
-    /* rotate() alone (as `spin` below produces) would replace, not compose
-       with, the translateY(-50%) centering above; spin-centered keeps both. */
-    animation: spin-centered 0.8s linear infinite;
-}
-
-body.page-link .user-input-wrap.searching .user-input-icon.spinner {
-    opacity: 1;
-}
-
-/* "User not found" indicator + hover tooltip. The tooltip is a plain <span>
-   wrapper (not the lucide-rendered <svg> icon itself): Firefox does not
-   render ::before/::after generated content on SVG elements, so anchoring
-   the tooltip bubble to the icon directly silently no-ops there. */
-body.page-link .not-found-indicator {
+body.page-link .user-input-lead-avatar {
     position: absolute;
-    left: 12px;
-    top: 50%;
-    display: inline-flex;
-    width: 16px;
-    height: 16px;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     opacity: 0;
-    transform: translateY(-50%) scale(0.8);
-    pointer-events: none;
-    cursor: help;
-    transition: opacity 0.15s ease, transform 0.15s ease;
+    transform: scale(0.6);
+    transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
 
-body.page-link .user-input-wrap.not-found .not-found-indicator {
-    opacity: 1;
-    transform: translateY(-50%) scale(1);
-    pointer-events: auto;
+body.page-link .user-input-wrap.has-avatar .user-input-lead-icon { opacity: 0; transform: scale(0.6); }
+body.page-link .user-input-wrap.has-avatar .user-input-lead-avatar { opacity: 1; transform: scale(1); }
+
+body.page-link .user-input-status-icon {
+    position: absolute;
+    width: 17px;
+    height: 17px;
+    opacity: 0;
+    transform: scale(0.6);
+    transition: opacity 0.15s ease, transform 0.2s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
 
-body.page-link .not-found-indicator .user-input-icon.not-found {
-    position: static;
-    width: 100%;
-    height: 100%;
+body.page-link .user-input-status-icon.is-searching { color: #007AFF; }
+body.page-link .user-input-status-icon.is-found { color: #00A36C; }
+body.page-link .user-input-status-icon.is-not-found {
+    display: inline-flex;
     color: #FF3B30;
+    cursor: help;
 }
+body.page-link .user-input-status-icon.is-not-found svg { width: 100%; height: 100%; }
 
-body.page-link .not-found-indicator::after {
+body.page-link .user-input-wrap[data-state="searching"] .user-input-status-icon.is-searching {
+    opacity: 1;
+    transform: scale(1);
+    animation: spin 0.8s linear infinite;
+}
+body.page-link .user-input-wrap[data-state="found"] .user-input-status-icon.is-found,
+body.page-link .user-input-wrap[data-state="not-found"] .user-input-status-icon.is-not-found {
+    opacity: 1;
+    transform: scale(1);
+}
+body.page-link .user-input-wrap[data-state="not-found"] .user-input-status { pointer-events: auto; }
+body.page-link .user-input-wrap[data-state="found"] .user-input { border-color: #79D9A8; }
+body.page-link .user-input-wrap[data-state="not-found"] .user-input { border-color: #FFB3AE; }
+body.page-link .user-input:disabled { opacity: 0.6; }
+
+/* "User not found" tooltip. Anchored to the <span> wrapper, not the lucide
+   <svg>: Firefox does not render ::after generated content on SVG elements. */
+body.page-link .user-input-status-icon.is-not-found::after {
     content: attr(data-tooltip);
     position: absolute;
-    left: 50%;
-    bottom: calc(100% + 8px);
-    transform: translateX(-50%) translateY(4px);
+    right: -6px;
+    bottom: calc(100% + 10px);
     background: #1C1C1E;
     color: #fff;
     font-family: 'Arimo', sans-serif;
@@ -2608,21 +2629,95 @@ body.page-link .not-found-indicator::after {
     border-radius: 8px;
     opacity: 0;
     visibility: hidden;
+    transform: translateY(4px);
     pointer-events: none;
     transition: opacity 0.12s ease, transform 0.12s ease;
     z-index: 5;
 }
 
-body.page-link .not-found-indicator:hover::after,
-body.page-link .not-found-indicator:focus-visible::after {
+body.page-link .user-input-status-icon.is-not-found:hover::after,
+body.page-link .user-input-status-icon.is-not-found:focus-visible::after {
     opacity: 1;
     visibility: visible;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
 }
 
-@keyframes spin-centered {
-    from { transform: translateY(-50%) rotate(0deg); }
-    to { transform: translateY(-50%) rotate(360deg); }
+/* Recent recipients: avatar tiles with the username beneath */
+body.page-link .recent-recipients { margin-bottom: 14px; }
+
+body.page-link .recent-recipients-label {
+    font-family: 'Arimo', sans-serif;
+    font-size: 12px;
+    color: #7A7A7A;
+    margin-bottom: 8px;
+}
+
+body.page-link .recent-recipients-row {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 2px;
+    margin: -2px;
+}
+body.page-link .recent-recipients-row::-webkit-scrollbar { display: none; }
+
+body.page-link .recent-recipient {
+    flex: 0 0 64px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px 6px;
+    background: none;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.15s ease, transform 0.12s ease;
+}
+body.page-link .recent-recipient:hover { background: #F5F5F7; }
+body.page-link .recent-recipient:active { transform: scale(0.96); }
+body.page-link .recent-recipient:focus-visible { outline: 2px solid #007AFF; outline-offset: 1px; }
+body.page-link .recent-recipient.is-selected { background: #EAF3FF; }
+
+body.page-link .recent-recipient-avatar {
+    position: relative;
+    display: flex;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px transparent;
+    transition: box-shadow 0.15s ease;
+}
+body.page-link .recent-recipient.is-selected .recent-recipient-avatar { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #007AFF; }
+
+body.page-link .recent-recipient-badge {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #00A36C;
+    color: #fff;
+    border: 2px solid #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.4);
+    transition: opacity 0.15s ease, transform 0.25s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+body.page-link .recent-recipient-badge svg { width: 10px; height: 10px; }
+body.page-link .recent-recipient.is-sent .recent-recipient-badge { opacity: 1; transform: scale(1); }
+
+body.page-link .recent-recipient-name {
+    max-width: 100%;
+    font-family: 'Arimo', sans-serif;
+    font-size: 12px;
+    color: #3C3C3C;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 body.page-link .send-btn {
@@ -2681,17 +2776,15 @@ body.page-link .suggest-item:hover,
 body.page-link .suggest-item.active { background: #F5F5F7; }
 
 body.page-link .suggest-avatar {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #E4E3E3;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Arimo', sans-serif;
-    font-weight: 700;
-    font-size: 11px;
-    color: #595959;
+    flex-shrink: 0;
+}
+
+body.page-link .suggest-sent {
+    width: 14px;
+    height: 14px;
+    margin-left: auto;
+    color: #00A36C;
     flex-shrink: 0;
 }
 
@@ -2700,12 +2793,9 @@ body.page-link .suggest-name {
     font-size: 13.5px;
     color: #000;
     font-weight: 500;
-}
-
-body.page-link .suggest-handle {
-    font-family: 'Arimo', sans-serif;
-    font-size: 12px;
-    color: #9A9A9A;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 body.page-link .sent-chips {
@@ -2734,18 +2824,7 @@ body.page-link .sent-chip {
     to { opacity: 1; transform: scale(1); }
 }
 
-body.page-link .sent-chip .chip-avatar {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #00827B;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 9px;
-    font-weight: 700;
-}
+body.page-link .sent-chip .chip-avatar { display: flex; }
 
 body.page-link .sent-chip svg { width: 12px; height: 12px; }
 
@@ -2825,17 +2904,22 @@ body.page-link .auth-nudge-btn {
     * { animation-duration: 0.01ms !important; animation-delay: 0.01ms !important; }
 }
 
-/* Loading spinner for share send button */
-body.page-link .send-btn.is-loading::after {
-    content: "";
-    width: 16px;
-    height: 16px;
-    border: 2px solid transparent;
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    margin-left: 8px;
+/* Send button: label swaps for a spinner while a share is in flight */
+body.page-link .send-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+body.page-link .send-btn-spinner {
+    position: absolute;
+    width: 17px;
+    height: 17px;
+    opacity: 0;
+}
+body.page-link .send-btn.is-loading .send-btn-label { opacity: 0; }
+body.page-link .send-btn.is-loading .send-btn-spinner { opacity: 1; animation: spin 0.8s linear infinite; }
+body.page-link .send-btn.is-loading:disabled { opacity: 0.85; cursor: progress; }
 
 @keyframes slideInRight {
     from { opacity: 0; transform: translateX(1rem); }
