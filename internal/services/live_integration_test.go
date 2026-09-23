@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -185,6 +186,72 @@ func TestLiveIdentityKeypairRegistrationEnrollmentAndRecovery(t *testing.T) {
 	}
 	if _, err := db.GetUserIdentityKeyDeviceEnvelope(ctx, userID, deviceC.ID, 1); err != nil {
 		t.Fatalf("device C identity envelope missing after recovery: %v", err)
+	}
+}
+
+func TestLiveUserCacheUpsertGetAndDeactivateStale(t *testing.T) {
+	ctx, db := liveDB(t)
+	userID := time.Now().UnixNano()
+
+	if _, err := db.GetUser(ctx, userID); err != models.ErrUserNotFound {
+		t.Fatalf("expected ErrUserNotFound before first sync, got %v", err)
+	}
+
+	if err := db.UpsertUser(ctx, &models.User{
+		CNSUserID: userID, Username: "livetest", Status: models.UserStatusActive,
+		AvatarURL: sql.NullString{String: "https://cdn.example/livetest.png", Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := db.GetUser(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Username != "livetest" || stored.Status != models.UserStatusActive {
+		t.Fatalf("unexpected stored user: %+v", stored)
+	}
+	if !stored.AvatarURL.Valid || stored.AvatarURL.String != "https://cdn.example/livetest.png" {
+		t.Fatalf("unexpected avatar: %+v", stored.AvatarURL)
+	}
+	firstSync := stored.LastSyncedAt
+
+	if err := db.UpsertUser(ctx, &models.User{
+		CNSUserID: userID, Username: "livetest-renamed", Status: models.UserStatusActive,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := db.GetUser(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.Username != "livetest-renamed" {
+		t.Fatalf("expected upsert to refresh username, got %q", restored.Username)
+	}
+	if !restored.LastSyncedAt.After(firstSync) {
+		t.Fatal("expected upsert to advance last_synced_at")
+	}
+
+	count, err := db.DeactivateStaleUsers(ctx, time.Now().Add(1*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count < 1 {
+		t.Fatal("expected the just-synced user to be deactivated when staleBefore is in the future")
+	}
+	deactivated, err := db.GetUser(ctx, userID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deactivated.Status != models.UserStatusInactive || !deactivated.DeactivatedAt.Valid {
+		t.Fatalf("expected user to be marked inactive with a deactivated_at, got %+v", deactivated)
+	}
+
+	count, err = db.DeactivateStaleUsers(ctx, time.Now().Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no active users to deactivate on second pass, got %d", count)
 	}
 }
 

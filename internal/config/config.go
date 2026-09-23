@@ -43,8 +43,19 @@ type Config struct {
 	CNSAuthClientID        string
 	CNSAuthDesktopClientID string
 	CNSAuthServiceKey      string
-	AuthMaxFileSize        int64
-	MigrationsDir          string
+	// CNSServiceAPIURL is CNS's service-to-service API gateway
+	// (GET /api/service/me, /api/data/{service}/*) — a different host from
+	// CNSAuthURL, which is the user-facing accounts surface (/api/me,
+	// /api/account/me, /api/auth/token/refresh) used for cookie-based
+	// browser auth.
+	CNSServiceAPIURL string
+	CNSServiceSlug   string
+	AuthMaxFileSize  int64
+	MigrationsDir    string
+
+	UserCacheTTL               time.Duration
+	UserCacheReconcileInterval time.Duration
+	UserCacheStaleAfter        time.Duration
 
 	RateLimitMaxPerMinute          int64
 	RateLimitWindowSeconds         int64
@@ -82,8 +93,13 @@ func Load() (*Config, error) {
 		CNSAuthClientID:                getEnv("CNS_AUTH_CLIENT_ID", ""),
 		CNSAuthDesktopClientID:         getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),
 		CNSAuthServiceKey:              getEnv("CNS_AUTH_SERVICE_KEY", ""),
+		CNSServiceAPIURL:               getEnv("CNS_SERVICE_API_URL", ""),
+		CNSServiceSlug:                 getEnv("CNS_SERVICE_SLUG", "sendly"),
 		AuthMaxFileSize:                getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
 		MigrationsDir:                  getEnv("MIGRATIONS_DIR", "db/migrations"),
+		UserCacheTTL:                   time.Duration(getEnvInt("USER_CACHE_TTL_HOURS", 24)) * time.Hour,
+		UserCacheReconcileInterval:     time.Duration(getEnvInt("USER_CACHE_RECONCILE_INTERVAL_MINUTES", 60)) * time.Minute,
+		UserCacheStaleAfter:            time.Duration(getEnvInt("USER_CACHE_STALE_AFTER_DAYS", 30)) * 24 * time.Hour,
 		RateLimitMaxPerMinute:          getEnvInt64("RATE_LIMIT_MAX_PER_MINUTE", 30),
 		RateLimitWindowSeconds:         getEnvInt64("RATE_LIMIT_WINDOW_SECONDS", 60),
 		StrictRateLimitMaxPerMinute:    getEnvInt64("RATE_LIMIT_STRICT_MAX_PER_MINUTE", 15),

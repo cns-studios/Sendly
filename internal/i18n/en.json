@@ -100,7 +100,7 @@
   "share_users_subtitle": "Send directly to people on Sendly",
   "share_recipient_placeholder": "Search by username",
   "share_send": "Send",
-  "share_checking": "Checking...",
+  "share_user_not_found": "We couldn't find anyone with that username.",
   "share_lookup_failed": "Could not look up users.",
   "share_no_user": "No user found.",
   "share_self_error": "You can't share a file with yourself.",

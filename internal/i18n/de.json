@@ -100,7 +100,7 @@
   "share_users_subtitle": "Direkt an Personen auf Sendly senden",
   "share_recipient_placeholder": "Nach Benutzername suchen",
   "share_send": "Senden",
-  "share_checking": "Wird geprüft...",
+  "share_user_not_found": "Wir konnten niemanden mit diesem Benutzernamen finden.",
   "share_lookup_failed": "Nutzer konnten nicht gesucht werden.",
   "share_no_user": "Kein Nutzer gefunden.",
   "share_self_error": "Du kannst eine Datei nicht mit dir selbst teilen.",

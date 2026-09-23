@@ -258,7 +258,7 @@
                     <div class="spark" aria-hidden="true"></div>
                     <div class="success-mark" aria-hidden="true">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M4 12.5L9.5 18L20 6"/>
+                            <path d="M5 12l4 4 9-9"/>
                         </svg>
                     </div>
                 </div>
@@ -312,6 +312,10 @@
                     <div class="send-row">
                         <div class="user-input-wrap">
                             <i data-lucide="search" class="user-input-icon" aria-hidden="true"></i>
+                            <i data-lucide="loader-2" class="user-input-icon spinner" aria-hidden="true"></i>
+                            <span class="not-found-indicator" tabindex="0" role="img" aria-label="{{.t.share_user_not_found}}" data-tooltip="{{.t.share_user_not_found}}">
+                                <i data-lucide="x-circle" class="user-input-icon not-found" aria-hidden="true"></i>
+                            </span>
                             <input type="text" class="user-input" id="share-recipient-input" placeholder="{{.t.share_recipient_placeholder}}" autocomplete="off" aria-describedby="share-recipient-status" aria-autocomplete="list" aria-controls="share-suggest-list">
                             <ul class="suggest-list" id="share-suggest-list" role="listbox" aria-label="{{.t.share_user_suggestions}}"></ul>
                         </div>

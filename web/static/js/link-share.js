@@ -247,13 +247,18 @@
     async function handleRecipientInput() {
         const query = shareRecipientInput.value.trim();
         recipientMatches = [];
+        selectedRecipient = null;
         shareRecipientSend.disabled = true;
-        setRecipientStatus(query.length < 3 ? '' : t('share_checking'));
-        if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
+        const inputWrap = shareRecipientInput?.closest('.user-input-wrap');
+        inputWrap?.classList.remove('not-found');
         if (query.length < 3) {
+            inputWrap?.classList.remove('searching');
             renderSuggestions(query, []);
             return;
         }
+        // Show spinner
+        inputWrap?.classList.add('searching');
+        if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
         recipientLookupTimer = setTimeout(async () => {
             try {
                 const response = await fetch(`/api/users/lookup?q=${encodeURIComponent(query)}`, {
@@ -263,8 +268,20 @@
                 if (!response.ok) throw new Error(payload.error || t('share_lookup_failed'));
                 recipientMatches = payload.items || [];
                 renderSuggestions(query, []);
+
+                // An exact username match unlocks sending without requiring a
+                // click on the suggestion list; a query with no matches at all
+                // shows the not-found icon instead of inline status text.
+                const exactMatch = recipientMatches.find(u => u.username.toLowerCase() === query.toLowerCase());
+                if (exactMatch) {
+                    selectRecipient(exactMatch);
+                } else if (recipientMatches.length === 0) {
+                    inputWrap?.classList.add('not-found');
+                }
             } catch (error) {
-                setRecipientStatus(error.message, 'error');
+                console.error('User lookup failed:', error);
+            } finally {
+                inputWrap?.classList.remove('searching');
             }
         }, 300);
     }

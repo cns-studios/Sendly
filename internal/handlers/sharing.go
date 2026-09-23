@@ -2,10 +2,7 @@ package handlers
 
 import (
 	"encoding/base64"
-	"encoding/json"
-	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +40,12 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 	})
 }
 
+// LookupUsers searches Sendly's own local user cache by username, rather
+// than CNS: CNS has no service-callable username-search endpoint, only
+// /api/service/me (a caller's own profile) and /api/data/{service}/* (this
+// service's own KV blob). The cache is populated by UserCacheSyncMiddleware
+// as users authenticate, so only users who have interacted with Sendly
+// while this cache existed will be found here.
 func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
@@ -54,55 +57,17 @@ func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}})
 		return
 	}
-	if h.cfg.CNSAuthURL == "" {
-		c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{Error: "User lookup unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
-		return
-	}
-	token, err := c.Cookie("auth_token")
-	if err != nil || token == "" {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet,
-		strings.TrimSuffix(h.cfg.CNSAuthURL, "/")+"/api/users/lookup?q="+url.QueryEscape(query), nil)
+	matches, err := h.db.SearchUsersByUsername(c.Request.Context(), query, 10)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if h.cfg.CNSAuthServiceKey != "" {
-		req.Header.Set("x-service-key", h.cfg.CNSAuthServiceKey)
-	}
-	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service is unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service is unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-	if err != nil {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service is unavailable", Code: "USER_LOOKUP_UNAVAILABLE"})
-		return
-	}
-	var payload struct {
-		Items []struct {
-			ID       int64  `json:"id"`
-			Username string `json:"username"`
-			Avatar   string `json:"avatar,omitempty"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(body, &payload); err != nil {
-		c.JSON(http.StatusBadGateway, models.ErrorResponse{Error: "User lookup service returned an invalid response", Code: "USER_LOOKUP_INVALID_RESPONSE"})
-		return
-	}
-	items := make([]gin.H, 0, len(payload.Items))
-	for _, item := range payload.Items {
-		items = append(items, gin.H{"user_id": item.ID, "username": item.Username, "avatar": item.Avatar})
+	items := make([]gin.H, 0, len(matches))
+	for _, match := range matches {
+		if match.CNSUserID == int64(user.ID) {
+			continue
+		}
+		items = append(items, gin.H{"user_id": match.CNSUserID, "username": match.Username})
 	}
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }

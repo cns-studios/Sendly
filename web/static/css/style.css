@@ -2202,6 +2202,7 @@ body.page-link .link-content-wrapper {
 /* Stage visibility */
 body.page-link .form-section {
     width: 100%;
+    align-items: center;
 }
 
 /* Success stage */
@@ -2524,6 +2525,8 @@ body.page-link .user-input:focus {
     background: #fff;
 }
 
+/* Search icon + loading spinner + "not found" indicator, all stacked at the
+   same absolute position inside the input, toggled by classes on .user-input-wrap */
 body.page-link .user-input-icon {
     position: absolute;
     left: 12px;
@@ -2533,6 +2536,93 @@ body.page-link .user-input-icon {
     height: 15px;
     color: #9A9A9A;
     pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+body.page-link .user-input-wrap.searching .user-input-icon,
+body.page-link .user-input-wrap.not-found .user-input-icon {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.8);
+}
+
+body.page-link .user-input-icon.spinner {
+    opacity: 0;
+    width: 16px;
+    height: 16px;
+    color: #007AFF;
+    /* rotate() alone (as `spin` below produces) would replace, not compose
+       with, the translateY(-50%) centering above; spin-centered keeps both. */
+    animation: spin-centered 0.8s linear infinite;
+}
+
+body.page-link .user-input-wrap.searching .user-input-icon.spinner {
+    opacity: 1;
+}
+
+/* "User not found" indicator + hover tooltip. The tooltip is a plain <span>
+   wrapper (not the lucide-rendered <svg> icon itself): Firefox does not
+   render ::before/::after generated content on SVG elements, so anchoring
+   the tooltip bubble to the icon directly silently no-ops there. */
+body.page-link .not-found-indicator {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    opacity: 0;
+    transform: translateY(-50%) scale(0.8);
+    pointer-events: none;
+    cursor: help;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+body.page-link .user-input-wrap.not-found .not-found-indicator {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+    pointer-events: auto;
+}
+
+body.page-link .not-found-indicator .user-input-icon.not-found {
+    position: static;
+    width: 100%;
+    height: 100%;
+    color: #FF3B30;
+}
+
+body.page-link .not-found-indicator::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(4px);
+    background: #1C1C1E;
+    color: #fff;
+    font-family: 'Arimo', sans-serif;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: normal;
+    max-width: 220px;
+    width: max-content;
+    padding: 6px 10px;
+    border-radius: 8px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    z-index: 5;
+}
+
+body.page-link .not-found-indicator:hover::after,
+body.page-link .not-found-indicator:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+@keyframes spin-centered {
+    from { transform: translateY(-50%) rotate(0deg); }
+    to { transform: translateY(-50%) rotate(360deg); }
 }
 
 body.page-link .send-btn {
