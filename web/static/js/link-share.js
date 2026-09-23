@@ -1005,6 +1005,17 @@
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;
         idleCopyDone = false;
+        // Per-file share state must not leak into the next upload.
+        sentRecipientIds.clear();
+        shareSentChips?.replaceChildren();
+        if (shareRecipientInput) {
+            cancelPendingLookup();
+            shareRecipientInput.value = '';
+            setRecipientInputState('idle');
+            clearSelectedRecipient();
+            closeSuggestions();
+            renderRecentRecipients();
+        }
         if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
         fileInput.value = '';
 
