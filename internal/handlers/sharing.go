@@ -148,16 +148,24 @@ func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {
 		}
 	}
 	now := time.Now()
-	if err := h.db.CreateFileAccessKeyEnvelope(c.Request.Context(), &models.FileAccessKeyEnvelope{
+	err = h.db.CreateTransfer(c.Request.Context(), &models.Transfer{
+		FileID: fileID, SenderCNSUserID: int64(user.ID), RecipientCNSUserID: req.RecipientUserID, CreatedAt: now,
+	}, &models.FileAccessKeyEnvelope{
 		FileID: fileID, RecipientCNSUserID: req.RecipientUserID, WrappedDEK: wrapped,
 		DEKWrapAlg: req.DEKWrapAlg, DEKWrapNonce: nonce, DEKWrapVersion: 1,
 		RecipientKeyVersion: req.RecipientKeyVersion, AccessKind: "share",
 		GrantedAt: now, CreatedAt: now, UpdatedAt: now,
-	}); err != nil {
+	})
+	if err == models.ErrTransferExists {
+		c.JSON(http.StatusConflict, models.ErrorResponse{Error: err.(*models.AppError).Message, Code: models.ErrTransferExists.Code})
+		return
+	}
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to create file share", Code: "FILE_SHARE_FAILED"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"file_id": fileID, "recipient_user_id": req.RecipientUserID})
+	h.publishTransfersChanged(c.Request.Context(), req.RecipientUserID)
+	c.JSON(http.StatusOK, gin.H{"file_id": fileID, "recipient_user_id": req.RecipientUserID, "status": models.TransferStatusPending})
 }
 
 func (h *RecentUploadsHandler) SharedWithMe(c *gin.Context) {
@@ -174,9 +182,6 @@ func (h *RecentUploadsHandler) SharedWithMe(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch shared files", Code: "SHARED_FILES_FAILED"})
 		return
-	}
-	for i := range items {
-		items[i].ShareURL = h.cfg.BaseURL + "/shared/" + items[i].FileID
 	}
 	totalPages := 0
 	if total > 0 {
