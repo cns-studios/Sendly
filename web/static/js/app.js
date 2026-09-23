@@ -1317,50 +1317,55 @@
                 return;
             }
 
-            async function shareFileWithUser(fileId) {
-                const recipient = window.prompt('Enter the recipient user ID');
-                if (!recipient || !/^[1-9]\d*$/.test(recipient.trim())) return;
-                const recipientID = Number(recipient.trim());
-                const keyResponse = await fetch(`/api/users/${recipientID}/identity-key`, {
-                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-                });
-                const keyPayload = await keyResponse.json().catch(() => ({}));
-                if (!keyResponse.ok) {
-                    if (keyPayload.code === 'RECIPIENT_NOT_READY') {
-                        throw new Error('This person has not set up sharing yet.');
-                    }
-                    throw new Error(keyPayload.error || 'Unable to look up recipient identity key.');
-                }
-                const passphrase = await getOwnedFilePassphrase(fileId);
-                const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
-                    new TextEncoder().encode(passphrase),
-                    keyPayload.public_key_jwk
-                );
-                const shareResponse = await fetch(`/api/file/${encodeURIComponent(fileId)}/share-to-user`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': getCookieValue('csrf_token')
-                    },
-                    body: JSON.stringify({
-                        recipient_user_id: recipientID,
-                        wrapped_dek: SecureCrypto.toBase64(wrapped),
-                        dek_wrap_alg: 'RSA-OAEP-2048-v1',
-                        recipient_key_version: keyPayload.key_version
-                    })
-                });
-                if (!shareResponse.ok) {
-                    const payload = await shareResponse.json().catch(() => ({}));
-                    throw new Error(payload.error || 'Unable to share file.');
-                }
-                showInfoBanner('File shared successfully.');
-            }
             showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
         } finally {
             if (!keepDisabled) {
                 button.disabled = false;
             }
         }
+    }
+
+    async function shareFileWithUser(fileId) {
+        const recipient = window.prompt('Enter the recipient user ID');
+        if (!recipient || !/^[1-9]\d*$/.test(recipient.trim())) return;
+        const recipientID = Number(recipient.trim());
+        const keyResponse = await fetch(`/api/users/${recipientID}/identity-key`, {
+            headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+        });
+        const keyPayload = await keyResponse.json().catch(() => ({}));
+        if (!keyResponse.ok) {
+            if (keyPayload.code === 'RECIPIENT_NOT_READY') {
+                throw new Error('This person has not set up sharing yet.');
+            }
+            throw new Error(keyPayload.error || 'Unable to look up recipient identity key.');
+        }
+        const passphrase = await getOwnedFilePassphrase(fileId);
+        const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
+            new TextEncoder().encode(passphrase),
+            keyPayload.public_key_jwk
+        );
+        const shareResponse = await fetch(`/api/file/${encodeURIComponent(fileId)}/share-to-user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookieValue('csrf_token')
+            },
+            body: JSON.stringify({
+                recipient_user_id: recipientID,
+                wrapped_dek: SecureCrypto.toBase64(wrapped),
+                dek_wrap_alg: 'RSA-OAEP-2048-v1',
+                recipient_key_version: keyPayload.key_version
+            })
+        });
+        if (!shareResponse.ok) {
+            const payload = await shareResponse.json().catch(() => ({}));
+            if (payload.code === 'TRANSFER_EXISTS') {
+                showInfoBanner(payload.error || 'This file was already sent to this user.');
+                return;
+            }
+            throw new Error(payload.error || 'Unable to share file.');
+        }
+        showInfoBanner('File shared successfully.');
     }
 
     async function downloadOwnedFile(fileId, fileName, tunnelId = '', cardEl = null) {
