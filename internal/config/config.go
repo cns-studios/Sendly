@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -29,6 +30,10 @@ type Config struct {
 	ChunkDir string
 
 	BehindCloudflare bool
+	// TrustedProxies lists the proxy IPs/CIDRs whose forwarding headers
+	// (X-Forwarded-For, CF-Connecting-IP) are believed. Requests from any
+	// other peer are attributed to their direct remote address.
+	TrustedProxies []string
 
 	MaxFileSize           int64
 	AutoDeleteReportCount int
@@ -83,6 +88,7 @@ func Load() (*Config, error) {
 		DataDir:                        getEnv("DATA_DIR", "./data"),
 		ChunkDir:                       getEnv("CHUNK_DIR", ""),
 		BehindCloudflare:               getEnvBool("BEHIND_CLOUDFLARE", false),
+		TrustedProxies:                 getEnvList("TRUSTED_PROXIES"),
 		MaxFileSize:                    getEnvInt64("MAX_FILE_SIZE", 786432000),
 		AutoDeleteReportCount:          getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
 		DiscordWebhookURL:              getEnv("DISCORD_WEBHOOK_URL", ""),
@@ -108,6 +114,10 @@ func Load() (*Config, error) {
 		DownloadRateLimitWindowSeconds: getEnvInt64("RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", 60),
 	}
 
+	if cfg.BehindCloudflare && len(cfg.TrustedProxies) == 0 {
+		cfg.TrustedProxies = append([]string(nil), cloudflareIPRanges...)
+	}
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
@@ -128,7 +138,28 @@ func (c *Config) validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("DATA_DIR is required")
 	}
+	for _, proxy := range c.TrustedProxies {
+		if _, _, err := net.ParseCIDR(proxy); err == nil {
+			continue
+		}
+		if net.ParseIP(proxy) == nil {
+			return fmt.Errorf("TRUSTED_PROXIES entry %q is not an IP or CIDR", proxy)
+		}
+	}
 	return nil
+}
+
+// cloudflareIPRanges are Cloudflare's published edge ranges
+// (https://www.cloudflare.com/ips/). They are the default trusted proxies
+// when BEHIND_CLOUDFLARE is set and TRUSTED_PROXIES is empty, i.e. when
+// Cloudflare connects to this server directly.
+var cloudflareIPRanges = []string{
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+	"141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+	"197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+	"104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+	"2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
 }
 
 func (c *Config) PostgresDSN() string {
@@ -171,6 +202,16 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func getEnvList(key string) []string {
+	var items []string
+	for _, item := range strings.Split(os.Getenv(key), ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 func getEnvBool(key string, defaultValue bool) bool {

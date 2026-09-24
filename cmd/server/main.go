@@ -84,6 +84,11 @@ func main() {
 	
 
 	router := gin.New()
+	// Only forwarding headers from configured proxies are believed; with no
+	// TRUSTED_PROXIES, ClientIP is always the direct peer address.
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("Invalid TRUSTED_PROXIES: %v", err)
+	}
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
 
