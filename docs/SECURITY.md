@@ -27,6 +27,10 @@ Access checks include:
 - Device ownership checks for enrollment actions.
 - Trusted device checks for envelope-sensitive operations.
 - Tunnel ownership and active-state checks.
+- Quick share (tunnel) membership: every tunnel endpoint requires the caller to be the host (initiating CNS user, or `X-Host-Token` for a guest host) or a participant (CNS user, or `X-Device-ID` + `X-Participant-Token` for an anonymous joiner). Device IDs alone never authorize anything.
+- Quick share host approval: joiners start unapproved. Session key envelopes, peer file-key wrapping, file lists, file access and uploads are only available to participants the host approved. The host compares a key fingerprint shown next to each joiner with the one on the joiner's screen before approving.
+- A participant's public key can only be replaced by that participant, and existing session key envelopes are never overwritten.
+- Device IDs stay bound to the account that registered them (`DEVICE_ID_CONFLICT` otherwise).
 
 ## Data Protection Model
 
@@ -40,8 +44,10 @@ Access checks include:
   - Standard
   - Strict
   - Download
-- Duplicate report prevention per reporter IP + file.
-- Auto-delete threshold for highly reported files.
+- Duplicate report prevention per signed-in user + file, or per client IP + file for anonymous reports.
+- Auto-delete threshold for highly reported files; only distinct signed-in reporters count towards it.
+- Client IPs come from forwarding headers only when the direct peer is a configured trusted proxy (`TRUSTED_PROXIES`, see CONFIGURATION.md).
+- Quick share joins are rate-limited with the strict limiter.
 
 ## Input and Transport Controls
 
