@@ -158,6 +158,8 @@ type Report struct {
 	FileID     string    `db:"file_id" json:"file_id"`
 	ReporterIP string    `db:"reporter_ip" json:"reporter_ip"`
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	// ReporterCNSUserID is set when a signed-in user filed the report.
+	ReporterCNSUserID sql.NullInt64 `db:"reporter_cns_user_id" json:"-"`
 }
 
 type UploadSession struct {

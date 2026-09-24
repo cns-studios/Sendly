@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
 	"time"
 
@@ -40,6 +41,10 @@ func (h *ReportHandler) Report(c *gin.Context) {
 
 	 
 	reporterIP := middleware.GetClientIP(c)
+	var reporterUserID int64
+	if user := middleware.GetCNSUser(c); user != nil && user.ID > 0 {
+		reporterUserID = int64(user.ID)
+	}
 
 	 
 	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
@@ -63,7 +68,7 @@ func (h *ReportHandler) Report(c *gin.Context) {
 	}
 
 	 
-	hasReported, err := h.db.HasUserReportedFile(c.Request.Context(), fileID, reporterIP)
+	hasReported, err := h.db.HasUserReportedFile(c.Request.Context(), fileID, reporterIP, reporterUserID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error: "Failed to check report status",
@@ -86,11 +91,22 @@ func (h *ReportHandler) Report(c *gin.Context) {
 		ReporterIP: reporterIP,
 		CreatedAt:  time.Now(),
 	}
+	if reporterUserID > 0 {
+		report.ReporterCNSUserID = sql.NullInt64{Int64: reporterUserID, Valid: true}
+	}
 
-	if err := h.db.CreateReport(c.Request.Context(), report); err != nil {
+	created, err := h.db.CreateReport(c.Request.Context(), report)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error: "Failed to create report",
 			Code:  "CREATE_REPORT_FAILED",
+		})
+		return
+	}
+	if !created {
+		c.JSON(http.StatusConflict, models.ErrorResponse{
+			Error: "You have already reported this file",
+			Code:  "ALREADY_REPORTED",
 		})
 		return
 	}
@@ -115,7 +131,16 @@ func (h *ReportHandler) Report(c *gin.Context) {
 	}
 
 	 
-	if newReportCount >= h.cfg.AutoDeleteReportCount {
+	// Only distinct signed-in reporters count towards automatic deletion;
+	// anonymous reports are recorded and forwarded to moderation, but on
+	// their own must not let an unauthenticated client delete any file.
+	signedInReporters, err := h.db.CountSignedInReporters(c.Request.Context(), fileID)
+	if err != nil {
+		println("Failed to count signed-in reporters:", err.Error())
+		signedInReporters = 0
+	}
+
+	if signedInReporters >= h.cfg.AutoDeleteReportCount {
 		 
 		if err := h.db.MarkFileDeleted(c.Request.Context(), fileID); err != nil {
 			 
