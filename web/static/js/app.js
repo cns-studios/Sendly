@@ -1068,7 +1068,7 @@
     async function handleStartTunnel() {
         if (!authDeviceIdentity) {
             try {
-                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
             } catch (error) {
                 showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
                 return;
@@ -1113,7 +1113,7 @@
     async function handleJoinTunnel() {
         if (!authDeviceIdentity) {
             try {
-                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
             } catch (error) {
                 showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
                 return;

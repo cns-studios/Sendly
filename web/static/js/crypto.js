@@ -109,12 +109,36 @@ const SecureCrypto = (function() {
         return bytes;
     }
 
-    async function getOrCreateDeviceIdentity() {
+    function userDeviceStorageKey(userId) {
+        return `${DEVICE_STORAGE_KEY}_u${userId}`;
+    }
+
+    // The browser-wide identity is used unless this account already got its
+    // own one because the browser-wide device id belongs to another account
+    // (see registerAuthenticatedDevice).
+    async function getOrCreateDeviceIdentity(userId = 0) {
+        if (userId) {
+            const scoped = localStorage.getItem(userDeviceStorageKey(userId));
+            if (scoped) {
+                return JSON.parse(scoped);
+            }
+        }
         const cached = localStorage.getItem(DEVICE_STORAGE_KEY);
         if (cached) {
             return JSON.parse(cached);
         }
+        const identity = await generateDeviceIdentity();
+        localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(identity));
+        return identity;
+    }
 
+    async function createUserScopedDeviceIdentity(userId) {
+        const identity = await generateDeviceIdentity();
+        localStorage.setItem(userDeviceStorageKey(userId), JSON.stringify(identity));
+        return identity;
+    }
+
+    async function generateDeviceIdentity() {
         const keyPair = await crypto.subtle.generateKey(
             {
                 name: 'RSA-OAEP',
@@ -134,7 +158,6 @@ const SecureCrypto = (function() {
             publicKeyJWK: publicJWK,
             privateKeyJWK: privateJWK
         };
-        localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(identity));
         return identity;
     }
 
@@ -368,7 +391,7 @@ const SecureCrypto = (function() {
         csrfToken = '',
         includeBootstrapEnvelope = true
     } = {}) {
-        const identity = await getOrCreateDeviceIdentity();
+        let identity = await getOrCreateDeviceIdentity(userId);
         let userKeyRaw = getUserKeyRaw(userId);
         let bootstrapKey = null;
         let wrappedUserKeyB64 = '';
@@ -405,12 +428,15 @@ const SecureCrypto = (function() {
             identityKeyVersion = identityKey.keyVersion || 1;
         }
 
-        const reqBody = {
+        const buildDeviceFields = (identity) => ({
             device_id: identity.deviceId,
             device_label: `${username || t('user_default')} device`,
             public_key_jwk: identity.publicKeyJWK,
             key_algorithm: identity.keyAlgorithm,
-            key_version: identity.keyVersion,
+            key_version: identity.keyVersion
+        });
+        const reqBody = {
+            ...buildDeviceFields(identity),
             wrapped_user_key_b64: wrappedUserKeyB64,
             uk_wrap_alg: ukWrapAlg,
             uk_wrap_meta: ukWrapMeta
@@ -426,11 +452,34 @@ const SecureCrypto = (function() {
 
         const headers = { 'Content-Type': 'application/json' };
         if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-        const response = await fetch(endpoint, {
+        let response = await fetch(endpoint, {
             method: 'POST',
             headers,
             body: JSON.stringify(reqBody)
         });
+        if (response.status === 409 && userId) {
+            const conflict = await response.clone().json().catch(() => ({}));
+            if (conflict.code === 'DEVICE_ID_CONFLICT') {
+                // This browser's device id is registered to another account
+                // (shared browser). Give this account its own device identity
+                // and re-wrap the self-wrapped keys for it.
+                identity = await createUserScopedDeviceIdentity(userId);
+                Object.assign(reqBody, buildDeviceFields(identity));
+                if (includeBootstrapEnvelope) {
+                    reqBody.wrapped_user_key_b64 = toBase64(await wrapUserKeyForDevice(userKeyRaw, identity.publicKeyJWK));
+                    reqBody.uk_wrap_meta = { type: 'self-wrap', device_id: identity.deviceId };
+                    if (wrappedIdentityPrivateKeyB64) {
+                        reqBody.wrapped_identity_private_key_b64 = toBase64(await wrapIdentityKeyForDevice(identityKey.privateKeyJWK, identity.publicKeyJWK));
+                        reqBody.identity_key_wrap_meta = { type: 'self-wrap', device_id: identity.deviceId };
+                    }
+                }
+                response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(reqBody)
+                });
+            }
+        }
         if (!response.ok) {
             const payload = await response.json().catch(() => ({}));
             throw new Error(payload.error || 'Device registration failed');

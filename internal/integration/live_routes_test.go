@@ -227,11 +227,11 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 		})
 		return body
 	}
-	rec = request(router, http.MethodPost, "/api/me/devices/register", register("00000000-0000-4000-8000-000000000003", "owner-uk"), "application/json")
+	rec = request(router, http.MethodPost, "/api/me/devices/register", register(fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID+3)%1000000000000), "owner-uk"), "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("web registration status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rec = request(router, http.MethodPost, "/android/me/devices/register", register("00000000-0000-4000-8000-000000000004", "android-uk"), "application/json")
+	rec = request(router, http.MethodPost, "/android/me/devices/register", register(fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID+4)%1000000000000), "android-uk"), "application/json")
 	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"needs_enrollment":true`)) {
 		t.Fatalf("android registration parity status=%d body=%s", rec.Code, rec.Body.String())
 	}
