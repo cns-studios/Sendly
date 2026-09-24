@@ -203,17 +203,19 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		if user == nil {
-			// Guests may only add files to a tunnel they host or joined.
-			caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
-			if authErr != nil {
-				c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
-				return
-			}
-			if caller == nil {
-				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
-				return
-			}
+		// Files may only be added by the host or participants it approved.
+		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
+		if authErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+			return
+		}
+		if caller == nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+		if !caller.approved() {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
+			return
 		}
 		if user != nil {
 			if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
@@ -222,6 +224,13 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			}
 
 			if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
+				if approved, err := tunnelPeerApproved(c, h.db, tunnel, peerUserID, peerDeviceID); err != nil {
+					c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+					return
+				} else if !approved {
+					c.JSON(http.StatusConflict, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
+					return
+				}
 				peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
 					req.SessionID,
 					peerUserID,

@@ -48,6 +48,25 @@ func (tc *tunnelCaller) ownsDevice(deviceID string) bool {
 	return tc.isHost && tc.tunnel.InitiatorDeviceID.Valid && strings.EqualFold(tc.tunnel.InitiatorDeviceID.String, deviceID)
 }
 
+// approved reports whether the host has admitted the caller (the host always
+// is). Only approved callers see files or receive key material.
+func (tc *tunnelCaller) approved() bool {
+	return tc.isHost || (tc.participant != nil && tc.participant.ApprovedAt.Valid)
+}
+
+// tunnelPeerApproved reports whether the tunnel peer a file key would be
+// wrapped for has been approved by the host.
+func tunnelPeerApproved(c *gin.Context, db *storage.Postgres, tunnel *models.Tunnel, peerUserID int64, peerDeviceID string) (bool, error) {
+	if peerUserID == tunnel.InitiatorCNSUserID {
+		return true, nil
+	}
+	participant, err := db.FindTunnelParticipant(c.Request.Context(), tunnel.ID, peerUserID, peerDeviceID, "")
+	if err != nil {
+		return false, err
+	}
+	return participant != nil && participant.ApprovedAt.Valid, nil
+}
+
 func isTunnelHost(c *gin.Context, tunnel *models.Tunnel) bool {
 	if tunnel.InitiatorCNSUserID != 0 {
 		user := middleware.GetCNSUser(c)

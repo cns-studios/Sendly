@@ -45,7 +45,10 @@ type TunnelParticipant struct {
 	KeyAlgorithm sql.NullString  `db:"key_algorithm" json:"key_algorithm,omitempty"`
 	KeyVersion   sql.NullInt32   `db:"key_version"   json:"key_version,omitempty"`
 	// TokenHash is the SHA-256 (hex) of an anonymous participant's secret.
-	TokenHash sql.NullString `db:"participant_token_hash" json:"-"`
+	TokenHash  sql.NullString `db:"participant_token_hash" json:"-"`
+	ApprovedAt sql.NullTime   `db:"approved_at" json:"-"`
+	// Approved mirrors ApprovedAt for API consumers.
+	Approved bool `db:"-" json:"approved"`
 }
 
 // TunnelJoin describes a join attempt. PresentedTokenHash is the hash of the
@@ -71,7 +74,8 @@ type TunnelParticipantPublicKey struct {
 	PublicKeyJWK  json.RawMessage `json:"public_key_jwk"`
 	KeyAlgorithm  string          `json:"key_algorithm"`
 	KeyVersion    int             `json:"key_version"`
-	
+	Approved      bool            `json:"approved"`
+
 	HasEnvelope bool `json:"has_envelope"`
 }
 

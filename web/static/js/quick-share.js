@@ -59,6 +59,13 @@
     const queueCodeSquares = document.querySelectorAll('#queueCodeSquares .code-square');
     const peopleRow = document.getElementById('peopleRow');
     const queuePeopleRow = document.getElementById('queuePeopleRow');
+    const approvalRequestLists = [
+        document.getElementById('approvalRequests'),
+        document.getElementById('sessionApprovalRequests')
+    ].filter(Boolean);
+    const approvalStatus = document.getElementById('approvalStatus');
+    const fingerprintCache = new Map();
+    let approvalRenderKey = null;
     const pageLoading = document.getElementById('page-loading');
     const pageError = document.getElementById('page-error');
     const pageErrorRetry = document.getElementById('page-error-retry');
@@ -294,6 +301,127 @@
         return t('guest_default');
     }
 
+    // Short fingerprint of a participant's public key. The host compares it
+    // with the one shown on the joiner's screen before letting them in, so a
+    // swapped key (by the server or anyone else) is noticed.
+    function keyFingerprint(jwk) {
+        if (!jwk || !jwk.n || !jwk.e) return '';
+        const cacheKey = `${jwk.e}:${jwk.n}`;
+        if (fingerprintCache.has(cacheKey)) return fingerprintCache.get(cacheKey);
+        fingerprintCache.set(cacheKey, '');
+        crypto.subtle.digest('SHA-256', new TextEncoder().encode(cacheKey)).then((digest) => {
+            const hex = Array.from(new Uint8Array(digest).slice(0, 4))
+                .map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+            fingerprintCache.set(cacheKey, `${hex.slice(0, 4)}-${hex.slice(4)}`);
+            renderApprovals();
+        }).catch(() => {});
+        return '';
+    }
+
+    function participantPublicKey(participant) {
+        const jwk = participant?.public_key_jwk;
+        return jwk && typeof jwk === 'object' ? jwk : null;
+    }
+
+    function isHostParticipant(participant) {
+        if (!activeTunnel) return false;
+        const initiatorUserID = Number(activeTunnel.initiator_cns_user_id || 0);
+        if (initiatorUserID && extractUserID(participant) === initiatorUserID) return true;
+        const initiatorDevice = activeTunnel.initiator_device_id;
+        const initiatorDeviceID = typeof initiatorDevice === 'string'
+            ? initiatorDevice
+            : (initiatorDevice?.Valid ? initiatorDevice.String : '');
+        return !!initiatorDeviceID && extractDeviceID(participant) === initiatorDeviceID;
+    }
+
+    function findSelfParticipant() {
+        return participants.find((p) => {
+            if (myDeviceId && extractDeviceID(p) === myDeviceId) return true;
+            return AUTHENTICATED && CNS_USER_ID && extractUserID(p) === CNS_USER_ID && !extractDeviceID(p);
+        }) || null;
+    }
+
+    function isSelfApproved() {
+        const self = findSelfParticipant();
+        return !!(self && self.approved);
+    }
+
+    function renderApprovals() {
+        if (isHost) {
+            const pending = participants.filter((p) => !p.approved && !isHostParticipant(p));
+            const renderKey = pending.map((p) => `${p.id}:${keyFingerprint(participantPublicKey(p))}`).join('|');
+            if (renderKey === approvalRenderKey) return;
+            approvalRenderKey = renderKey;
+
+            approvalRequestLists.forEach((list) => {
+                list.innerHTML = '';
+                list.classList.toggle('hidden', pending.length === 0);
+                if (pending.length === 0) return;
+
+                const heading = document.createElement('h2');
+                heading.className = 'people-heading';
+                heading.textContent = t('quickshare_approval_heading');
+                list.appendChild(heading);
+                const hint = document.createElement('p');
+                hint.className = 'approval-hint';
+                hint.textContent = t('quickshare_approval_hint');
+                list.appendChild(hint);
+
+                pending.forEach((participant) => {
+                    const row = document.createElement('div');
+                    row.className = 'approval-request';
+                    const name = document.createElement('span');
+                    name.className = 'approval-request-name';
+                    name.textContent = getParticipantName(participant);
+                    const fingerprint = document.createElement('code');
+                    fingerprint.className = 'approval-fingerprint';
+                    fingerprint.textContent = keyFingerprint(participantPublicKey(participant)) || '\u2013';
+                    const approveBtn = document.createElement('button');
+                    approveBtn.className = 'approve-btn';
+                    approveBtn.textContent = t('quickshare_approve');
+                    approveBtn.addEventListener('click', () => respondToParticipant(participant.id, 'approve'));
+                    const declineBtn = document.createElement('button');
+                    declineBtn.className = 'decline-btn';
+                    declineBtn.textContent = t('quickshare_decline');
+                    declineBtn.addEventListener('click', () => respondToParticipant(participant.id, 'reject'));
+                    row.append(name, fingerprint, approveBtn, declineBtn);
+                    list.appendChild(row);
+                });
+            });
+            return;
+        }
+
+        if (!approvalStatus) return;
+        const self = findSelfParticipant();
+        const waiting = !!(activeTunnel && self && !self.approved);
+        approvalStatus.classList.toggle('hidden', !waiting);
+        if (!waiting) return;
+        const code = keyFingerprint(ephemeralKeyPair?.publicKeyJWK) || '\u2013';
+        const [before, after = ''] = t('quickshare_waiting_approval').split('{code}');
+        const codeEl = document.createElement('code');
+        codeEl.textContent = code;
+        approvalStatus.replaceChildren(document.createTextNode(before), codeEl, document.createTextNode(after));
+    }
+
+    async function respondToParticipant(participantId, action) {
+        if (!activeTunnel?.id || !isHost) return;
+        try {
+            const response = await fetch(
+                `/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/participants/${encodeURIComponent(participantId)}/${action}`,
+                { method: 'POST', headers: buildHeaders({ 'Content-Type': 'application/json' }) }
+            );
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `HTTP ${response.status}`);
+            }
+            approvalRenderKey = null;
+            await refreshTunnelState();
+        } catch (error) {
+            console.error('Participant update failed:', error);
+            showErrorBanner(tpl('quickshare_approve_failed', {msg: error.message}));
+        }
+    }
+
     function renderParticipants(items) {
         const container = isHost ? peopleRow : queuePeopleRow;
         if (!container) return;
@@ -317,13 +445,15 @@
                 const person = document.createElement('div');
                 person.className = 'person';
                 const isSelf = extractDeviceID(p) === myCurrentDeviceID;
+                const isPending = !p.approved && !isHostParticipant(p);
+                if (isPending) person.classList.add('pending');
                 person.innerHTML = `
                     <div class="person-circle">
                         <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                         </svg>
                     </div>
-                    <span class="person-name">${getParticipantName(p)}${isSelf ? t('label_you') : ''}</span>
+                    <span class="person-name">${escapeHtml(getParticipantName(p))}${isSelf ? escapeHtml(t('label_you')) : ''}${isPending ? escapeHtml(t('quickshare_pending_suffix')) : ''}</span>
                 `;
                 container.appendChild(person);
             });
@@ -332,6 +462,8 @@
         if (connectedText) {
             connectedText.textContent = `${allParticipants.length}${t('label_connected')}`;
         }
+
+        renderApprovals();
     }
 
     function renderTunnelFiles(files) {
@@ -565,7 +697,8 @@
 
             const data = await res.json();
             const guestParticipants = Array.isArray(data.participants) ? data.participants : [];
-            const pending = guestParticipants.filter(p => !p.has_envelope);
+            // Only participants the host let in get the session key.
+            const pending = guestParticipants.filter(p => p.approved && !p.has_envelope);
 
             if (pending.length === 0) return;
 
@@ -691,7 +824,7 @@
             activeTunnel = payload.tunnel;
             participants = payload.participants || [];
             isHost = false;
-            hasStarted = activeTunnel.status === 'active';
+            hasStarted = activeTunnel.status === 'active' && isSelfApproved();
 
             const storedPw = localStorage.getItem(SESSION_PASSWORD_PREFIX + activeTunnel.id);
             sessionPassword = storedPw || null;
@@ -795,7 +928,7 @@
                 participants = payload.participants || [];
 
                 const tunnelStatus = activeTunnel.status || '';
-                if (!isHost && !hasStarted && tunnelStatus === 'active') {
+                if (!isHost && !hasStarted && tunnelStatus === 'active' && isSelfApproved()) {
                     hasStarted = true;
                     setView('session');
                     if (!sessionPassword) {
@@ -846,6 +979,7 @@
         activeTunnel = null;
         hostToken = '';
         participantToken = '';
+        approvalRenderKey = null;
         sessionPassword = null;
         participants = [];
         isHost = false;

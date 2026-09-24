@@ -369,6 +369,13 @@
   "guest_default": "Guest",
   "user_default": "User",
   "nobody_joined": "Nobody joined yet",
+  "quickshare_approval_heading": "Waiting to join",
+  "quickshare_approval_hint": "Only let in people you invited. The code next to each name must match the code on their screen.",
+  "quickshare_approve": "Let in",
+  "quickshare_decline": "Decline",
+  "quickshare_waiting_approval": "Waiting for the host to let you in. Your code: {code}",
+  "quickshare_pending_suffix": " (waiting)",
+  "quickshare_approve_failed": "Could not update participant: {msg}",
 
   "quickshare_no_decryption_key": "No decryption key available yet. Try again in a moment.",
   "quickshare_download_failed": "Download failed: {msg}",

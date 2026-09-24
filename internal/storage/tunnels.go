@@ -167,7 +167,7 @@ func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, join models.
 		err = tx.GetContext(ctx, &existing, `
 			SELECT id, tunnel_id, cns_user_id, device_id, joined_at,
 				COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
-				key_algorithm, key_version, participant_token_hash
+				key_algorithm, key_version, participant_token_hash, approved_at
 			FROM tunnel_participants
 			WHERE tunnel_id = $1 AND device_id::text = $2
 			FOR UPDATE
@@ -176,7 +176,7 @@ func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, join models.
 		err = tx.GetContext(ctx, &existing, `
 			SELECT id, tunnel_id, cns_user_id, device_id, joined_at,
 				COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
-				key_algorithm, key_version, participant_token_hash
+				key_algorithm, key_version, participant_token_hash, approved_at
 			FROM tunnel_participants
 			WHERE tunnel_id = $1 AND cns_user_id = $2 AND device_id IS NULL
 			FOR UPDATE
@@ -289,7 +289,7 @@ func (p *Postgres) FindTunnelParticipant(ctx context.Context, tunnelID string, u
 	var err error
 	const columns = `id, tunnel_id, cns_user_id, device_id, joined_at,
 		COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
-		key_algorithm, key_version, participant_token_hash`
+		key_algorithm, key_version, participant_token_hash, approved_at`
 	if userID != 0 {
 		err = p.db.SelectContext(ctx, &participants, `
 			SELECT `+columns+`
@@ -310,12 +310,104 @@ func (p *Postgres) FindTunnelParticipant(ctx context.Context, tunnelID string, u
 	if err != nil {
 		return nil, err
 	}
+	markApproved(participants)
 	for i := range participants {
 		if participantOwnedBy(participants[i], userID, presentedTokenHash) {
 			return &participants[i], nil
 		}
 	}
 	return nil, nil
+}
+
+func markApproved(participants []models.TunnelParticipant) {
+	for i := range participants {
+		participants[i].Approved = participants[i].ApprovedAt.Valid
+	}
+}
+
+// GetTunnelParticipantByDevice returns the participant row for a device, or
+// nil if there is none.
+func (p *Postgres) GetTunnelParticipantByDevice(ctx context.Context, tunnelID, deviceID string) (*models.TunnelParticipant, error) {
+	var participant models.TunnelParticipant
+	err := p.db.GetContext(ctx, &participant, `
+		SELECT id, tunnel_id, cns_user_id, device_id, joined_at,
+			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			key_algorithm, key_version, participant_token_hash, approved_at
+		FROM tunnel_participants
+		WHERE tunnel_id = $1 AND device_id::text = $2
+		ORDER BY joined_at ASC
+		LIMIT 1
+	`, tunnelID, strings.TrimSpace(deviceID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	participant.Approved = participant.ApprovedAt.Valid
+	return &participant, nil
+}
+
+// ApproveTunnelParticipant marks a participant approved by the host.
+func (p *Postgres) ApproveTunnelParticipant(ctx context.Context, tunnelID, participantID string) error {
+	res, err := p.db.ExecContext(ctx, `
+		UPDATE tunnel_participants
+		SET approved_at = COALESCE(approved_at, NOW())
+		WHERE tunnel_id = $1 AND id::text = $2
+	`, tunnelID, participantID)
+	if err != nil {
+		return err
+	}
+	if rows, err := res.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return models.ErrFileNotFound
+	}
+	return nil
+}
+
+// RejectTunnelParticipant removes a participant, its key envelope, and, if it
+// was the tunnel's peer, the peer assignment (so no file keys get wrapped for
+// it). It returns the removed row.
+func (p *Postgres) RejectTunnelParticipant(ctx context.Context, tunnelID, participantID string) (*models.TunnelParticipant, error) {
+	tx, err := p.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var participant models.TunnelParticipant
+	err = tx.GetContext(ctx, &participant, `
+		DELETE FROM tunnel_participants
+		WHERE tunnel_id = $1 AND id::text = $2
+		RETURNING id, tunnel_id, cns_user_id, device_id, joined_at,
+			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			key_algorithm, key_version, participant_token_hash, approved_at
+	`, tunnelID, participantID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrFileNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if participant.DeviceID.Valid {
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM tunnel_participant_envelopes
+			WHERE tunnel_id = $1 AND participant_device_id = $2
+		`, tunnelID, participant.DeviceID.String); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tunnels
+		SET peer_cns_user_id = NULL, peer_device_id = NULL, peer_confirmed = FALSE
+		WHERE id = $1
+		  AND (($2::bigint IS NOT NULL AND peer_cns_user_id = $2::bigint)
+		    OR ($3::text IS NOT NULL AND peer_device_id::text = $3::text))
+	`, tunnelID, participant.CNSUserID, participant.DeviceID); err != nil {
+		return nil, err
+	}
+	return &participant, tx.Commit()
 }
 
 func (p *Postgres) ConfirmTunnel(ctx context.Context, tunnelID string, userID int64, deviceID string) (*models.Tunnel, error) {
@@ -447,10 +539,12 @@ func (p *Postgres) TunnelCodeExists(ctx context.Context, code string) (bool, err
 	return count > 0, err
 }
 
+// AddTunnelParticipant adds the host's own participant row, which is approved
+// from the start.
 func (p *Postgres) AddTunnelParticipant(ctx context.Context, tunnelID string, userID int64, deviceID string) error {
 	_, err := p.db.ExecContext(ctx, `
-		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id)
-		VALUES ($1, $2, $3)
+		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id, approved_at)
+		VALUES ($1, $2, $3, NOW())
 		ON CONFLICT DO NOTHING
 	`, tunnelID, nullableInt64(userID), nullableString(deviceID))
 	return err
@@ -467,7 +561,8 @@ func (p *Postgres) GetTunnelParticipants(ctx context.Context, tunnelID string) (
 			joined_at,
 			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
 			COALESCE(key_algorithm, '') AS key_algorithm,
-			COALESCE(key_version, 0) AS key_version
+			COALESCE(key_version, 0) AS key_version,
+			approved_at
 		FROM tunnel_participants
 		WHERE tunnel_id = $1
 		ORDER BY joined_at ASC
@@ -476,6 +571,7 @@ func (p *Postgres) GetTunnelParticipants(ctx context.Context, tunnelID string) (
 	if err != nil {
 		return participants, err
 	}
+	markApproved(participants)
 	return participants, nil
 }
 
@@ -521,6 +617,7 @@ func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID s
 		  AND  public_key_jwk IS NOT NULL
 		ORDER BY joined_at ASC
 	`, tunnelID)
+	markApproved(participants)
 	return participants, err
 }
 
