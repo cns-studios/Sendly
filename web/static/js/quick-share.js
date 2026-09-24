@@ -31,6 +31,9 @@
     let ephemeralKeyPair = null;
     let myDeviceId = '';
     let hostToken = '';
+    // Issued when joining as a guest; proves this participant on later calls.
+    // Kept in memory only: every page load joins afresh.
+    let participantToken = '';
     let joinCodeInput = '';
 
     const createView = document.getElementById('createView');
@@ -116,6 +119,13 @@
         return created;
     }
 
+    function resetGuestDeviceId() {
+        const created = randomUUID();
+        localStorage.setItem('sendly_guest_device_id', created);
+        myDeviceId = created;
+        return created;
+    }
+
     function extractDeviceID(participant) {
         if (!participant) return '';
         const deviceID = participant.device_id;
@@ -146,6 +156,7 @@
         if (csrf) headers['X-CSRF-Token'] = csrf;
         if (myDeviceId) headers['X-Device-ID'] = myDeviceId;
         if (hostToken) headers['X-Host-Token'] = hostToken;
+        if (participantToken) headers['X-Participant-Token'] = participantToken;
         return headers;
     }
 
@@ -645,7 +656,7 @@
         await ensureEphemeralKeyPair();
 
         try {
-            const response = await fetch('/api/me/tunnels/join', {
+            const requestJoin = () => fetch('/api/me/tunnels/join', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
@@ -657,12 +668,26 @@
                 })
             });
 
+            participantToken = '';
+            let response = await requestJoin();
+            if (response.status === 409 && !AUTHENTICATED) {
+                const conflict = await response.clone().json().catch(() => ({}));
+                if (conflict.code === 'PARTICIPANT_CONFLICT') {
+                    // This guest device already joined earlier (e.g. before a
+                    // reload) and its participant token is gone; join as a new
+                    // guest device instead.
+                    resetGuestDeviceId();
+                    response = await requestJoin();
+                }
+            }
+
             if (!response.ok) {
                 const error = await response.json();
                 throw new Error(error.error || 'Failed to join tunnel');
             }
 
             const payload = await response.json();
+            participantToken = payload.participant_token || '';
             activeTunnel = payload.tunnel;
             participants = payload.participants || [];
             isHost = false;
@@ -820,6 +845,7 @@
         stopTunnelPolling();
         activeTunnel = null;
         hostToken = '';
+        participantToken = '';
         sessionPassword = null;
         participants = [];
         isHost = false;

@@ -44,6 +44,22 @@ type TunnelParticipant struct {
 	PublicKeyJWK json.RawMessage `db:"public_key_jwk" json:"public_key_jwk,omitempty"`
 	KeyAlgorithm sql.NullString  `db:"key_algorithm" json:"key_algorithm,omitempty"`
 	KeyVersion   sql.NullInt32   `db:"key_version"   json:"key_version,omitempty"`
+	// TokenHash is the SHA-256 (hex) of an anonymous participant's secret.
+	TokenHash sql.NullString `db:"participant_token_hash" json:"-"`
+}
+
+// TunnelJoin describes a join attempt. PresentedTokenHash is the hash of the
+// X-Participant-Token the caller sent, used when an anonymous caller re-joins
+// with a device ID that already has a participant row; NewTokenHash is stored
+// when an anonymous caller joins for the first time.
+type TunnelJoin struct {
+	UserID             int64
+	DeviceID           string
+	PresentedTokenHash string
+	NewTokenHash       string
+	PublicKeyJWK       json.RawMessage
+	KeyAlgorithm       string
+	KeyVersion         int
 }
 
 
@@ -69,6 +85,9 @@ type TunnelStartResponse struct {
 	QRPayload    string              `json:"qr_payload"`
 	Participants []TunnelParticipant `json:"participants,omitempty"`
 	HostToken    string              `json:"host_token,omitempty"`
+	// ParticipantToken is returned once to an anonymous joiner, who must send
+	// it as X-Participant-Token on later calls.
+	ParticipantToken string `json:"participant_token,omitempty"`
 }
 
 type TunnelJoinRequest struct {

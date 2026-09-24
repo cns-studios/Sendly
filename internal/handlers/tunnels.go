@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
@@ -126,8 +125,34 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		peerUserID = int64(user.ID)
 	}
 
-	joined, joinErr := h.db.JoinTunnel(c.Request.Context(), tunnel.ID, peerUserID, req.DeviceID)
+	join := models.TunnelJoin{
+		UserID:             peerUserID,
+		DeviceID:           req.DeviceID,
+		PresentedTokenHash: hashParticipantToken(c.GetHeader(headerParticipantToken)),
+		PublicKeyJWK:       req.PublicKeyJWK,
+		KeyAlgorithm:       req.KeyAlgorithm,
+		KeyVersion:         req.KeyVersion,
+	}
+	var participantToken string
+	if peerUserID == 0 {
+		token, tokenHash, tokenErr := newParticipantToken()
+		if tokenErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to join tunnel", Code: "TUNNEL_JOIN_FAILED"})
+			return
+		}
+		participantToken, join.NewTokenHash = token, tokenHash
+	}
+
+	joined, issued, joinErr := h.db.JoinTunnel(c.Request.Context(), tunnel.ID, join)
 	if joinErr != nil {
+		if joinErr == models.ErrParticipantConflict {
+			c.JSON(http.StatusConflict, models.ErrorResponse{Error: models.ErrParticipantConflict.Message, Code: models.ErrParticipantConflict.Code})
+			return
+		}
+		if joinErr == models.ErrGuestDeviceRequired {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: models.ErrGuestDeviceRequired.Message, Code: models.ErrGuestDeviceRequired.Code})
+			return
+		}
 		if joinErr == models.ErrFileExpired {
 			c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel expired", Code: "TUNNEL_EXPIRED"})
 			return
@@ -140,25 +165,17 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		return
 	}
 
-	
-	if len(req.PublicKeyJWK) > 0 && req.DeviceID != "" {
-		_ = h.db.SaveParticipantPublicKey(
-			c.Request.Context(),
-			tunnel.ID,
-			req.DeviceID,
-			req.PublicKeyJWK,
-			req.KeyAlgorithm,
-			req.KeyVersion,
-		)
-	}
-
 	participants, _ := h.db.GetTunnelParticipants(c.Request.Context(), tunnel.ID)
 
-	c.JSON(http.StatusOK, models.TunnelStartResponse{
+	resp := models.TunnelStartResponse{
 		Tunnel:       *joined,
 		QRPayload:    h.buildQRPayload(joined),
 		Participants: participants,
-	})
+	}
+	if issued {
+		resp.ParticipantToken = participantToken
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 func (h *TunnelHandler) Confirm(c *gin.Context) {
@@ -190,11 +207,18 @@ func (h *TunnelHandler) Confirm(c *gin.Context) {
 		userID = int64(user.ID)
 	}
 
-	// A guest confirming as the initiator device must be the host.
-	if userID == 0 && current.InitiatorCNSUserID == 0 && current.InitiatorDeviceID.Valid &&
-		current.InitiatorDeviceID.String == req.DeviceID && !h.callerIsHost(c, current) {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Only the tunnel host can confirm as host", Code: "FORBIDDEN"})
-		return
+	// Guests confirm for a device ID; it has to be their own (the host's
+	// initiator device for the host, their participant device otherwise).
+	if userID == 0 {
+		caller, authErr := authorizeTunnelCaller(c, h.db, current)
+		if authErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to confirm tunnel", Code: "TUNNEL_CONFIRM_FAILED"})
+			return
+		}
+		if caller == nil || !caller.ownsDevice(req.DeviceID) {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
 	}
 
 	tunnel, err := h.db.ConfirmTunnel(c.Request.Context(), tunnelID, userID, req.DeviceID)
@@ -221,10 +245,18 @@ func (h *TunnelHandler) End(c *gin.Context) {
 		return
 	}
 
-	var req models.TunnelEndRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		
-		req.DeviceID = ""
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil && (tunnel == nil || err != models.ErrFileExpired) {
+		status := http.StatusBadRequest
+		if err == models.ErrFileNotFound {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+	caller, ok := h.requireTunnelCaller(c, tunnel)
+	if !ok {
+		return
 	}
 
 	user := middleware.GetCNSUser(c)
@@ -233,13 +265,32 @@ func (h *TunnelHandler) End(c *gin.Context) {
 		userID = int64(user.ID)
 	}
 
-	if err := h.db.RemoveTunnelParticipant(c.Request.Context(), tunnelID, userID, req.DeviceID); err != nil {
+	// Callers can only remove themselves: a guest by its own device.
+	deviceID := ""
+	if userID == 0 {
+		switch {
+		case caller.participant != nil && caller.participant.DeviceID.Valid:
+			deviceID = caller.participant.DeviceID.String
+		case caller.isHost && tunnel.InitiatorDeviceID.Valid:
+			deviceID = tunnel.InitiatorDeviceID.String
+		default:
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+	}
+
+	if err := h.db.RemoveTunnelParticipant(c.Request.Context(), tunnelID, userID, deviceID); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to leave tunnel", Code: "TUNNEL_LEAVE_FAILED"})
 		return
 	}
 
 	count, countErr := h.db.CountTunnelParticipants(c.Request.Context(), tunnelID)
-	if countErr != nil || count == 0 {
+	if countErr != nil {
+		// Never treat a failed count as "empty": that would delete the files.
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to leave tunnel", Code: "TUNNEL_LEAVE_FAILED"})
+		return
+	}
+	if count == 0 {
 		fileIDs, _ := h.db.GetTunnelFileIDs(c.Request.Context(), tunnelID)
 		for _, fileID := range fileIDs {
 			_ = h.fs.DeleteFile(fileID)
@@ -268,6 +319,9 @@ func (h *TunnelHandler) Get(c *gin.Context) {
 		c.JSON(status, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
 		return
 	}
+	if _, ok := h.requireTunnelCaller(c, tunnel); !ok {
+		return
+	}
 
 	files, err := h.db.GetTunnelFiles(c.Request.Context(), tunnelID)
 	if err != nil {
@@ -290,6 +344,9 @@ func (h *TunnelHandler) Files(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
 		return
 	}
+	if _, ok := h.loadTunnelForCaller(c, tunnelID); !ok {
+		return
+	}
 
 	files, err := h.db.GetTunnelFiles(c.Request.Context(), tunnelID)
 	if err != nil {
@@ -304,6 +361,9 @@ func (h *TunnelHandler) Participants(c *gin.Context) {
 	tunnelID := c.Param("id")
 	if tunnelID == "" {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing tunnel id", Code: "INVALID_REQUEST"})
+		return
+	}
+	if _, ok := h.loadTunnelForCaller(c, tunnelID); !ok {
 		return
 	}
 
@@ -397,6 +457,9 @@ func (h *TunnelHandler) GuestFileAccess(c *gin.Context) {
 
 	if tunnel.Status != models.TunnelStatusActive && tunnel.Status != models.TunnelStatusPending {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return
+	}
+	if _, ok := h.requireTunnelCaller(c, tunnel); !ok {
 		return
 	}
 
@@ -563,6 +626,15 @@ func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel not available", Code: "TUNNEL_NOT_AVAILABLE"})
 		return
 	}
+	// Only the participant the envelope was wrapped for may fetch it.
+	caller, ok := h.requireTunnelCaller(c, tunnel)
+	if !ok {
+		return
+	}
+	if !caller.ownsDevice(deviceID) {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not your device", Code: "TUNNEL_FORBIDDEN"})
+		return
+	}
 
 	envelope, err := h.db.GetTunnelParticipantEnvelope(c.Request.Context(), tunnelID, deviceID)
 	if err != nil {
@@ -582,21 +654,38 @@ func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 
 
 
-// callerIsHost authenticates the tunnel host: a signed-in host by CNS user,
-// a guest host by the host token issued at creation. The initiator's device
-// ID is visible to other participants, so it never proves anything on its
-// own.
 func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool {
-	if tunnel.InitiatorCNSUserID != 0 {
-		user := middleware.GetCNSUser(c)
-		return user != nil && int64(user.ID) == tunnel.InitiatorCNSUserID
-	}
-
-	hostToken := c.GetHeader("X-Host-Token")
-	return tunnel.HostToken != "" && hostToken != "" &&
-		subtle.ConstantTimeCompare([]byte(tunnel.HostToken), []byte(hostToken)) == 1
+	return isTunnelHost(c, tunnel)
 }
 
+// requireTunnelCaller authenticates the caller as the tunnel's host or one of
+// its participants, writing a 403 (or 500) response when that fails.
+func (h *TunnelHandler) requireTunnelCaller(c *gin.Context, tunnel *models.Tunnel) (*tunnelCaller, bool) {
+	caller, err := authorizeTunnelCaller(c, h.db, tunnel)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+		return nil, false
+	}
+	if caller == nil {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+		return nil, false
+	}
+	return caller, true
+}
+
+// loadTunnelForCaller loads an available tunnel and authenticates the caller.
+func (h *TunnelHandler) loadTunnelForCaller(c *gin.Context, tunnelID string) (*tunnelCaller, bool) {
+	tunnel, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if err == models.ErrFileExpired {
+			status = http.StatusGone
+		}
+		c.JSON(status, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
+		return nil, false
+	}
+	return h.requireTunnelCaller(c, tunnel)
+}
 
 func (h *TunnelHandler) participantIsHost(p models.TunnelParticipant, tunnel *models.Tunnel) bool {
 	if tunnel.InitiatorCNSUserID != 0 && p.CNSUserID.Valid &&
