@@ -397,15 +397,15 @@ func (p *Postgres) CreateOrUpdateUserDevice(ctx context.Context, device *models.
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL)
 		ON CONFLICT (id) DO UPDATE
-		SET cns_user_id = EXCLUDED.cns_user_id,
-			device_label = EXCLUDED.device_label,
+		SET device_label = EXCLUDED.device_label,
 			public_key_jwk = EXCLUDED.public_key_jwk,
 			key_algorithm = EXCLUDED.key_algorithm,
 			key_version = EXCLUDED.key_version,
 			last_seen_at = NOW(),
 			revoked_at = NULL
+		WHERE user_devices.cns_user_id = EXCLUDED.cns_user_id
 	`
-	_, err := p.db.ExecContext(ctx, query,
+	res, err := p.db.ExecContext(ctx, query,
 		device.ID,
 		device.CNSUserID,
 		device.DeviceLabel,
@@ -413,7 +413,24 @@ func (p *Postgres) CreateOrUpdateUserDevice(ctx context.Context, device *models.
 		device.KeyAlgorithm,
 		device.KeyVersion,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return requireDeviceUpsert(res)
+}
+
+// requireDeviceUpsert turns an upsert that touched no row into
+// ErrDeviceIDConflict: device IDs are client-chosen, so an ID that already
+// belongs to another account must never be re-assigned to the caller.
+func requireDeviceUpsert(res sql.Result) error {
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return models.ErrDeviceIDConflict
+	}
+	return nil
 }
 
 func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.UserDevice, envelope *models.UserKeyEnvelope) error {
@@ -437,7 +454,7 @@ func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.U
 		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
+	res, err := tx.ExecContext(ctx, `
 		INSERT INTO user_devices (
 			id,
 			cns_user_id,
@@ -451,14 +468,18 @@ func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.U
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL)
 		ON CONFLICT (id) DO UPDATE
-		SET cns_user_id = EXCLUDED.cns_user_id,
-			device_label = EXCLUDED.device_label,
+		SET device_label = EXCLUDED.device_label,
 			public_key_jwk = EXCLUDED.public_key_jwk,
 			key_algorithm = EXCLUDED.key_algorithm,
 			key_version = EXCLUDED.key_version,
 			last_seen_at = NOW(),
 			revoked_at = NULL
-	`, device.ID, device.CNSUserID, device.DeviceLabel, device.PublicKeyJWK, device.KeyAlgorithm, device.KeyVersion); err != nil {
+		WHERE user_devices.cns_user_id = EXCLUDED.cns_user_id
+	`, device.ID, device.CNSUserID, device.DeviceLabel, device.PublicKeyJWK, device.KeyAlgorithm, device.KeyVersion)
+	if err == nil {
+		err = requireDeviceUpsert(res)
+	}
+	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}

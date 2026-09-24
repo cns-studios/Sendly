@@ -31,6 +31,9 @@ func handleSharedDeviceRegistration(c *gin.Context, db services.DeviceStore, rec
 			if appErr == models.ErrDeviceNotAuthorized || appErr == models.ErrApproverNotTrusted {
 				status = http.StatusForbidden
 			}
+			if appErr == models.ErrDeviceIDConflict {
+				status = http.StatusConflict
+			}
 			c.JSON(status, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
 			return
 		}

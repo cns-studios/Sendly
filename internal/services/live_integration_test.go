@@ -59,8 +59,9 @@ func TestLiveDeviceRecovery(t *testing.T) {
 		}
 	}
 
-	oldDeviceID := "00000000-0000-4000-8000-000000000001"
-	newDeviceID := "00000000-0000-4000-8000-000000000002"
+	// Device IDs belong to one account, so derive them from this run's user.
+	oldDeviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID*2)%1000000000000)
+	newDeviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID*2+1)%1000000000000)
 	if _, err := service.Register(ctx, userID, request(oldDeviceID, "b2xk"), false); err != nil {
 		t.Fatal(err)
 	}
