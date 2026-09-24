@@ -445,6 +445,7 @@ var (
 	ErrDeviceNotFound           = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}
 	ErrWrappedUserKeyRequired   = &AppError{Code: "WRAPPED_UK_REQUIRED", Message: "wrapped user key is required"}
 	ErrDeviceNotAuthorized      = &AppError{Code: "DEVICE_NOT_AUTHORIZED", Message: "device does not belong to user"}
+	ErrEnvelopeExists           = &AppError{Code: "ENVELOPE_EXISTS", Message: "participant already has a key envelope"}
 	ErrDeviceIDConflict         = &AppError{Code: "DEVICE_ID_CONFLICT", Message: "device id is registered to another account"}
 	ErrApproverNotTrusted       = &AppError{Code: "APPROVER_NOT_TRUSTED", Message: "approver device is not trusted"}
 	ErrEnrollmentNotPending     = &AppError{Code: "ENROLLMENT_NOT_PENDING", Message: "enrollment is no longer pending"}

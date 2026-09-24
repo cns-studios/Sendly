@@ -66,11 +66,15 @@ func (h *TunnelHandler) Start(c *gin.Context) {
 
 	var hostToken string
 	if initiatorUserID == 0 {
+		// A guest host is identified only by this token; never create a
+		// guest tunnel without one.
 		tokenBytes := make([]byte, 32)
-		if _, err := rand.Read(tokenBytes); err == nil {
-			hostToken = hex.EncodeToString(tokenBytes)
-			tunnel.HostToken = hostToken
+		if _, err := rand.Read(tokenBytes); err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to create tunnel", Code: "TUNNEL_CREATE_FAILED"})
+			return
 		}
+		hostToken = hex.EncodeToString(tokenBytes)
+		tunnel.HostToken = hostToken
 	}
 
 	if err := h.db.CreateTunnel(c.Request.Context(), tunnel); err != nil {
@@ -170,7 +174,8 @@ func (h *TunnelHandler) Confirm(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID); err != nil {
+	current, err := h.db.GetTunnelByID(c.Request.Context(), tunnelID)
+	if err != nil {
 		status := http.StatusBadRequest
 		if err == models.ErrFileExpired {
 			status = http.StatusGone
@@ -183,6 +188,13 @@ func (h *TunnelHandler) Confirm(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user != nil {
 		userID = int64(user.ID)
+	}
+
+	// A guest confirming as the initiator device must be the host.
+	if userID == 0 && current.InitiatorCNSUserID == 0 && current.InitiatorDeviceID.Valid &&
+		current.InitiatorDeviceID.String == req.DeviceID && !h.callerIsHost(c, current) {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Only the tunnel host can confirm as host", Code: "FORBIDDEN"})
+		return
 	}
 
 	tunnel, err := h.db.ConfirmTunnel(c.Request.Context(), tunnelID, userID, req.DeviceID)
@@ -521,6 +533,10 @@ func (h *TunnelHandler) PushParticipantEnvelope(c *gin.Context) {
 		req.DEKWrapAlg,
 		version,
 	); err != nil {
+		if err == models.ErrEnvelopeExists {
+			c.JSON(http.StatusConflict, models.ErrorResponse{Error: err.(*models.AppError).Message, Code: models.ErrEnvelopeExists.Code})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to save envelope", Code: "ENVELOPE_SAVE_FAILED"})
 		return
 	}
@@ -566,33 +582,19 @@ func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 
 
 
+// callerIsHost authenticates the tunnel host: a signed-in host by CNS user,
+// a guest host by the host token issued at creation. The initiator's device
+// ID is visible to other participants, so it never proves anything on its
+// own.
 func (h *TunnelHandler) callerIsHost(c *gin.Context, tunnel *models.Tunnel) bool {
-	user := middleware.GetCNSUser(c)
-	if user != nil && int64(user.ID) == tunnel.InitiatorCNSUserID {
-		return true
+	if tunnel.InitiatorCNSUserID != 0 {
+		user := middleware.GetCNSUser(c)
+		return user != nil && int64(user.ID) == tunnel.InitiatorCNSUserID
 	}
 
-	hostDeviceID := c.GetHeader("X-Device-ID")
-	if hostDeviceID != "" && tunnel.InitiatorDeviceID.Valid &&
-		strings.EqualFold(tunnel.InitiatorDeviceID.String, hostDeviceID) {
-		if tunnel.InitiatorCNSUserID != 0 || tunnel.HostToken == "" {
-			return true
-		}
-		hostToken := c.GetHeader("X-Host-Token")
-		if hostToken != "" && subtle.ConstantTimeCompare([]byte(tunnel.HostToken), []byte(hostToken)) == 1 {
-			return true
-		}
-		return false
-	}
-
-	if tunnel.InitiatorCNSUserID == 0 && tunnel.HostToken != "" {
-		hostToken := c.GetHeader("X-Host-Token")
-		if hostToken != "" && subtle.ConstantTimeCompare([]byte(tunnel.HostToken), []byte(hostToken)) == 1 {
-			return true
-		}
-	}
-
-	return false
+	hostToken := c.GetHeader("X-Host-Token")
+	return tunnel.HostToken != "" && hostToken != "" &&
+		subtle.ConstantTimeCompare([]byte(tunnel.HostToken), []byte(hostToken)) == 1
 }
 
 

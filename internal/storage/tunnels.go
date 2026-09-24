@@ -419,19 +419,23 @@ func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID s
 
 
 func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, participantDeviceID string, wrappedDEK, nonce []byte, wrapAlg string, wrapVersion int) error {
-	_, err := p.db.ExecContext(ctx, `
+	res, err := p.db.ExecContext(ctx, `
 		INSERT INTO tunnel_participant_envelopes
 			(tunnel_id, participant_device_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (tunnel_id, participant_device_id)
-		DO UPDATE SET
-			wrapped_dek      = EXCLUDED.wrapped_dek,
-			dek_wrap_alg     = EXCLUDED.dek_wrap_alg,
-			dek_wrap_nonce   = EXCLUDED.dek_wrap_nonce,
-			dek_wrap_version = EXCLUDED.dek_wrap_version,
-			created_at       = NOW()
+		ON CONFLICT (tunnel_id, participant_device_id) DO NOTHING
 	`, tunnelID, participantDeviceID, wrappedDEK, wrapAlg, nonce, wrapVersion)
-	return err
+	if err != nil {
+		return err
+	}
+	// An existing envelope is never replaced: whoever could overwrite it
+	// could hand the participant a key of their own choosing.
+	if rows, err := res.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return models.ErrEnvelopeExists
+	}
+	return nil
 }
 
 
