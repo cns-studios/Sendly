@@ -16,11 +16,13 @@ const (
 
 type IPMiddleware struct {
 	behindCloudflare bool
+	trustedProxies   []*net.IPNet
 }
 
 func NewIPMiddleware(cfg *config.Config) *IPMiddleware {
 	return &IPMiddleware{
 		behindCloudflare: cfg.BehindCloudflare,
+		trustedProxies:   parseProxyNets(cfg.TrustedProxies),
 	}
 }
 
@@ -32,40 +34,65 @@ func (m *IPMiddleware) Handler() gin.HandlerFunc {
 	}
 }
 
+// getClientIP only believes forwarding headers when the direct peer is a
+// configured trusted proxy; otherwise any client could claim any IP and
+// sidestep IP-keyed rate limits and report de-duplication.
 func (m *IPMiddleware) getClientIP(c *gin.Context) string {
-	var ip string
-
-	if m.behindCloudflare {
-		 
-		ip = c.GetHeader("CF-Connecting-IP")
-		if ip != "" {
-			return normalizeIP(ip)
-		}
-
-		 
-		ip = c.GetHeader("X-Forwarded-For")
-		if ip != "" {
-			 
-			ips := strings.Split(ip, ",")
-			if len(ips) > 0 {
-				return normalizeIP(strings.TrimSpace(ips[0]))
+	if m.behindCloudflare && m.isTrustedProxy(remotePeerIP(c)) {
+		if ip := c.GetHeader("CF-Connecting-IP"); ip != "" {
+			if normalized := normalizeIP(ip); normalized != "unknown" {
+				return normalized
 			}
-		}
-
-		 
-		ip = c.GetHeader("X-Real-IP")
-		if ip != "" {
-			return normalizeIP(ip)
 		}
 	}
 
-	 
-	ip = c.ClientIP()
+	// gin only honors X-Forwarded-For / X-Real-IP from the trusted proxies
+	// configured on the router (see SetTrustedProxies in main).
+	ip := c.ClientIP()
 	if ip == "" {
 		ip = c.Request.RemoteAddr
 	}
 
 	return normalizeIP(ip)
+}
+
+func (m *IPMiddleware) isTrustedProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, network := range m.trustedProxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+func remotePeerIP(c *gin.Context) net.IP {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(c.Request.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(c.Request.RemoteAddr)
+	}
+	return net.ParseIP(host)
+}
+
+func parseProxyNets(entries []string) []*net.IPNet {
+	nets := make([]*net.IPNet, 0, len(entries))
+	for _, entry := range entries {
+		if _, network, err := net.ParseCIDR(entry); err == nil {
+			nets = append(nets, network)
+			continue
+		}
+		if ip := net.ParseIP(entry); ip != nil {
+			bits := 128
+			if ip.To4() != nil {
+				ip = ip.To4()
+				bits = 32
+			}
+			nets = append(nets, &net.IPNet{IP: ip, Mask: net.CIDRMask(bits, bits)})
+		}
+	}
+	return nets
 }
 
  
