@@ -454,6 +454,14 @@ func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.U
 		return err
 	}
 
+	// Recovery revokes every device, so their open approval requests
+	// (including the recovering device's own) are moot.
+	if _, err := tx.ExecContext(ctx, `UPDATE device_enrollments SET status = $1 WHERE cns_user_id = $2 AND status = $3`,
+		models.EnrollmentStatusExpired, device.CNSUserID, models.EnrollmentStatusPending); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO user_devices (
 			id,
@@ -1024,6 +1032,13 @@ func (p *Postgres) ListPendingEnrollments(ctx context.Context, userID int64) ([]
 		WHERE cns_user_id = $1
 		  AND status = $2
 		  AND expires_at > NOW()
+		  -- A device that is already trusted (e.g. it recovered the account
+		  -- after asking for approval) has nothing left to approve.
+		  AND NOT EXISTS (
+			SELECT 1 FROM user_key_envelopes uke
+			WHERE uke.cns_user_id = device_enrollments.cns_user_id
+			  AND uke.device_id = device_enrollments.request_device_id
+		  )
 		ORDER BY created_at DESC
 	`
 	items := []models.DeviceEnrollment{}

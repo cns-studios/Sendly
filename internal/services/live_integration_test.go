@@ -65,8 +65,19 @@ func TestLiveDeviceRecovery(t *testing.T) {
 	if _, err := service.Register(ctx, userID, request(oldDeviceID, "b2xk"), false); err != nil {
 		t.Fatal(err)
 	}
+	// The new device first asks to be approved, then recovers the account
+	// instead; its own request must not be left behind for approval.
+	if result, err := service.Register(ctx, userID, request(newDeviceID, "bmV3"), false); err != nil || !result.NeedsEnrollment {
+		t.Fatalf("expected the new device to need enrollment: result=%+v err=%v", result, err)
+	}
+	if _, err := service.CreateEnrollment(ctx, userID, newDeviceID); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := service.Register(ctx, userID, request(newDeviceID, "bmV3"), true); err != nil {
 		t.Fatal(err)
+	}
+	if pending, err := service.ListPending(ctx, userID); err != nil || len(pending) != 0 {
+		t.Fatalf("recovery left pending approval requests: pending=%+v err=%v", pending, err)
 	}
 
 	if trusted, err := service.IsTrusted(ctx, userID, oldDeviceID); err != nil || trusted {
