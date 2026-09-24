@@ -31,6 +31,8 @@
   "transfers_status_accepted": "Angenommen",
   "transfers_status_declined": "Abgelehnt",
   "transfers_status_expired": "Abgelaufen",
+  "transfers_status_locked": "Gesperrt",
+  "transfers_locked": "Diese Datei kann nicht mehr geöffnet werden: Sie wurde dir vor der Wiederherstellung deines Kontos gesendet, und der Schlüssel dafür existierte nur auf deinen alten Geräten.",
   "transfers_load_more": "Mehr laden",
   "transfers_accepted_toast": "{name} angenommen",
   "transfers_declined_toast": "{name} abgelehnt",

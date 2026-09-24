@@ -27,6 +27,11 @@
     let historyTotalPages = 0;
     let device = null; // { deviceId, identityKey } once this device is ready
     const busy = new Set();
+    // Accepted transfers whose file key can no longer be unwrapped here: they
+    // were wrapped for an identity key this account replaced when it was
+    // recovered on a device that never held the old key.
+    const lockedFiles = new Set();
+    const lockChecked = new Set();
     let notificationTimer = null;
     let reloadTimer = null;
     let pendingLoaded = false;
@@ -139,6 +144,11 @@
             return el('div', 'expiry-pill', SecureCrypto.getTimeRemaining(item.expires_at));
         }
         if (item.status === 'declined') return el('div', 'transfer-status is-declined', t('transfers_status_declined'));
+        if (lockedFiles.has(item.file_id)) {
+            const pill = el('div', 'transfer-status is-expired is-locked', t('transfers_status_locked'));
+            pill.title = t('transfers_locked');
+            return pill;
+        }
         if (!item.available) return el('div', 'transfer-status is-expired', t('transfers_status_expired'));
         return el('div', 'transfer-status is-accepted', t('transfers_status_accepted'));
     }
@@ -146,7 +156,7 @@
     function buildCard(item) {
         const card = el('article', `card transfer-card is-${item.status}`);
         card.dataset.fileId = item.file_id;
-        if (item.status !== 'pending' && (item.status === 'declined' || !item.available)) card.classList.add('is-muted');
+        if (item.status !== 'pending' && (item.status === 'declined' || !item.available || lockedFiles.has(item.file_id))) card.classList.add('is-muted');
 
         const row = el('div', 'file-row');
         const fileIcon = el('div', 'file-icon');
@@ -180,7 +190,7 @@
             decline.addEventListener('click', () => handleDecline(item, card, decline));
             accept.addEventListener('click', () => handleAccept(item, card, accept));
             actions.append(decline, accept);
-        } else if (item.status === 'accepted' && item.available) {
+        } else if (item.status === 'accepted' && item.available && !lockedFiles.has(item.file_id)) {
             const download = actionButton('transfer-btn is-download', 'download', t('transfers_download'));
             download.addEventListener('click', () => handleDownload(item, card, download));
             actions.append(download);
@@ -252,6 +262,7 @@
             historyPage = payload.page || page;
             historyTotalPages = payload.total_pages || 0;
             renderHistory();
+            checkLockedTransfers();
         } catch (error) {
             console.error('Failed to load transfer history:', error);
             if (page === 1) errorState(historyList, () => { skeleton(historyList, 2); loadHistory(1); });
@@ -331,8 +342,20 @@
         }
     }
 
-    async function ensureDevice() {
-        if (device) return device;
+    // Register this device once, even if several callers ask at the same time.
+    let devicePromise = null;
+    function ensureDevice() {
+        if (device) return Promise.resolve(device);
+        if (!devicePromise) {
+            devicePromise = registerDevice().catch((error) => {
+                devicePromise = null;
+                throw error;
+            });
+        }
+        return devicePromise;
+    }
+
+    async function registerDevice() {
         const result = await SecureCrypto.registerAuthenticatedDevice({
             userId: USER_ID,
             username: USERNAME,
@@ -352,6 +375,12 @@
         return device;
     }
 
+    function lockedError() {
+        const error = new Error(t('transfers_locked'));
+        error.code = 'FILE_LOCKED';
+        return error;
+    }
+
     // Unwrap the file key locally with this device's identity private key.
     async function fileKeyFor(item) {
         const cached = SecureCrypto.getCachedFileKey(item.file_id);
@@ -359,10 +388,16 @@
         const { deviceId, identityKey } = await ensureDevice();
         const access = await api(`/api/me/files/${encodeURIComponent(item.file_id)}/access?device_id=${encodeURIComponent(deviceId)}`);
         if (!access.file_access_key_envelope?.wrapped_dek_b64) throw new Error(t('transfers_key_unavailable'));
-        const dek = await SecureCrypto.unwrapFileDEK(access.file_access_key_envelope, {
-            authenticated: true,
-            identityPrivateKeyJWK: identityKey.privateKeyJWK
-        });
+        let dek;
+        try {
+            dek = await SecureCrypto.unwrapFileDEK(access.file_access_key_envelope, {
+                authenticated: true,
+                identityPrivateKeyJWK: identityKey.privateKeyJWK
+            });
+        } catch (_) {
+            // Wrapped for an identity key this device does not hold.
+            throw lockedError();
+        }
         const passphrase = new TextDecoder().decode(dek);
         SecureCrypto.cacheFileKey(item.file_id, passphrase);
         return passphrase;
@@ -391,7 +426,12 @@
                 received += value.length;
                 if (total) setProgress((received / total) * 80);
             }
-            const decrypted = await SecureCrypto.decryptBlob(new Blob(chunks), passphrase, (p) => setProgress(80 + p * 0.2));
+            let decrypted;
+            try {
+                decrypted = await SecureCrypto.decryptBlob(new Blob(chunks), passphrase, (p) => setProgress(80 + p * 0.2));
+            } catch (_) {
+                throw lockedError();
+            }
             const url = URL.createObjectURL(new Blob([decrypted], { type: 'application/octet-stream' }));
             const a = document.createElement('a');
             a.href = url;
@@ -403,12 +443,38 @@
             setProgress(100);
         } catch (error) {
             console.error('Transfer download failed:', error);
-            if (error.code !== 'DEVICE_NOT_TRUSTED') notify(tpl('transfers_download_failed', { msg: error.message }), 'error');
+            if (error.code === 'FILE_LOCKED') {
+                markLocked(item);
+                notify(error.message, 'error');
+            } else if (error.code !== 'DEVICE_NOT_TRUSTED') notify(tpl('transfers_download_failed', { msg: error.message }), 'error');
             else notify(error.message, 'error');
         } finally {
             busy.delete(item.file_id);
             setButtonLoading(button, false);
             setTimeout(() => { card.classList.remove('is-downloading'); setProgress(0); }, 600);
+        }
+    }
+
+    function markLocked(item) {
+        if (lockedFiles.has(item.file_id)) return;
+        lockedFiles.add(item.file_id);
+        SecureCrypto.removeCachedFileKey?.(item.file_id);
+        renderHistory();
+    }
+
+    // Find accepted transfers this device can no longer decrypt, so they show
+    // as locked instead of offering a download that is bound to fail.
+    async function checkLockedTransfers() {
+        const candidates = historyItems.filter(item => item.status === 'accepted' && item.available
+            && !lockChecked.has(item.file_id) && !lockedFiles.has(item.file_id));
+        for (const item of candidates) {
+            lockChecked.add(item.file_id);
+            try {
+                await fileKeyFor(item);
+            } catch (error) {
+                if (error.code === 'FILE_LOCKED') markLocked(item);
+                else if (error.code === 'DEVICE_NOT_TRUSTED') return;
+            }
         }
     }
 

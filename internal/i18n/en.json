@@ -31,6 +31,8 @@
   "transfers_status_accepted": "Accepted",
   "transfers_status_declined": "Declined",
   "transfers_status_expired": "Expired",
+  "transfers_status_locked": "Locked",
+  "transfers_locked": "This file can no longer be opened: it was sent to you before your account was recovered, and the key it was locked with only existed on your old devices.",
   "transfers_load_more": "Load more",
   "transfers_accepted_toast": "Accepted {name}",
   "transfers_declined_toast": "Declined {name}",
