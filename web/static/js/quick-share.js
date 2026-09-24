@@ -145,6 +145,25 @@
         return '';
     }
 
+    // Tunnel JSON carries sql.Null* values as {Int64, Valid} objects.
+    function nullableInt(value) {
+        if (!value) return 0;
+        if (typeof value === 'number') return value;
+        if (typeof value === 'object') return value.Valid === false ? 0 : Number(value.Int64 || 0);
+        return 0;
+    }
+
+    // The signed-in account on the other side of a cross-account tunnel, whose
+    // device a file key must also be wrapped for (mirrors the server's
+    // resolveTunnelPeerRecipient). 0 when the other side is a guest.
+    function crossAccountPeerUserID() {
+        if (!activeTunnel || !CNS_USER_ID) return 0;
+        const initiatorID = nullableInt(activeTunnel.initiator_cns_user_id);
+        const peerID = nullableInt(activeTunnel.peer_cns_user_id);
+        const otherID = initiatorID === CNS_USER_ID ? peerID : (peerID === CNS_USER_ID ? initiatorID : 0);
+        return otherID && otherID !== CNS_USER_ID ? otherID : 0;
+    }
+
     function extractUserID(participant) {
         if (!participant) return 0;
         const userID = participant.cns_user_id;
@@ -1050,7 +1069,7 @@
                     envelopePayload.identity_dek_wrap_version = 1;
                     envelopePayload.identity_key_version = identityKey.keyVersion || 1;
                 }
-                if (activeTunnel?.peer_cns_user_id && activeTunnel.peer_cns_user_id !== CNS_USER_ID) {
+                if (crossAccountPeerUserID()) {
                     const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
                     if (!peerEnvelope) {
                         throw new Error('Cross-account tunnel upload requires a peer key envelope. Peer may not be ready yet.');
