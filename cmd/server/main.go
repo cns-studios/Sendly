@@ -194,7 +194,7 @@ func main() {
 			me.POST("/transfers/:file_id/decline", recentUploadsHandler.DeclineTransfer)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 			me.POST("/tunnels/start", tunnelHandler.Start)
-			me.POST("/tunnels/join", tunnelHandler.Join)
+			me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
 			me.GET("/tunnels/:id", tunnelHandler.Get)
 			me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
 			me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
@@ -206,6 +206,8 @@ func main() {
 			me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 			me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
 			me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
+			me.POST("/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
+			me.POST("/tunnels/:id/participants/:participant_id/reject", tunnelHandler.RejectParticipant)
 
 			devices := me.Group("/devices")
 			{
@@ -305,6 +307,8 @@ func main() {
 	router.OPTIONS("/desktop/me/tunnels/:id/participant-keys", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/envelopes", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/envelopes/:device_id", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/participants/:participant_id/approve", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/participants/:participant_id/reject", desktopCORS)
 
 	desktop := router.Group("/desktop")
 	desktop.Use(desktopCORS)
@@ -346,7 +350,7 @@ func main() {
 				me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 				me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 				me.POST("/tunnels/start", tunnelHandler.Start)
-				me.POST("/tunnels/join", tunnelHandler.Join)
+				me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
 				me.GET("/tunnels/:id", tunnelHandler.Get)
 				me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
 				me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
@@ -358,6 +362,8 @@ func main() {
 				me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 				me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
 				me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
+				me.POST("/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
+				me.POST("/tunnels/:id/participants/:participant_id/reject", tunnelHandler.RejectParticipant)
 
 				devices := me.Group("/devices")
 				{

@@ -287,6 +287,8 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	router.GET("/api/me/tunnels/:id", tunnelHandler.Get)
 	router.GET("/api/me/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
 	router.DELETE("/api/me/tunnels/:id", tunnelHandler.End)
+	router.POST("/api/me/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
+	router.POST("/api/me/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
 
 	startBody, _ := json.Marshal(models.TunnelStartRequest{Duration: "10m", DeviceID: "00000000-0000-4000-8000-000000000011"})
 	rec := request(router, http.MethodPost, "/api/me/tunnels/start", startBody, "application/json")
@@ -363,6 +365,47 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json", guestHeaders)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest peer confirm status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// The guest joined but is not approved yet: no key envelope may be
+	// pushed for it and it cannot see the tunnel's files.
+	envelopeBody, _ := json.Marshal(models.TunnelPushEnvelopeRequest{
+		ParticipantDeviceID: guestDevice, WrappedDEKB64: base64.StdEncoding.EncodeToString([]byte("session-key")),
+		DEKWrapAlg: "RSA-OAEP-2048", DEKWrapVersion: 1,
+	})
+	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/envelopes", envelopeBody, "application/json", hostHeaders)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("envelope for unapproved participant status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var guestParticipantID string
+	for _, participant := range joined.Participants {
+		if participant.DeviceID.String == guestDevice {
+			guestParticipantID = participant.ID
+		}
+	}
+	if guestParticipantID == "" {
+		t.Fatalf("guest participant missing from join response: %+v", joined.Participants)
+	}
+	approvePath := "/api/me/tunnels/" + started.Tunnel.ID + "/participants/" + guestParticipantID + "/approve"
+	rec = requestWithHeaders(router, http.MethodPost, approvePath, nil, "", guestHeaders)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("participant approving itself status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodPost, approvePath, nil, "", hostHeaders)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("host approve status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/envelopes", envelopeBody, "application/json", hostHeaders)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("envelope for approved participant status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/envelopes", envelopeBody, "application/json", hostHeaders)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("overwriting an envelope status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodGet, "/api/me/tunnels/"+started.Tunnel.ID+"/envelopes/"+guestDevice, nil, "", guestHeaders)
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"ready":true`)) {
+		t.Fatalf("approved guest envelope status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	initBody, _ := json.Marshal(models.UploadInitRequest{FileName: "guest.txt", FileSize: 5, TotalChunks: 1, ChunkSize: 5, TunnelID: started.Tunnel.ID})
 	rec = request(router, http.MethodPost, "/api/upload/init", initBody, "application/json")
@@ -458,6 +501,7 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	router.POST("/api/me/tunnels/join", tunnelHandler.Join)
 	router.POST("/api/me/tunnels/:id/confirm", tunnelHandler.Confirm)
 	router.GET("/api/me/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
+	router.POST("/api/me/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
 	router.POST("/api/upload/init", uploadHandler.Init)
 	router.POST("/api/upload/chunk", uploadHandler.Chunk)
 	router.POST("/api/upload/complete", uploadHandler.Complete)
@@ -505,7 +549,26 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("peer confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	// No file key may be wrapped for the signed-in peer before the host
+	// approves it.
 	peerKeyResp := requestAs(router, 991003, http.MethodGet,
+		"/api/me/tunnels/"+started.Tunnel.ID+"/peer-wrap-key", nil, "")
+	if peerKeyResp.Code != http.StatusConflict {
+		t.Fatalf("peer key before approval status=%d body=%s", peerKeyResp.Code, peerKeyResp.Body.String())
+	}
+	participants, err := db.GetTunnelParticipants(context.Background(), started.Tunnel.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, participant := range participants {
+		if participant.CNSUserID.Int64 == 991004 {
+			rec = requestAs(router, 991003, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/participants/"+participant.ID+"/approve", nil, "")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("approve peer status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		}
+	}
+	peerKeyResp = requestAs(router, 991003, http.MethodGet,
 		"/api/me/tunnels/"+started.Tunnel.ID+"/peer-wrap-key", nil, "")
 	if peerKeyResp.Code != http.StatusOK {
 		t.Fatalf("peer key status=%d body=%s", peerKeyResp.Code, peerKeyResp.Body.String())

@@ -369,6 +369,13 @@
   "guest_default": "Gast",
   "user_default": "Benutzer",
   "nobody_joined": "Noch niemand ist beigetreten",
+  "quickshare_approval_heading": "Möchten beitreten",
+  "quickshare_approval_hint": "Lass nur Personen herein, die du eingeladen hast. Der Code neben dem Namen muss mit dem Code auf ihrem Bildschirm übereinstimmen.",
+  "quickshare_approve": "Hereinlassen",
+  "quickshare_decline": "Ablehnen",
+  "quickshare_waiting_approval": "Warte darauf, dass der Host dich hereinlässt. Dein Code: {code}",
+  "quickshare_pending_suffix": " (wartet)",
+  "quickshare_approve_failed": "Teilnehmer konnte nicht aktualisiert werden: {msg}",
 
   "quickshare_no_decryption_key": "Noch kein Entschlüsselungsschlüssel verfügbar. Versuche es in einem Moment erneut.",
   "quickshare_download_failed": "Download fehlgeschlagen: {msg}",

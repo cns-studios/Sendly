@@ -643,6 +643,81 @@ body.page-index {
     color: #000000;
 }
 
+.person.pending .person-circle {
+    opacity: 0.45;
+}
+
+/* Quick share: host approves joiners, comparing key fingerprints */
+.approval-requests {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 520px;
+}
+
+.approval-requests.hidden,
+.approval-status.hidden {
+    display: none;
+}
+
+.approval-hint {
+    font-family: 'Arimo', sans-serif;
+    font-size: 14px;
+    color: #555555;
+    margin: 0;
+}
+
+.approval-request {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background-color: #F2F2F2;
+}
+
+.approval-request-name {
+    font-family: 'Arimo', sans-serif;
+    font-size: 16px;
+    flex: 1;
+}
+
+.approval-fingerprint,
+.approval-status code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+}
+
+.approval-request button {
+    border: none;
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-family: 'Arimo', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.approval-request .approve-btn {
+    background-color: #0A84FF;
+    color: #FFFFFF;
+}
+
+.approval-request .decline-btn {
+    background-color: #D9D9D9;
+    color: #000000;
+}
+
+.approval-status {
+    margin-top: 24px;
+    font-family: 'Arimo', sans-serif;
+    font-size: 16px;
+    color: #333333;
+    max-width: 520px;
+}
+
 /* ── Join code squares (quickshare) ── */
 .join-code-squares {
     display: flex;
