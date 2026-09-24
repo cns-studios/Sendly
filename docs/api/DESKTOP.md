@@ -272,7 +272,13 @@ Get envelope material needed for secure download/decrypt workflows.
 Create tunnel.
 
 ### `POST /desktop/me/tunnels/join`
-Join tunnel by short code.
+Join tunnel by short code. Rate-limited. Callers without a CNS bearer token (API key only) are anonymous joiners: they receive `participant_token` and must send `X-Device-ID` + `X-Participant-Token` on later tunnel calls. See the Tunnels section of WEB.md for authentication and host approval.
+
+### `POST /desktop/me/tunnels/:id/participants/:participant_id/approve`
+Host only. Admit a joiner; session keys may only be wrapped for approved participants.
+
+### `POST /desktop/me/tunnels/:id/participants/:participant_id/reject`
+Host only. Remove a joiner.
 
 ### `GET /desktop/me/tunnels/:id`
 Get tunnel and files.
@@ -284,7 +290,7 @@ Get tunnel file list.
 Confirm tunnel participation.
 
 ### `DELETE /desktop/me/tunnels/:id`
-End tunnel and remove tunnel files.
+Leave the tunnel; the last participant leaving removes the tunnel files.
 
 ## Devices and Enrollment
 

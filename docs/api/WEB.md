@@ -227,7 +227,7 @@ Response JSON:
 }
 ```
 
-If reports cross threshold (`AUTO_DELETE_REPORT_COUNT`), file is auto-marked deleted and response message reflects auto-removal.
+Reports are de-duplicated per signed-in user (or per client IP for anonymous reports); a repeat returns `409 ALREADY_REPORTED`. If the number of distinct signed-in reporters crosses `AUTO_DELETE_REPORT_COUNT`, the file is auto-marked deleted and the response message reflects auto-removal. Anonymous reports are recorded but never trigger auto-removal on their own. The endpoint uses the strict rate limiter.
 
 ## Current User
 
@@ -260,6 +260,13 @@ Return wrapped file key envelope plus wrapped user key envelope for a specific d
 
 ## Tunnels
 
+Caller authentication for all tunnel endpoints below:
+
+- Host: the initiating CNS user, or for a guest-started tunnel the `host_token` returned by `start`, sent as `X-Host-Token`.
+- Participant: a signed-in caller by CNS user; an anonymous joiner by `X-Device-ID` plus the `participant_token` returned by `join`, sent as `X-Participant-Token`.
+
+Non-members get `403 TUNNEL_FORBIDDEN`. Joiners must be approved by the host; until then they only see the lobby (tunnel, participants), and file lists, file access, uploads and key envelopes return `403 PARTICIPANT_NOT_APPROVED` (`409` from `peer-wrap-key` / cross-account finalize).
+
 ### `POST /api/me/tunnels/start`
 Request JSON:
 
@@ -280,10 +287,30 @@ Request JSON:
 
 ```json
 {
-  "code": "123456",
-  "device_id": "optional-device-id"
+  "code": "1234",
+  "device_id": "device-id (required for anonymous joiners)",
+  "public_key_jwk": { "kty": "RSA", "n": "...", "e": "AQAB" },
+  "key_algorithm": "RSA-OAEP-2048",
+  "key_version": 1
 }
 ```
+
+Anonymous joiners receive `participant_token` in the response (returned once). Re-joining with a `device_id` that already belongs to another participant returns `409 PARTICIPANT_CONFLICT`; the owner can re-join (same CNS user, or the same `X-Participant-Token`) to replace its key. Rate-limited with the strict limiter.
+
+### `POST /api/me/tunnels/:id/participants/:participant_id/approve`
+Host only. Admit a joiner so the host can wrap the session key for it.
+
+### `POST /api/me/tunnels/:id/participants/:participant_id/reject`
+Host only. Remove a joiner together with its key envelope and peer assignment.
+
+### `GET /api/me/tunnels/:id/participant-keys`
+Host only. Participants with public keys, including `approved` and `has_envelope`.
+
+### `POST /api/me/tunnels/:id/envelopes`
+Host only. Store the session key wrapped for an approved participant's device. Returns `403 PARTICIPANT_NOT_APPROVED` for unapproved participants and `409 ENVELOPE_EXISTS` if one is already stored.
+
+### `GET /api/me/tunnels/:id/envelopes/:device_id`
+The participant's own envelope (`:device_id` must be the caller's device).
 
 ### `GET /api/me/tunnels/:id`
 Get tunnel metadata and tunnel file list.
@@ -301,12 +328,12 @@ Request JSON:
 ```
 
 ### `DELETE /api/me/tunnels/:id`
-End tunnel and delete associated stored file blobs.
+Leave the tunnel (removes only the caller). When the last participant leaves, the tunnel and its stored file blobs are deleted.
 
 ## Devices and Enrollment
 
 ### `POST /api/me/devices/register`
-Register device or bootstrap trust.
+Register device or bootstrap trust. A `device_id` registered to another account returns `409 DEVICE_ID_CONFLICT`.
 
 ### `POST /api/me/devices/recover`
 Recovery flow that resets trusted device state and provisions a new trusted envelope.
