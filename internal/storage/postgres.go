@@ -256,17 +256,37 @@ func (p *Postgres) MarkFileDeleted(ctx context.Context, fileID string) error {
 	return err
 }
 
-func (p *Postgres) CreateReport(ctx context.Context, report *models.Report) error {
+// CreateReport stores a report and reports whether it was new. A signed-in
+// user can report a file only once (unique index); a repeat returns false.
+func (p *Postgres) CreateReport(ctx context.Context, report *models.Report) (bool, error) {
 	query := `
-		INSERT INTO reports (file_id, reporter_ip, created_at)
-		VALUES ($1, $2, $3)
+		INSERT INTO reports (file_id, reporter_ip, reporter_cns_user_id, created_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (file_id, reporter_cns_user_id) WHERE reporter_cns_user_id IS NOT NULL DO NOTHING
 	`
-	_, err := p.db.ExecContext(ctx, query,
+	res, err := p.db.ExecContext(ctx, query,
 		report.FileID,
 		report.ReporterIP,
+		report.ReporterCNSUserID,
 		report.CreatedAt,
 	)
-	return err
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	return rows > 0, err
+}
+
+// CountSignedInReporters counts the distinct signed-in users who reported a
+// file; only these reports count towards automatic deletion.
+func (p *Postgres) CountSignedInReporters(ctx context.Context, fileID string) (int, error) {
+	var count int
+	err := p.db.GetContext(ctx, &count, `
+		SELECT COUNT(DISTINCT reporter_cns_user_id)
+		FROM reports
+		WHERE file_id = $1 AND reporter_cns_user_id IS NOT NULL
+	`, fileID)
+	return count, err
 }
 
 func (p *Postgres) GetReportsByFileID(ctx context.Context, fileID string) ([]models.Report, error) {
@@ -276,9 +296,15 @@ func (p *Postgres) GetReportsByFileID(ctx context.Context, fileID string) ([]mod
 	return reports, err
 }
 
-func (p *Postgres) HasUserReportedFile(ctx context.Context, fileID, reporterIP string) (bool, error) {
+// HasUserReportedFile de-duplicates reports: by user for signed-in
+// reporters (reporterUserID > 0), by client IP for anonymous ones.
+func (p *Postgres) HasUserReportedFile(ctx context.Context, fileID, reporterIP string, reporterUserID int64) (bool, error) {
 	var count int
-	query := `SELECT COUNT(*) FROM reports WHERE file_id = $1 AND reporter_ip = $2`
+	if reporterUserID > 0 {
+		err := p.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM reports WHERE file_id = $1 AND reporter_cns_user_id = $2`, fileID, reporterUserID)
+		return count > 0, err
+	}
+	query := `SELECT COUNT(*) FROM reports WHERE file_id = $1 AND reporter_ip = $2 AND reporter_cns_user_id IS NULL`
 	err := p.db.GetContext(ctx, &count, query, fileID, reporterIP)
 	return count > 0, err
 }

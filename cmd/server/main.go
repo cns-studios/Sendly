@@ -177,7 +177,7 @@ func main() {
 			file.GET("/:id/download", downloadRateLimiter.Handler(), downloadHandler.Download)
 			file.GET("/:id", downloadHandler.GetMetadata)
 			file.GET("/code/:code", downloadHandler.GetByCode)
-			file.POST("/:id/report", reportHandler.Report)
+			file.POST("/:id/report", strictRateLimiter.Handler(), reportHandler.Report)
 			file.POST("/:id/share-to-user", standardRateLimiter.Handler(), recentUploadsHandler.ShareFileToUser)
 		}
 
@@ -338,7 +338,7 @@ func main() {
 			file := desktopAuth.Group("/file")
 			{
 				file.GET("/code/:code", downloadHandler.GetByCode)
-				file.POST("/:id/report", reportHandler.Report)
+				file.POST("/:id/report", strictRateLimiter.Handler(), reportHandler.Report)
 			}
 
 			me := desktopAuth.Group("/me")
