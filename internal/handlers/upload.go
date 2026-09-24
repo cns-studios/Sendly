@@ -203,6 +203,18 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
+		if user == nil {
+			// Guests may only add files to a tunnel they host or joined.
+			caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
+			if authErr != nil {
+				c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+				return
+			}
+			if caller == nil {
+				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+				return
+			}
+		}
 		if user != nil {
 			if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
 				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})

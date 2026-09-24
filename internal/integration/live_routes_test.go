@@ -284,6 +284,9 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	router.POST("/api/upload/finalize", uploadHandler.Finalize)
 	router.GET("/api/tunnels/:id/files/:file_id/access", tunnelHandler.GuestFileAccess)
 	router.GET("/api/me/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
+	router.GET("/api/me/tunnels/:id", tunnelHandler.Get)
+	router.GET("/api/me/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
+	router.DELETE("/api/me/tunnels/:id", tunnelHandler.End)
 
 	startBody, _ := json.Marshal(models.TunnelStartRequest{Duration: "10m", DeviceID: "00000000-0000-4000-8000-000000000011"})
 	rec := request(router, http.MethodPost, "/api/me/tunnels/start", startBody, "application/json")
@@ -294,10 +297,46 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &started); err != nil {
 		t.Fatal(err)
 	}
-	joinBody, _ := json.Marshal(models.TunnelJoinRequest{Code: started.Tunnel.Code, DeviceID: "00000000-0000-4000-8000-000000000012"})
+	guestDevice := "00000000-0000-4000-8000-000000000012"
+	joinBody, _ := json.Marshal(models.TunnelJoinRequest{
+		Code: started.Tunnel.Code, DeviceID: guestDevice,
+		PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"guest","e":"AQAB"}`), KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+	})
 	rec = request(router, http.MethodPost, "/api/me/tunnels/join", joinBody, "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest tunnel join status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var joined models.TunnelStartResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &joined); err != nil || joined.ParticipantToken == "" {
+		t.Fatalf("guest join did not return a participant token: %s", rec.Body.String())
+	}
+	guestHeaders := map[string]string{"X-Device-ID": guestDevice, "X-Participant-Token": joined.ParticipantToken}
+
+	// Someone else re-joining with the guest's (visible) device ID must not
+	// be able to replace its public key.
+	hijackBody, _ := json.Marshal(models.TunnelJoinRequest{
+		Code: started.Tunnel.Code, DeviceID: guestDevice,
+		PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"attacker","e":"AQAB"}`), KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+	})
+	rec = request(router, http.MethodPost, "/api/me/tunnels/join", hijackBody, "application/json")
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("join with another participant's device ID status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// Non-members get nothing: tunnel state, envelopes, or leaving for others.
+	outsider := map[string]string{"X-Device-ID": guestDevice}
+	for _, probe := range []struct{ method, path string }{
+		{http.MethodGet, "/api/me/tunnels/" + started.Tunnel.ID},
+		{http.MethodGet, "/api/me/tunnels/" + started.Tunnel.ID + "/envelopes/" + guestDevice},
+		{http.MethodDelete, "/api/me/tunnels/" + started.Tunnel.ID},
+	} {
+		rec = requestWithHeaders(router, probe.method, probe.path, nil, "", outsider)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s %s by non-member status=%d body=%s", probe.method, probe.path, rec.Code, rec.Body.String())
+		}
+	}
+	rec = requestWithHeaders(router, http.MethodGet, "/api/me/tunnels/"+started.Tunnel.ID, nil, "", guestHeaders)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("member tunnel state status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: "00000000-0000-4000-8000-000000000011"})
 	// The host's device ID is visible to participants; it must not be
@@ -316,8 +355,12 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest initiator confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	confirmBody, _ = json.Marshal(models.TunnelConfirmRequest{DeviceID: "00000000-0000-4000-8000-000000000012"})
+	confirmBody, _ = json.Marshal(models.TunnelConfirmRequest{DeviceID: guestDevice})
 	rec = request(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest confirm without participant token status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json", guestHeaders)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest peer confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -351,19 +394,27 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 		DEKWrapAlg:    "RAW-DEK", DEKWrapVersion: 1,
 	})
 	rec = request(router, http.MethodPost, "/api/upload/finalize", finalizeBody, "application/json")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-member finalize into tunnel status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodPost, "/api/upload/finalize", finalizeBody, "application/json", guestHeaders)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest finalize status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var finalized models.UploadFinalizeResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &finalized)
 	rec = request(router, http.MethodGet, "/api/tunnels/"+started.Tunnel.ID+"/files/"+finalized.FileID+"/access", nil, "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-member guest access status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodGet, "/api/tunnels/"+started.Tunnel.ID+"/files/"+finalized.FileID+"/access", nil, "", guestHeaders)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest access status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if err := db.DeleteTunnel(context.Background(), started.Tunnel.ID); err != nil {
 		t.Fatal(err)
 	}
-	rec = request(router, http.MethodGet, "/api/tunnels/"+started.Tunnel.ID+"/files/"+finalized.FileID+"/access", nil, "")
+	rec = requestWithHeaders(router, http.MethodGet, "/api/tunnels/"+started.Tunnel.ID+"/files/"+finalized.FileID+"/access", nil, "", guestHeaders)
 	if rec.Code == http.StatusOK {
 		t.Fatal("guest access remained available after tunnel deletion")
 	}
