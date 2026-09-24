@@ -283,6 +283,7 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	router.GET("/api/upload/status/:session_id", uploadHandler.AssemblyStatus)
 	router.POST("/api/upload/finalize", uploadHandler.Finalize)
 	router.GET("/api/tunnels/:id/files/:file_id/access", tunnelHandler.GuestFileAccess)
+	router.GET("/api/me/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 
 	startBody, _ := json.Marshal(models.TunnelStartRequest{Duration: "10m", DeviceID: "00000000-0000-4000-8000-000000000011"})
 	rec := request(router, http.MethodPost, "/api/me/tunnels/start", startBody, "application/json")
@@ -299,7 +300,19 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 		t.Fatalf("guest tunnel join status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: "00000000-0000-4000-8000-000000000011"})
+	// The host's device ID is visible to participants; it must not be
+	// enough to act as the host without the host token.
 	rec = request(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("host confirm without host token status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = requestWithHeaders(router, http.MethodGet, "/api/me/tunnels/"+started.Tunnel.ID+"/participant-keys", nil, "",
+		map[string]string{"X-Device-ID": "00000000-0000-4000-8000-000000000011"})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("participant keys with host device ID only status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	hostHeaders := map[string]string{"X-Host-Token": started.HostToken}
+	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json", hostHeaders)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("guest initiator confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -598,6 +611,19 @@ func request(router http.Handler, method, path string, body []byte, contentType 
 	req := httptest.NewRequest(method, path, bytes.NewReader(body))
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func requestWithHeaders(router http.Handler, method, path string, body []byte, contentType string, headers map[string]string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
 	}
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
