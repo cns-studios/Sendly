@@ -22,6 +22,10 @@
     const pendingCount = document.getElementById('transfers-pending-count');
     const deviceNotice = document.getElementById('transfers-device-notice');
     const filter = document.getElementById('transfers-filter');
+    const reportModal = document.getElementById('transfers-report-modal');
+    const reportDesc = document.getElementById('transfers-report-desc');
+    const reportCancel = document.getElementById('transfers-report-cancel');
+    const reportConfirm = document.getElementById('transfers-report-confirm');
     const DIRECTIONS = ['all', 'received', 'sent'];
     const DIRECTION_STORAGE_KEY = 'sendly.transfers.direction';
 
@@ -246,10 +250,24 @@
             decline.addEventListener('click', () => handleDecline(item, card, decline));
             accept.addEventListener('click', () => handleAccept(item, card, accept));
             actions.append(decline, accept);
-        } else if (item.status === 'accepted' && item.available && !lockedFiles.has(item.file_id)) {
-            const download = actionButton('transfer-btn is-download', 'download', t('transfers_download'));
-            download.addEventListener('click', () => handleDownload(item, card, download));
-            actions.append(download);
+        } else if (item.status === 'accepted' && item.available) {
+            // Locked files can still be reported: the recipient may have
+            // seen them before the account was recovered.
+            if (item.reported) {
+                const reported = el('span', 'transfer-reported');
+                reported.append(icon('flag'), el('span', '', t('transfers_reported')));
+                actions.append(reported);
+            } else {
+                const report = actionButton('transfer-btn is-report', 'flag', t('transfers_report'));
+                report.title = t('transfers_report_hint');
+                report.addEventListener('click', () => openReportModal(item));
+                actions.append(report);
+            }
+            if (!lockedFiles.has(item.file_id)) {
+                const download = actionButton('transfer-btn is-download', 'download', t('transfers_download'));
+                download.addEventListener('click', () => handleDownload(item, card, download));
+                actions.append(download);
+            }
         }
         footer.append(sender, actions);
 
@@ -524,6 +542,68 @@
         }
     }
 
+    // ── Reporting (accepted transfers only; the server enforces it too) ──
+    let reportTarget = null;
+
+    function openReportModal(item) {
+        reportTarget = item;
+        reportDesc.textContent = tpl('transfers_report_desc', { name: item.filename, sender: peerName(peerOf(item)) });
+        reportModal.classList.remove('hidden');
+        reportModal.setAttribute('aria-hidden', 'false');
+        reportConfirm.focus();
+    }
+
+    function closeReportModal() {
+        reportTarget = null;
+        reportModal.classList.add('hidden');
+        reportModal.setAttribute('aria-hidden', 'true');
+    }
+
+    function markReported(item) {
+        item.reported = true;
+        historyItems.forEach((h) => { if (h.file_id === item.file_id && !isSent(h)) h.reported = true; });
+        renderHistory();
+    }
+
+    async function submitReport() {
+        const item = reportTarget;
+        if (!item || busy.has(item.file_id)) return;
+        busy.add(item.file_id);
+        reportConfirm.disabled = true;
+        try {
+            await api(`/api/me/transfers/${encodeURIComponent(item.file_id)}/report`, { method: 'POST' });
+            closeReportModal();
+            markReported(item);
+            notify(t('transfers_report_toast'));
+            // Enough reports remove the file; pick that up.
+            scheduleHistoryReload();
+        } catch (error) {
+            if (error.code === 'ALREADY_REPORTED') {
+                closeReportModal();
+                markReported(item);
+                notify(t('transfers_report_toast'));
+            } else {
+                notify(error.status ? error.message : t('transfers_report_failed'), 'error');
+                if (error.status === 404 || error.status === 409 || error.status === 410) {
+                    closeReportModal();
+                    scheduleHistoryReload();
+                }
+            }
+        } finally {
+            busy.delete(item.file_id);
+            reportConfirm.disabled = false;
+        }
+    }
+
+    function initReportModal() {
+        reportCancel.addEventListener('click', closeReportModal);
+        reportConfirm.addEventListener('click', submitReport);
+        reportModal.addEventListener('click', (e) => { if (e.target === reportModal) closeReportModal(); });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !reportModal.classList.contains('hidden')) closeReportModal();
+        });
+    }
+
     function markLocked(item) {
         if (lockedFiles.has(item.file_id)) return;
         lockedFiles.add(item.file_id);
@@ -614,6 +694,7 @@
         historyDirection = readSavedDirection();
         syncFilter();
         initFilter();
+        initReportModal();
         skeleton(pendingList, 2);
         skeleton(historyList, 2);
         refreshAll();
