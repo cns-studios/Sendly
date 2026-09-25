@@ -165,6 +165,7 @@ func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {
 		return
 	}
 	h.publishTransfersChanged(c.Request.Context(), req.RecipientUserID)
+	h.publishSentTransferChanged(int64(user.ID), fileID, models.TransferStatusPending)
 	c.JSON(http.StatusOK, gin.H{"file_id": fileID, "recipient_user_id": req.RecipientUserID, "status": models.TransferStatusPending})
 }
 
