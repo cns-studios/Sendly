@@ -128,6 +128,28 @@ func (p *Postgres) CountPendingTransfers(ctx context.Context, recipientUserID in
 	return count, err
 }
 
+// GetAcceptedTransfer returns the transfer of fileID to recipientUserID, for
+// reporting it. ErrTransferNotFound when the user was never sent the file,
+// ErrTransferNotAccepted while it is pending or after it was declined.
+func (p *Postgres) GetAcceptedTransfer(ctx context.Context, recipientUserID int64, fileID string) (*models.Transfer, error) {
+	var transfer models.Transfer
+	err := p.db.GetContext(ctx, &transfer, `
+		SELECT id, file_id, sender_cns_user_id, recipient_cns_user_id, status, created_at, responded_at
+		FROM file_transfers
+		WHERE file_id = $1 AND recipient_cns_user_id = $2
+	`, fileID, recipientUserID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrTransferNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if transfer.Status != models.TransferStatusAccepted {
+		return nil, models.ErrTransferNotAccepted
+	}
+	return &transfer, nil
+}
+
 // RespondToTransfer accepts or declines a pending transfer. Declining also
 // deletes the recipient's key envelope, so the server can no longer hand
 // them the wrapped DEK; the transfer row stays as history. Only the

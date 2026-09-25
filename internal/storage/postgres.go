@@ -260,14 +260,15 @@ func (p *Postgres) MarkFileDeleted(ctx context.Context, fileID string) error {
 // user can report a file only once (unique index); a repeat returns false.
 func (p *Postgres) CreateReport(ctx context.Context, report *models.Report) (bool, error) {
 	query := `
-		INSERT INTO reports (file_id, reporter_ip, reporter_cns_user_id, created_at)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO reports (file_id, reporter_ip, reporter_cns_user_id, transfer_id, created_at)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (file_id, reporter_cns_user_id) WHERE reporter_cns_user_id IS NOT NULL DO NOTHING
 	`
 	res, err := p.db.ExecContext(ctx, query,
 		report.FileID,
 		report.ReporterIP,
 		report.ReporterCNSUserID,
+		report.TransferID,
 		report.CreatedAt,
 	)
 	if err != nil {

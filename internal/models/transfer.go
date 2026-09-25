@@ -53,6 +53,8 @@ type TransferListItem struct {
 	RecipientUserID    int64        `db:"recipient_user_id" json:"recipient_user_id"`
 	RecipientUsername  string       `db:"recipient_username" json:"recipient_username"`
 	RecipientAvatarURL string       `db:"recipient_avatar_url" json:"recipient_avatar_url"`
+	// Reported is true when the listing user has reported this file.
+	Reported bool `db:"reported" json:"reported"`
 }
 
 type TransfersResponse struct {
@@ -68,4 +70,5 @@ var (
 	ErrTransferNotFound        = &AppError{Code: "TRANSFER_NOT_FOUND", Message: "Transfer not found"}
 	ErrTransferAlreadyAnswered = &AppError{Code: "TRANSFER_ALREADY_ANSWERED", Message: "This transfer was already accepted or declined"}
 	ErrTransferFileUnavailable = &AppError{Code: "TRANSFER_FILE_UNAVAILABLE", Message: "This file has expired or was deleted"}
+	ErrTransferNotAccepted     = &AppError{Code: "TRANSFER_NOT_ACCEPTED", Message: "Only accepted transfers can be reported"}
 )
