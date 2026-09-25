@@ -89,7 +89,8 @@
     // Pending (unanswered) transfers show as a red counter on the Transfers
     // item and a dot on the avatar. The count arrives live over the existing
     // per-user device socket (transfers_updated events) and is re-broadcast
-    // as a 'sendly:transfers-updated' window event for the transfers page.
+    // as a 'sendly:transfers-updated' window event for the transfers page;
+    // sent_transfers_updated events become 'sendly:sent-transfers-updated'.
     var badge = document.getElementById('account-menu-transfers-badge');
     var dot = document.getElementById('account-menu-dot');
     var baseLabel = trigger.getAttribute('aria-label') || '';
@@ -129,6 +130,10 @@
             try { data = JSON.parse(event.data); } catch (e) { return; }
             if (data && data.type === 'transfers_updated' && typeof data.pending_count === 'number') {
                 setTransferCount(data.pending_count);
+            } else if (data && data.type === 'sent_transfers_updated') {
+                // A transfer this user sent was created or answered; no badge
+                // change, but an open transfers page refreshes its history.
+                window.dispatchEvent(new CustomEvent('sendly:sent-transfers-updated', { detail: { fileId: data.file_id, status: data.status } }));
             }
         });
         socket.addEventListener('close', function () {

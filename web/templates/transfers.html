@@ -99,6 +99,11 @@
             <section class="transfers-section" aria-labelledby="transfers-history-title">
                 <div class="transfers-section-head">
                     <h2 id="transfers-history-title" class="transfers-section-title">{{.t.transfers_history_title}}</h2>
+                    <div id="transfers-filter" class="transfers-filter" role="radiogroup" aria-label="{{.t.transfers_filter_label}}" aria-controls="transfers-history-list">
+                        <button type="button" class="transfers-filter-btn" role="radio" aria-checked="true" tabindex="0" data-direction="all">{{.t.transfers_filter_all}}</button>
+                        <button type="button" class="transfers-filter-btn" role="radio" aria-checked="false" tabindex="-1" data-direction="received"><i data-lucide="arrow-down-left" aria-hidden="true"></i>{{.t.transfers_filter_received}}</button>
+                        <button type="button" class="transfers-filter-btn" role="radio" aria-checked="false" tabindex="-1" data-direction="sent"><i data-lucide="arrow-up-right" aria-hidden="true"></i>{{.t.transfers_filter_sent}}</button>
+                    </div>
                 </div>
                 <div id="transfers-history-list" class="transfers-list" aria-busy="true"></div>
                 <button id="transfers-history-more" type="button" class="done-btn transfers-more hidden">{{.t.transfers_load_more}}</button>

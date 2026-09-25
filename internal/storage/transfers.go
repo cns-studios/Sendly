@@ -51,15 +51,27 @@ func (p *Postgres) CreateTransfer(ctx context.Context, transfer *models.Transfer
 	return tx.Commit()
 }
 
-// ListReceivedTransfers returns a recipient's transfers. view "pending"
-// lists unanswered transfers whose file is still available; view "history"
-// lists accepted and declined transfers, newest answer first.
-func (p *Postgres) ListReceivedTransfers(ctx context.Context, recipientUserID int64, view string, page, perPage int) ([]models.TransferListItem, int, error) {
-	where := `t.status = 'pending' AND COALESCE(f.is_deleted, FALSE) = FALSE AND f.expires_at > NOW()`
-	order := `t.created_at DESC`
+// ListTransfers returns the transfers a user is part of. view "pending"
+// lists unanswered transfers sent to the user whose file is still available
+// (direction is ignored: only the recipient can act on them). view "history"
+// lists the user's answered received transfers and/or every transfer they
+// sent, whatever its status, depending on direction ("all", "received" or
+// "sent"), most recent activity (answer, else send) first.
+func (p *Postgres) ListTransfers(ctx context.Context, userID int64, view, direction string, page, perPage int) ([]models.TransferListItem, int, error) {
+	const received = `(t.recipient_cns_user_id = $1 AND t.status IN ('accepted', 'declined'))`
+	const sent = `t.sender_cns_user_id = $1`
+	where := `t.recipient_cns_user_id = $1 AND t.status = 'pending' AND COALESCE(f.is_deleted, FALSE) = FALSE AND f.expires_at > NOW()`
+	order := `t.created_at DESC, t.id DESC`
 	if view == "history" {
-		where = `t.status IN ('accepted', 'declined')`
-		order = `COALESCE(t.responded_at, t.created_at) DESC`
+		switch direction {
+		case models.TransferDirectionReceived:
+			where = received
+		case models.TransferDirectionSent:
+			where = sent
+		default:
+			where = `(` + received + ` OR ` + sent + `)`
+		}
+		order = `COALESCE(t.responded_at, t.created_at) DESC, t.id DESC`
 	}
 
 	var total int
@@ -67,25 +79,30 @@ func (p *Postgres) ListReceivedTransfers(ctx context.Context, recipientUserID in
 		SELECT COUNT(*)
 		FROM file_transfers t
 		JOIN files f ON f.id = t.file_id
-		WHERE t.recipient_cns_user_id = $1 AND `+where, recipientUserID); err != nil {
+		WHERE `+where, userID); err != nil {
 		return nil, 0, err
 	}
 
 	items := []models.TransferListItem{}
 	if err := p.db.SelectContext(ctx, &items, `
-		SELECT f.id AS file_id, f.original_name AS filename, f.size_bytes, f.expires_at,
+		SELECT t.id, f.id AS file_id, f.original_name AS filename, f.size_bytes, f.expires_at,
 			t.status, t.created_at AS sent_at, t.responded_at,
 			(COALESCE(f.is_deleted, FALSE) = FALSE AND f.expires_at > NOW()) AS available,
+			CASE WHEN t.recipient_cns_user_id = $1 THEN 'received' ELSE 'sent' END AS direction,
 			t.sender_cns_user_id AS sender_user_id,
-			COALESCE(u.username, f.owner_cns_username, '') AS sender_username,
-			COALESCE(u.avatar_url, '') AS sender_avatar_url
+			COALESCE(su.username, f.owner_cns_username, '') AS sender_username,
+			COALESCE(su.avatar_url, '') AS sender_avatar_url,
+			t.recipient_cns_user_id AS recipient_user_id,
+			COALESCE(ru.username, '') AS recipient_username,
+			COALESCE(ru.avatar_url, '') AS recipient_avatar_url
 		FROM file_transfers t
 		JOIN files f ON f.id = t.file_id
-		LEFT JOIN users u ON u.cns_user_id = t.sender_cns_user_id
-		WHERE t.recipient_cns_user_id = $1 AND `+where+`
+		LEFT JOIN users su ON su.cns_user_id = t.sender_cns_user_id
+		LEFT JOIN users ru ON ru.cns_user_id = t.recipient_cns_user_id
+		WHERE `+where+`
 		ORDER BY `+order+`
 		LIMIT $2 OFFSET $3
-	`, recipientUserID, perPage, (page-1)*perPage); err != nil {
+	`, userID, perPage, (page-1)*perPage); err != nil {
 		return nil, 0, err
 	}
 	for i := range items {

@@ -258,6 +258,28 @@ Response JSON:
 ### `GET /api/me/files/:id/access?device_id=<device_id>`
 Return wrapped file key envelope plus wrapped user key envelope for a specific device.
 
+## Transfers
+
+User-to-user sends (`POST /api/file/:id/share-to-user`). The recipient accepts or declines; declining deletes their key envelope.
+
+### `GET /api/me/transfers`
+List the caller's transfers.
+
+Query params:
+
+- `view` (optional): `pending` (default) lists received transfers awaiting an answer whose file is still available; `history` lists past transfers, most recent activity (answer, else send) first.
+- `direction` (optional, `history` only): `all` (default), `received` (accepted or declined transfers sent to the caller) or `sent` (every transfer the caller sent, including ones still pending). Anything else returns `400 INVALID_DIRECTION`.
+- `page`, `per_page` (optional, as for recent uploads)
+
+Each item carries `id`, `file_id`, `filename`, `size_bytes`, `expires_at`, `status` (`pending`/`accepted`/`declined`), `sent_at`, `responded_at`, `available`, `direction` (`received`/`sent`, relative to the caller), and both parties as `sender_user_id`/`sender_username`/`sender_avatar_url` and `recipient_user_id`/`recipient_username`/`recipient_avatar_url`.
+
+### `GET /api/me/transfers/pending-count`
+`{"count": n}`: received transfers awaiting an answer (the account menu badge).
+
+### `POST /api/me/transfers/:file_id/accept`
+### `POST /api/me/transfers/:file_id/decline`
+Recipient only, once per transfer. `404 TRANSFER_NOT_FOUND`, `409 TRANSFER_ALREADY_ANSWERED`, `410 TRANSFER_FILE_UNAVAILABLE` (accept only).
+
 ## Tunnels
 
 Caller authentication for all tunnel endpoints below:
@@ -358,6 +380,8 @@ Event `type` values include:
 - `device_enrollment_created`
 - `device_enrollment_approved`
 - `device_enrollment_rejected`
+- `transfers_updated` (`{"pending_count": n}`): the caller's received pending transfers changed
+- `sent_transfers_updated` (`{"file_id": "...", "status": "..."}`): a transfer the caller sent was created, accepted or declined
 
 ### `POST /api/me/devices/enrollments`
 Create enrollment request.

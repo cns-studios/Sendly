@@ -782,6 +782,10 @@
         }
 
         const eventType = payload?.type || '';
+        // The same socket carries transfer events for the account menu.
+        if (!eventType.startsWith('device_enrollment_')) {
+            return;
+        }
         if (eventType === 'device_enrollment_created') {
             loadPendingEnrollments();
             return;

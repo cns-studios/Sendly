@@ -295,6 +295,30 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	if declinedHistory := requestAs(router, int(declinerID), http.MethodGet, "/api/me/transfers?view=history", nil, ""); !bytes.Contains(declinedHistory.Body.Bytes(), []byte(`"status":"declined"`)) {
 		t.Fatalf("declined history body=%s", declinedHistory.Body.String())
 	}
+	// The sender tracks both outgoing transfers and how each was answered.
+	var sentHistory models.TransfersResponse
+	sentRes := requestAs(router, int(ownerID), http.MethodGet, "/api/me/transfers?view=history&direction=sent", nil, "")
+	if err := json.Unmarshal(sentRes.Body.Bytes(), &sentHistory); err != nil || sentRes.Code != http.StatusOK {
+		t.Fatalf("sent history status=%d body=%s", sentRes.Code, sentRes.Body.String())
+	}
+	sentStatus := map[int64]string{}
+	for _, item := range sentHistory.Items {
+		if item.FileID == fileID && item.Direction == models.TransferDirectionSent {
+			sentStatus[item.RecipientUserID] = item.Status
+		}
+	}
+	if sentStatus[recipientID] != models.TransferStatusAccepted || sentStatus[declinerID] != models.TransferStatusDeclined {
+		t.Fatalf("sent history statuses=%v body=%s", sentStatus, sentRes.Body.String())
+	}
+	if all := requestAs(router, int(ownerID), http.MethodGet, "/api/me/transfers?view=history", nil, ""); !bytes.Contains(all.Body.Bytes(), []byte(`"direction":"sent"`)) {
+		t.Fatalf("combined history omitted sent transfers: body=%s", all.Body.String())
+	}
+	if received := requestAs(router, int(ownerID), http.MethodGet, "/api/me/transfers?view=history&direction=received", nil, ""); bytes.Contains(received.Body.Bytes(), []byte(fileID)) {
+		t.Fatalf("sent transfer listed as received: body=%s", received.Body.String())
+	}
+	if bad := requestAs(router, int(ownerID), http.MethodGet, "/api/me/transfers?view=history&direction=sideways", nil, ""); bad.Code != http.StatusBadRequest {
+		t.Fatalf("invalid direction status=%d", bad.Code)
+	}
 	// The first recipient's accepted access is unaffected by someone else declining.
 	if still := requestAs(router, int(recipientID), http.MethodGet, "/api/me/files/"+fileID+"/access?device_id="+recipientDevice, nil, ""); still.Code != http.StatusOK {
 		t.Fatalf("accepted recipient lost access: status=%d body=%s", still.Code, still.Body.String())

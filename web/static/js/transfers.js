@@ -1,4 +1,5 @@
-// Transfers page: files other users sent to the signed-in user.
+// Transfers page: files other users sent to the signed-in user, and a
+// history of transfers in both directions (received and sent).
 //
 // End-to-end encryption: the server only ever returns the file key wrapped
 // for this user's identity key, and only after the transfer is accepted.
@@ -20,11 +21,19 @@
     const historyMore = document.getElementById('transfers-history-more');
     const pendingCount = document.getElementById('transfers-pending-count');
     const deviceNotice = document.getElementById('transfers-device-notice');
+    const filter = document.getElementById('transfers-filter');
+    const DIRECTIONS = ['all', 'received', 'sent'];
+    const DIRECTION_STORAGE_KEY = 'sendly.transfers.direction';
 
     let pendingItems = [];
     let historyItems = [];
     let historyPage = 0;
     let historyTotalPages = 0;
+    let historyDirection = 'all';
+    // Bumped on every page-1 history load so a slow response for a filter
+    // the user already switched away from is dropped.
+    let historyRequest = 0;
+    let historyReloadTimer = null;
     let device = null; // { deviceId, identityKey } once this device is ready
     const busy = new Set();
     // Accepted transfers whose file key can no longer be unwrapped here: they
@@ -139,7 +148,32 @@
         window.lucide?.createIcons?.();
     }
 
+    const isSent = (item) => item.direction === 'sent';
+
+    // The other party: who sent a received transfer, who got a sent one.
+    function peerOf(item) {
+        return isSent(item)
+            ? { username: item.recipient_username, avatarURL: item.recipient_avatar_url }
+            : { username: item.sender_username, avatarURL: item.sender_avatar_url };
+    }
+
+    function peerName(peer) {
+        return peer.username ? `@${peer.username}` : t('transfers_unknown_user');
+    }
+
+    // Sent transfers only report what the recipient did with them; the
+    // sender has no key to check or file to download here.
+    function sentStatusPill(item) {
+        if (item.status === 'accepted') return el('div', 'transfer-status is-accepted', t('transfers_status_accepted'));
+        if (item.status === 'declined') return el('div', 'transfer-status is-declined', t('transfers_status_declined'));
+        if (!item.available) return el('div', 'transfer-status is-expired', t('transfers_status_expired'));
+        const pill = el('div', 'transfer-status is-awaiting', t('transfers_status_awaiting'));
+        pill.title = tpl('transfers_awaiting_hint', { name: peerName(peerOf(item)) });
+        return pill;
+    }
+
     function statusPill(item) {
+        if (isSent(item)) return sentStatusPill(item);
         if (item.status === 'pending') {
             return el('div', 'expiry-pill', SecureCrypto.getTimeRemaining(item.expires_at));
         }
@@ -153,14 +187,35 @@
         return el('div', 'transfer-status is-accepted', t('transfers_status_accepted'));
     }
 
+    function isMuted(item) {
+        if (isSent(item)) return item.status === 'declined' || !item.available;
+        return item.status !== 'pending' && (item.status === 'declined' || !item.available || lockedFiles.has(item.file_id));
+    }
+
+    // "from @alice · accepted 2 hours ago" / "to @bob · sent 5 minutes ago"
+    function peerLine(item) {
+        const when = item.status === 'pending' || !item.responded_at ? item.sent_at : item.responded_at;
+        let key = 'transfers_sent_when';
+        if (item.status === 'accepted') key = 'transfers_accepted_when';
+        else if (item.status === 'declined') key = 'transfers_declined_when';
+        if (!isSent(item) && item.status === 'pending') return relativeTime(when);
+        return tpl(key, { time: relativeTime(when) });
+    }
+
     function buildCard(item) {
-        const card = el('article', `card transfer-card is-${item.status}`);
+        const direction = isSent(item) ? 'sent' : 'received';
+        const card = el('article', `card transfer-card is-${item.status} is-${direction}`);
         card.dataset.fileId = item.file_id;
-        if (item.status !== 'pending' && (item.status === 'declined' || !item.available || lockedFiles.has(item.file_id))) card.classList.add('is-muted');
+        if (item.id) card.dataset.transferId = item.id;
+        if (isMuted(item)) card.classList.add('is-muted');
 
         const row = el('div', 'file-row');
         const fileIcon = el('div', 'file-icon');
         fileIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        const badge = el('span', `transfer-direction is-${direction}`);
+        badge.title = t(direction === 'sent' ? 'transfers_filter_sent' : 'transfers_filter_received');
+        badge.append(icon(direction === 'sent' ? 'arrow-up-right' : 'arrow-down-left'));
+        fileIcon.append(badge);
         const meta = el('div', 'file-meta');
         const name = el('div', 'file-meta-name', item.filename);
         name.title = item.filename;
@@ -171,19 +226,20 @@
         row.append(fileIcon, meta, statusPill(item));
 
         const footer = el('div', 'transfer-footer');
+        const peer = peerOf(item);
         const sender = el('div', 'transfer-sender');
         const avatar = el('span', 'transfer-sender-avatar');
-        avatar.appendChild(window.buildUserAvatar(item.sender_username || '?', item.sender_avatar_url, 22));
+        avatar.appendChild(window.buildUserAvatar(peer.username || '?', peer.avatarURL, 22));
         const senderText = el('span', 'transfer-sender-text');
-        const who = el('strong', '', `@${item.sender_username || '?'}`);
-        const when = item.status === 'pending' || !item.responded_at ? item.sent_at : item.responded_at;
-        const whenLabel = item.status === 'pending' ? relativeTime(when)
-            : tpl(item.status === 'accepted' ? 'transfers_accepted_when' : 'transfers_declined_when', { time: relativeTime(when) });
-        senderText.append(document.createTextNode(`${t('transfers_from')} `), who, document.createTextNode(` · ${whenLabel}`));
+        const who = el('strong', '', peerName(peer));
+        const preposition = t(isSent(item) ? 'transfers_to' : 'transfers_from');
+        senderText.append(document.createTextNode(`${preposition} `), who, document.createTextNode(` · ${peerLine(item)}`));
         sender.append(avatar, senderText);
 
         const actions = el('div', 'transfer-actions');
-        if (item.status === 'pending') {
+        if (isSent(item)) {
+            // Nothing to act on: the recipient accepts or declines.
+        } else if (item.status === 'pending') {
             const decline = actionButton('transfer-btn is-decline', 'x', t('transfers_decline'));
             decline.title = t('transfers_decline_hint');
             const accept = actionButton('transfer-btn is-accept', 'check', t('transfers_accept'));
@@ -233,7 +289,9 @@
     function renderHistory() {
         historyMore.classList.toggle('hidden', historyPage >= historyTotalPages);
         if (!historyItems.length) {
-            emptyState(historyList, 'history', t('transfers_empty_history'));
+            if (historyDirection === 'sent') emptyState(historyList, 'send', t('transfers_empty_sent'), t('transfers_empty_sent_sub'));
+            else if (historyDirection === 'received') emptyState(historyList, 'inbox', t('transfers_empty_received'));
+            else emptyState(historyList, 'history', t('transfers_empty_history'));
             return;
         }
         historyList.setAttribute('aria-busy', 'false');
@@ -254,16 +312,24 @@
         }
     }
 
+    // A transfer's identity: one file can be sent to several people.
+    const transferKey = (item) => item.id || `${item.direction}:${item.file_id}`;
+
     async function loadHistory(page = 1) {
+        const request = page === 1 ? ++historyRequest : historyRequest;
+        const direction = historyDirection;
         try {
-            const payload = await api(`/api/me/transfers?view=history&page=${page}&per_page=${PER_PAGE}`);
+            const payload = await api(`/api/me/transfers?view=history&direction=${direction}&page=${page}&per_page=${PER_PAGE}`);
+            if (request !== historyRequest || direction !== historyDirection) return;
             const items = payload.items || [];
-            historyItems = page === 1 ? items : historyItems.concat(items.filter(i => !historyItems.some(h => h.file_id === i.file_id)));
+            const seen = new Set(historyItems.map(transferKey));
+            historyItems = page === 1 ? items : historyItems.concat(items.filter(i => !seen.has(transferKey(i))));
             historyPage = payload.page || page;
             historyTotalPages = payload.total_pages || 0;
             renderHistory();
             checkLockedTransfers();
         } catch (error) {
+            if (request !== historyRequest || direction !== historyDirection) return;
             console.error('Failed to load transfer history:', error);
             if (page === 1) errorState(historyList, () => { skeleton(historyList, 2); loadHistory(1); });
             else notify(t('transfers_load_failed'), 'error');
@@ -282,7 +348,10 @@
 
     function moveToHistory(item, status) {
         pendingItems = pendingItems.filter(p => p.file_id !== item.file_id);
-        historyItems = [{ ...item, status, responded_at: new Date().toISOString() }, ...historyItems.filter(h => h.file_id !== item.file_id)];
+        if (historyDirection !== 'sent') {
+            const answered = { ...item, status, direction: 'received', responded_at: new Date().toISOString() };
+            historyItems = [answered, ...historyItems.filter(h => transferKey(h) !== transferKey(answered))];
+        }
         renderPending();
         renderHistory();
         window.SendlyTransfers?.refreshCount?.();
@@ -465,7 +534,7 @@
     // Find accepted transfers this device can no longer decrypt, so they show
     // as locked instead of offering a download that is bound to fail.
     async function checkLockedTransfers() {
-        const candidates = historyItems.filter(item => item.status === 'accepted' && item.available
+        const candidates = historyItems.filter(item => !isSent(item) && item.status === 'accepted' && item.available
             && !lockChecked.has(item.file_id) && !lockedFiles.has(item.file_id));
         for (const item of candidates) {
             lockChecked.add(item.file_id);
@@ -483,11 +552,78 @@
         loadHistory(1);
     }
 
+    // ── History direction filter (a radio group with roving focus) ──
+    function readSavedDirection() {
+        try {
+            const saved = localStorage.getItem(DIRECTION_STORAGE_KEY);
+            return DIRECTIONS.includes(saved) ? saved : 'all';
+        } catch (_) {
+            return 'all';
+        }
+    }
+
+    function syncFilter() {
+        filter?.querySelectorAll('.transfers-filter-btn').forEach((button) => {
+            const active = button.dataset.direction === historyDirection;
+            button.setAttribute('aria-checked', String(active));
+            button.tabIndex = active ? 0 : -1;
+        });
+    }
+
+    function setDirection(direction, focus) {
+        if (!DIRECTIONS.includes(direction)) return;
+        if (focus) filter.querySelector(`[data-direction="${direction}"]`)?.focus();
+        if (direction === historyDirection) return;
+        historyDirection = direction;
+        try { localStorage.setItem(DIRECTION_STORAGE_KEY, direction); } catch (_) { /* per-viewer nicety only */ }
+        syncFilter();
+        historyItems = [];
+        historyPage = 0;
+        historyTotalPages = 0;
+        historyMore.classList.add('hidden');
+        skeleton(historyList, 2);
+        loadHistory(1);
+    }
+
+    function initFilter() {
+        if (!filter) return;
+        filter.addEventListener('click', (e) => {
+            const button = e.target.closest('.transfers-filter-btn');
+            if (button) setDirection(button.dataset.direction, false);
+        });
+        filter.addEventListener('keydown', (e) => {
+            const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+            let next = null;
+            if (step) next = DIRECTIONS[(DIRECTIONS.indexOf(historyDirection) + step + DIRECTIONS.length) % DIRECTIONS.length];
+            else if (e.key === 'Home') next = DIRECTIONS[0];
+            else if (e.key === 'End') next = DIRECTIONS[DIRECTIONS.length - 1];
+            if (!next) return;
+            e.preventDefault();
+            setDirection(next, true);
+        });
+    }
+
+    // Reload the first history page soon, e.g. after a live update. Items
+    // loaded through "Load more" are dropped; the newest activity is on top.
+    function scheduleHistoryReload() {
+        clearTimeout(historyReloadTimer);
+        historyReloadTimer = setTimeout(() => loadHistory(1), 250);
+    }
+
     function init() {
+        historyDirection = readSavedDirection();
+        syncFilter();
+        initFilter();
         skeleton(pendingList, 2);
         skeleton(historyList, 2);
         refreshAll();
         historyMore.addEventListener('click', () => loadHistory(historyPage + 1));
+
+        // One of this user's sent transfers was created or answered (possibly
+        // from another tab or device): refresh the history if it shows sent.
+        window.addEventListener('sendly:sent-transfers-updated', () => {
+            if (historyDirection !== 'received') scheduleHistoryReload();
+        });
 
         // The account menu owns the live socket and re-broadcasts count
         // changes; reload the pending list when a new transfer arrives.

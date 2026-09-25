@@ -16,8 +16,9 @@ import (
 // never touch key material: accepting only unlocks the recipient's existing
 // identity-wrapped envelope, declining deletes it.
 
-// ListTransfers returns the caller's received transfers:
-// ?view=pending (default) or ?view=history.
+// ListTransfers returns the caller's transfers: ?view=pending (default),
+// the received transfers awaiting an answer, or ?view=history, filtered by
+// ?direction=all (default), received or sent.
 func (h *RecentUploadsHandler) ListTransfers(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
@@ -29,11 +30,16 @@ func (h *RecentUploadsHandler) ListTransfers(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "view must be pending or history", Code: "INVALID_VIEW"})
 		return
 	}
+	direction := c.DefaultQuery("direction", models.TransferDirectionAll)
+	if direction != models.TransferDirectionAll && direction != models.TransferDirectionReceived && direction != models.TransferDirectionSent {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "direction must be all, received or sent", Code: "INVALID_DIRECTION"})
+		return
+	}
 	page, perPage, ok := parsePagination(c)
 	if !ok {
 		return
 	}
-	items, total, err := h.db.ListReceivedTransfers(c.Request.Context(), int64(user.ID), view, page, perPage)
+	items, total, err := h.db.ListTransfers(c.Request.Context(), int64(user.ID), view, direction, page, perPage)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch transfers", Code: "TRANSFERS_FAILED"})
 		return
@@ -91,6 +97,7 @@ func (h *RecentUploadsHandler) respondToTransfer(c *gin.Context, accept bool) {
 		return
 	}
 	h.publishTransfersChanged(c.Request.Context(), int64(user.ID))
+	h.publishSentTransferChanged(transfer.SenderCNSUserID, transfer.FileID, transfer.Status)
 	c.JSON(http.StatusOK, gin.H{"file_id": transfer.FileID, "status": transfer.Status})
 }
 
@@ -107,4 +114,14 @@ func (h *RecentUploadsHandler) publishTransfersChanged(ctx context.Context, reci
 		return
 	}
 	h.hub.broadcast(recipientUserID, gin.H{"type": "transfers_updated", "pending_count": count})
+}
+
+// publishSentTransferChanged tells the sender's open pages that one of their
+// sent transfers was created or answered, so their transfer history can
+// refresh. It carries no count: sent transfers never raise the badge.
+func (h *RecentUploadsHandler) publishSentTransferChanged(senderUserID int64, fileID, status string) {
+	if h.hub == nil {
+		return
+	}
+	h.hub.broadcast(senderUserID, gin.H{"type": "sent_transfers_updated", "file_id": fileID, "status": status})
 }
