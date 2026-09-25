@@ -42,7 +42,7 @@
   "transfers_device_untrusted_title": "Dieses Gerät ist noch nicht freigegeben",
   "transfers_device_untrusted": "Gib es auf einem deiner vertrauenswürdigen Geräte frei, um dir geschickte Dateien zu öffnen.",
   "transfers_device_open_home": "Sendly öffnen",
-  "transfers_no_identity_key": "Dieses Gerät hat noch keinen Freigabeschlüssel. Öffne Sendly einmal, um ihn einzurichten.",
+  "transfers_no_identity_key": "Dieses Gerät hat noch keinen Freigabeschlüssel. Öffne Sendly auf einem deiner anderen Geräte und lade diese Seite dann neu.",
   "transfers_key_unavailable": "Der Schlüssel für diese Datei ist nicht mehr verfügbar.",
   "transfers_download_failed_generic": "Die verschlüsselte Datei konnte nicht heruntergeladen werden.",
   "transfers_download_failed": "Download fehlgeschlagen: {msg}",

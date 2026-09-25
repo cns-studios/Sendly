@@ -183,6 +183,10 @@ const SecureCrypto = (function() {
         localStorage.setItem(identityKeyStorageKey(userId), JSON.stringify(keyData));
     }
 
+    function clearIdentityKey(userId) {
+        localStorage.removeItem(identityKeyStorageKey(userId));
+    }
+
     function getIdentityKey(userId) {
         const value = localStorage.getItem(identityKeyStorageKey(userId));
         if (!value) return null;
@@ -484,26 +488,102 @@ const SecureCrypto = (function() {
             const payload = await response.json().catch(() => ({}));
             throw new Error(payload.error || 'Device registration failed');
         }
-        const payload = await response.json().catch(() => ({}));
+        let payload = await response.json().catch(() => ({}));
         if (!payload.needs_enrollment && !userKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
             userKeyRaw = await unwrapUserKeyForDevice(fromBase64(payload.user_key_envelope.wrapped_uk_b64), identity.privateKeyJWK);
         }
         if (!payload.needs_enrollment && userKeyRaw) saveUserKeyRaw(userId, userKeyRaw);
 
-        if (!payload.needs_enrollment && (!identityKey || !identityKey.privateKeyJWK) && payload.identity_key_envelope?.wrapped_private_key_b64) {
-            const unwrapPrivJWK = await unwrapIdentityKeyForDevice(
-                fromBase64(payload.identity_key_envelope.wrapped_private_key_b64),
-                identity.privateKeyJWK
-            );
-            identityKey = {
-                keyVersion: payload.identity_key_envelope.identity_key_version || 1,
-                keyAlgorithm: 'RSA-OAEP-2048',
-                privateKeyJWK: unwrapPrivJWK
-            };
+        if (!payload.needs_enrollment) {
+            const resolved = await resolveIdentityKey(identityKey, payload, identity);
+            if (resolved.envelopeInvalid && !/\/recover$/.test(endpoint)) {
+                // The stored copy isn't this account's identity key. Drop it so
+                // another device can wrap the right one for this device.
+                const retry = await fetch(endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ ...reqBody, discard_identity_key_envelope: true })
+                });
+                if (retry.ok) payload = await retry.json().catch(() => payload);
+            }
+            identityKey = resolved.key;
+            if (identityKey) saveIdentityKey(userId, identityKey);
+            else clearIdentityKey(userId);
+
+            if (identityKey && payload.devices_missing_identity_key?.length) {
+                const distributeEndpoint = endpoint.replace(/\/(register|recover)$/, '/identity-key/envelopes');
+                distributeIdentityKey(distributeEndpoint, headers, identity, identityKey, payload.devices_missing_identity_key)
+                    .catch((error) => console.warn('Could not share the identity key with other devices:', error));
+            }
         }
-        if (!payload.needs_enrollment && identityKey) saveIdentityKey(userId, identityKey);
 
         return { identity, userKeyRaw, identityKey, payload };
+    }
+
+    // Two JWKs describe the same RSA key if modulus and exponent match; a
+    // private JWK carries both, so it can be checked against a public one.
+    function isSameRsaKey(jwk, publicJWK) {
+        return !!jwk?.n && jwk.n === publicJWK?.n && jwk.e === publicJWK?.e;
+    }
+
+    // Picks the identity private key this device should use: the one belonging
+    // to the account's active identity public key. A key this device generated
+    // itself is dropped when another device's key is already the account key;
+    // this device then gets that key from a sibling device instead.
+    async function resolveIdentityKey(localKey, payload, identity) {
+        const active = payload.identity_public_key;
+        const belongsToAccount = (key) => !active || isSameRsaKey(key.privateKeyJWK, active.public_key_jwk);
+        const withAccountKey = (key) => active
+            ? { ...key, keyVersion: active.key_version, publicKeyJWK: active.public_key_jwk }
+            : key;
+
+        if (localKey?.privateKeyJWK && belongsToAccount(localKey)) {
+            return { key: withAccountKey(localKey) };
+        }
+        const envelope = payload.identity_key_envelope;
+        if (!envelope?.wrapped_private_key_b64) return { key: null };
+
+        let privateKeyJWK = null;
+        try {
+            privateKeyJWK = await unwrapIdentityKeyForDevice(fromBase64(envelope.wrapped_private_key_b64), identity.privateKeyJWK);
+        } catch (_) {
+            // Handled below: a copy this device can't open is as good as none.
+        }
+        const key = privateKeyJWK && {
+            keyVersion: envelope.identity_key_version || 1,
+            keyAlgorithm: 'RSA-OAEP-2048',
+            privateKeyJWK
+        };
+        if (key && belongsToAccount(key)) return { key: withAccountKey(key) };
+        return { key: null, envelopeInvalid: true };
+    }
+
+    // Wraps this device's identity private key for the account's other trusted
+    // devices that have no copy of it yet.
+    async function distributeIdentityKey(endpoint, headers, identity, identityKey, devices) {
+        const envelopes = [];
+        for (const device of devices) {
+            if (!device?.device_id || device.device_id === identity.deviceId || !device.public_key_jwk) continue;
+            try {
+                const wrapped = await wrapIdentityKeyForDevice(identityKey.privateKeyJWK, device.public_key_jwk);
+                envelopes.push({
+                    device_id: device.device_id,
+                    identity_key_version: identityKey.keyVersion || 1,
+                    wrapped_private_key_b64: toBase64(wrapped),
+                    wrap_alg: 'RSA-OAEP-2048+AES-GCM-256-v1',
+                    wrap_meta: { type: 'sibling-device', sender_device_id: identity.deviceId, request_device_id: device.device_id }
+                });
+            } catch (error) {
+                console.warn('Skipping identity key copy for device', device.device_id, error);
+            }
+        }
+        if (!envelopes.length) return;
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ device_id: identity.deviceId, envelopes })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
     }
 
 

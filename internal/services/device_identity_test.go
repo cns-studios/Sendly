@@ -154,6 +154,24 @@ func (m *memoryDeviceStore) DeleteUserIdentityKeyDeviceEnvelopesByUser(_ context
 	return nil
 }
 
+func (m *memoryDeviceStore) DeleteUserIdentityKeyDeviceEnvelope(_ context.Context, userID int64, deviceID string, version int) error {
+	delete(m.identityEnvelopes, fmt.Sprintf("%d:%s:%d", userID, deviceID, version))
+	return nil
+}
+
+func (m *memoryDeviceStore) ListDevicesMissingIdentityKeyEnvelope(_ context.Context, userID int64, version int) ([]models.UserDevice, error) {
+	result := []models.UserDevice{}
+	for id, d := range m.devices {
+		if _, trusted := m.envelopes[id]; !trusted || d.RevokedAt.Valid {
+			continue
+		}
+		if _, ok := m.identityEnvelopes[fmt.Sprintf("%d:%s:%d", userID, id, version)]; !ok {
+			result = append(result, d)
+		}
+	}
+	return result, nil
+}
+
 func (m *memoryDeviceStore) UpdateUserIdentityKeyPublicKey(_ context.Context, userID int64, version int, publicKeyJWK json.RawMessage) error {
 	key := fmt.Sprintf("%d:%d", userID, version)
 	k, ok := m.identityKeys[key]
@@ -233,6 +251,94 @@ func TestDeviceIdentityLifecycle(t *testing.T) {
 			if item.Enrollment.ID == "expired" {
 				t.Fatal("expired enrollment listed")
 			}
+		}
+	})
+}
+
+// identityRequest is a registration from a device that sends a self-wrapped
+// copy of the identity keypair it holds (or just generated), identified by n.
+func identityRequest(id, n string) models.DeviceRegisterRequest {
+	req := deviceRequest(id, []byte("wrapped"))
+	req.IdentityPublicKeyJWK = json.RawMessage(fmt.Sprintf(`{"kty":"RSA","n":%q,"e":"AQAB"}`, n))
+	req.WrappedIdentityPrivateKeyB64 = encode([]byte("identity-private-" + n))
+	req.IdentityKeyWrapAlg = "RSA-OAEP-2048+AES-GCM-256-v1"
+	req.IdentityKeyWrapMeta = json.RawMessage(`{}`)
+	return req
+}
+
+// Devices that were trusted before identity keys existed each generate their
+// own keypair on first login. Only the first one may become the account key;
+// the others must get that key from a sibling instead of keeping their own.
+func TestIdentityKeyForPreexistingDevices(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryDeviceStore()
+	service := &DeviceIdentity{DB: store}
+	for _, id := range []string{"device-a", "device-b"} {
+		store.devices[id] = models.UserDevice{ID: id, CNSUserID: 1, PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"dev-` + id + `"}`)}
+		store.envelopes[id] = models.UserKeyEnvelope{CNSUserID: 1, DeviceID: id, WrappedUserKey: []byte("uk")}
+	}
+
+	t.Run("first-device-creates-the-identity-key", func(t *testing.T) {
+		result, err := service.Register(ctx, 1, identityRequest("device-a", "key-a"), false)
+		if err != nil || result.IdentityKeyEnvelope == nil {
+			t.Fatalf("expected device-a to store its copy: %#v %v", result, err)
+		}
+		if result.ActiveIdentityKey == nil || !samePublicKey(result.ActiveIdentityKey.PublicKeyJWK, identityRequest("", "key-a").IdentityPublicKeyJWK) {
+			t.Fatalf("expected key-a to be the active identity key: %#v", result.ActiveIdentityKey)
+		}
+		if len(result.DevicesMissingIdentityKey) != 1 || result.DevicesMissingIdentityKey[0].ID != "device-b" {
+			t.Fatalf("expected device-b to be listed as missing the key: %#v", result.DevicesMissingIdentityKey)
+		}
+	})
+	t.Run("second-device-with-its-own-key-is-not-stored", func(t *testing.T) {
+		result, err := service.Register(ctx, 1, identityRequest("device-b", "key-b"), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.IdentityKeyEnvelope != nil {
+			t.Fatalf("mismatched copy was stored: %#v", result.IdentityKeyEnvelope)
+		}
+		if !samePublicKey(result.ActiveIdentityKey.PublicKeyJWK, identityRequest("", "key-a").IdentityPublicKeyJWK) {
+			t.Fatal("active identity key changed")
+		}
+		if len(result.DevicesMissingIdentityKey) != 0 {
+			t.Fatal("a device without the key must not be asked to distribute it")
+		}
+	})
+	t.Run("sender-without-a-copy-cannot-distribute", func(t *testing.T) {
+		_, err := service.DistributeIdentityKey(ctx, 1, models.DistributeIdentityKeyRequest{DeviceID: "device-b", Envelopes: []models.DistributedIdentityEnvelope{
+			{DeviceID: "device-b", IdentityKeyVersion: 1, WrappedPrivateKeyB64: encode([]byte("x"))},
+		}})
+		if err != models.ErrIdentityKeyNotHeld {
+			t.Fatalf("expected ErrIdentityKeyNotHeld, got %v", err)
+		}
+	})
+	t.Run("sibling-distributes-the-key", func(t *testing.T) {
+		stored, err := service.DistributeIdentityKey(ctx, 1, models.DistributeIdentityKeyRequest{DeviceID: "device-a", Envelopes: []models.DistributedIdentityEnvelope{
+			{DeviceID: "device-b", IdentityKeyVersion: 1, WrappedPrivateKeyB64: encode([]byte("key-a-for-b"))},
+			{DeviceID: "device-a", IdentityKeyVersion: 1, WrappedPrivateKeyB64: encode([]byte("overwrite"))},
+		}})
+		if err != nil || stored != 1 {
+			t.Fatalf("expected exactly one stored copy: %d %v", stored, err)
+		}
+		if string(store.identityEnvelopes["1:device-a:1"].WrappedPrivateKey) != "identity-private-key-a" {
+			t.Fatal("an existing copy was overwritten")
+		}
+		result, err := service.Register(ctx, 1, identityRequest("device-b", "key-b2"), false)
+		if err != nil || result.IdentityKeyEnvelope == nil || string(result.IdentityKeyEnvelope.WrappedPrivateKey) != "key-a-for-b" {
+			t.Fatalf("device-b should now receive the distributed copy: %#v %v", result, err)
+		}
+	})
+	t.Run("discarded-copy-is-listed-as-missing-again", func(t *testing.T) {
+		req := deviceRequest("device-b", []byte("wrapped"))
+		req.DiscardIdentityKeyEnvelope = true
+		result, err := service.Register(ctx, 1, req, false)
+		if err != nil || result.IdentityKeyEnvelope != nil {
+			t.Fatalf("expected the copy to be dropped: %#v %v", result, err)
+		}
+		result, err = service.Register(ctx, 1, identityRequest("device-a", "key-a"), false)
+		if err != nil || len(result.DevicesMissingIdentityKey) != 1 {
+			t.Fatalf("expected device-b to be missing the key again: %#v %v", result, err)
 		}
 	})
 }

@@ -865,6 +865,37 @@ func (p *Postgres) DeleteUserIdentityKeyDeviceEnvelopesByUser(ctx context.Contex
 	return err
 }
 
+func (p *Postgres) DeleteUserIdentityKeyDeviceEnvelope(ctx context.Context, userID int64, deviceID string, version int) error {
+	_, err := p.db.ExecContext(ctx, `
+		DELETE FROM user_identity_key_device_envelopes
+		WHERE cns_user_id = $1 AND device_id = $2 AND identity_key_version = $3
+	`, userID, deviceID, version)
+	return err
+}
+
+// ListDevicesMissingIdentityKeyEnvelope returns the user's trusted (holding a
+// user key envelope), non-revoked devices that have no copy of the given
+// identity key version.
+func (p *Postgres) ListDevicesMissingIdentityKeyEnvelope(ctx context.Context, userID int64, version int) ([]models.UserDevice, error) {
+	var devices []models.UserDevice
+	err := p.db.SelectContext(ctx, &devices, `
+		SELECT ud.id, ud.cns_user_id, ud.device_label, ud.public_key_jwk, ud.key_algorithm,
+			ud.key_version, ud.created_at, ud.last_seen_at, ud.revoked_at
+		FROM user_devices ud
+		INNER JOIN user_key_envelopes uke ON uke.device_id = ud.id AND uke.cns_user_id = ud.cns_user_id
+		WHERE ud.cns_user_id = $1
+		  AND ud.revoked_at IS NULL
+		  AND NOT EXISTS (
+			  SELECT 1 FROM user_identity_key_device_envelopes e
+			  WHERE e.cns_user_id = ud.cns_user_id
+			    AND e.device_id = ud.id
+			    AND e.identity_key_version = $2
+		  )
+		ORDER BY ud.created_at ASC
+	`, userID, version)
+	return devices, err
+}
+
 func (p *Postgres) UpdateUserIdentityKeyPublicKey(ctx context.Context, userID int64, version int, publicKeyJWK json.RawMessage) error {
 	_, err := p.db.ExecContext(ctx, `
 		UPDATE user_identity_keys

@@ -218,6 +218,7 @@ func main() {
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
 				devices.POST("/enrollments/:id/reject", strictRateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+				devices.POST("/identity-key/envelopes", strictRateLimiter.Handler(), recentUploadsHandler.DistributeIdentityKey)
 			}
 		}
 	}

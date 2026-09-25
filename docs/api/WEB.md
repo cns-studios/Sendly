@@ -28,6 +28,7 @@ Current middleware classes applied on `/api`:
   - `POST /api/me/devices/enrollments`
   - `POST /api/me/devices/enrollments/:id/approve`
   - `POST /api/me/devices/enrollments/:id/reject`
+  - `POST /api/me/devices/identity-key/envelopes`
 - Download limiter:
   - `GET /api/file/:id/download`
 
@@ -357,6 +358,15 @@ Leave the tunnel (removes only the caller). When the last participant leaves, th
 ### `POST /api/me/devices/register`
 Register device or bootstrap trust. A `device_id` registered to another account returns `409 DEVICE_ID_CONFLICT`.
 
+A device without an identity key sends a freshly generated one (`identity_public_key_jwk` plus its self-wrapped private key). The first device to do so creates the account's identity key. After that, a device's copy is only stored if its public key matches the account's key; otherwise the device gets no `identity_key_envelope` and waits for a sibling device to wrap the real key for it (see below).
+
+Response fields besides `device_id`, `needs_enrollment` and the envelopes:
+
+- `identity_public_key`: `{ "key_version", "key_algorithm", "public_key_jwk" }` of the account's active identity key. Clients keep a local identity private key only if it belongs to this public key.
+- `devices_missing_identity_key`: `[{ "device_id", "public_key_jwk" }]`, the account's other trusted devices without a copy of the identity key. Only sent to a device that holds one.
+
+Set `discard_identity_key_envelope: true` to drop this device's stored copy when it doesn't belong to `identity_public_key`; the device is then listed as missing the key again.
+
 ### `POST /api/me/devices/recover`
 Recovery flow that resets trusted device state and provisions a new trusted envelope.
 
@@ -432,6 +442,28 @@ Request JSON:
   "approver_device_id": "..."
 }
 ```
+
+### `POST /api/me/devices/identity-key/envelopes`
+Store copies of the identity private key that a trusted device holding it wrapped for the devices listed in its `devices_missing_identity_key`. Only devices without a copy are filled; an existing copy is never replaced. Returns `403 IDENTITY_KEY_NOT_HELD` if the sending device has no copy itself.
+
+Request JSON:
+
+```json
+{
+  "device_id": "sending-device-id",
+  "envelopes": [
+    {
+      "device_id": "target-device-id",
+      "identity_key_version": 1,
+      "wrapped_private_key_b64": "...",
+      "wrap_alg": "RSA-OAEP-2048+AES-GCM-256-v1",
+      "wrap_meta": {}
+    }
+  ]
+}
+```
+
+Response JSON: `{ "stored": 1 }`
 
 ## Notes
 
