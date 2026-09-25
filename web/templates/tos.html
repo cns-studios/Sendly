@@ -55,7 +55,7 @@
       },
       "inLanguage": ["en", "de"],
       "datePublished": "2026-04-05",
-      "dateModified": "2026-04-05"
+      "dateModified": "2026-09-25"
     }
     </script>
 
@@ -102,7 +102,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
                     <h1>Terms of Service</h1>
                 </div>
-                <p class="last-updated">Last updated: April 5, 2026</p>
+                <p class="last-updated">Last updated: September 25, 2026</p>
 
                 <p>
                     Please read these Terms of Service ("Terms") carefully before using the website and file-sharing feature operated by CNS Studios ("us", "we", or "our").
@@ -118,7 +118,7 @@
                 <section>
                     <h2>2. End-to-End Encryption &amp; Data Security</h2>
                     <p>
-                        Our Service utilizes client-side End-to-End (E2E) encryption. Files are encrypted in your browser before they reach our servers. We store only the encrypted binary blobs and do not possess the decryption keys. The decryption key is generated on your device and is contained solely within the URL fragment (the part after the <code>#</code>) of the share link.
+                        Our Service utilizes client-side End-to-End (E2E) encryption. Files are encrypted in your browser before they reach our servers. We store only the encrypted binary blobs and do not possess the decryption keys. The decryption key is generated on your device. For share links, it is contained solely within the URL fragment (the part after the <code>#</code>) of the link. For files sent directly to another Sendly user, it is encrypted on your device for that user's account key, so only the recipient's approved devices can unlock it.
                     </p>
                     <ul>
                         <li><strong>No Access:</strong> Because we do not have the keys, we cannot view, decrypt, or proactively scan the content of any uploaded files.</li>
@@ -140,15 +140,49 @@
                 </section>
 
                 <section>
-                    <h2>4. Reporting, Content Removal &amp; Enforcement</h2>
+                    <h2>4. Content Moderation, Reporting &amp; Illegal Content</h2>
                     <p>
-                        Due to the E2E encrypted nature of the Service, our ability to investigate content is technically limited. However, we take abuse seriously.
+                        This section explains how we handle illegal content and content that violates these Terms, as required by Article 14 of the EU Digital Services Act (DSA).
+                    </p>
+
+                    <h3>4.1 How to report content</h3>
+                    <ul>
+                        <li><strong>In the Service:</strong> Use the "Report file" button on a shared file's download page, or the "Report" button on a file another user sent you (available once you have accepted the transfer).</li>
+                        <li><strong>By email:</strong> Send notices of illegal content to <a href="mailto:abuse@cns-studios.com">abuse@cns-studios.com</a>. To let us act on it, a notice should include: (a) why you consider the content illegal; (b) where it is, such as the share link, the file ID or numeric code, or the username of the account that sent it to you; (c) your name and email address, unless the notice concerns child sexual abuse material; and (d) a statement that you believe in good faith that the information in the notice is accurate and complete.</li>
+                    </ul>
+                    <p>
+                        We confirm receipt of email notices and tell you what we decided and whether you can challenge it.
+                    </p>
+
+                    <h3>4.2 What end-to-end encryption means for moderation</h3>
+                    <p>
+                        Because files are end-to-end encrypted and we never hold their keys (see Section 2), we cannot view, scan, filter or search the content of any file, and we do not use automated tools to analyse file contents. As a result:
                     </p>
                     <ul>
-                        <li><strong>Reporting:</strong> Users may report files they believe violate these Terms. When a file receives 2 credible reports, it is automatically and permanently deleted from our servers as a security measure.</li>
-                        <li><strong>Investigation:</strong> We will investigate reports to the extent possible given our technical limitations. We reserve the right to remove any content at our sole discretion, with or without notice.</li>
-                        <li><strong>Enforcement:</strong> We may ban IP addresses or implement strict rate limits for users who repeatedly violate these Terms. We will cooperate fully with law enforcement agencies as required by applicable law.</li>
+                        <li>We can act on a specific file only when a report or notice identifies it (for example by its share link, file ID or numeric code, or through the in-app report button).</li>
+                        <li>We generally cannot verify what a reported file contains, and we cannot find other copies of the same content on the Service.</li>
+                        <li>Where a notice concerns content we cannot pinpoint, for example a file sent between users, we act on the account or feature involved instead (see Section 4.4).</li>
                     </ul>
+
+                    <h3>4.3 What happens after a report or notice</h3>
+                    <ul>
+                        <li><strong>Review:</strong> Every report is forwarded to our moderators and reviewed by a person, to the extent our technical limits allow. We may remove or disable access to any reported file.</li>
+                        <li><strong>Automatic removal:</strong> When {{.autoDeleteReportCount}} different signed-in users have reported the same file, it is automatically and permanently deleted from our servers without prior human review. Anonymous reports are reviewed but never trigger automatic removal on their own.</li>
+                        <li><strong>Valid notices:</strong> If a notice identifies a specific file and gives sufficient reason to believe it is illegal, we delete that file. Deletion is permanent and applies to everyone the file was shared with.</li>
+                        <li><strong>Serious crimes:</strong> Where we become aware of information giving rise to a suspicion of a criminal offence involving a threat to the life or safety of persons, we inform the competent authorities. We cooperate with law enforcement agencies as required by applicable law.</li>
+                    </ul>
+
+                    <h3>4.4 Repeat offenders</h3>
+                    <ul>
+                        <li>If an account frequently shares manifestly illegal content, we will, after a prior warning, suspend that account's use of the Service or of specific features (such as uploads, quick shares or sending files to other users) for a reasonable period. Where accounts are not involved, we may ban IP addresses or apply strict rate limits.</li>
+                        <li>If someone frequently submits manifestly unfounded reports or notices, we may, after a prior warning, stop processing their reports and notices for a reasonable period.</li>
+                        <li>When deciding, we consider how often and how seriously the Service was misused, and the intent of the person concerned, where it can be determined.</li>
+                    </ul>
+
+                    <h3>4.5 Statement of reasons and complaints</h3>
+                    <p>
+                        If we remove your file or restrict your account because of a report or notice and we can reach you (for example through your signed-in account), we tell you what we did and why. Files uploaded anonymously cannot be linked to a person, so we cannot notify their uploader. You can challenge a moderation decision, and the person who reported the content can challenge our decision on their report, by writing to <a href="mailto:abuse@cns-studios.com">abuse@cns-studios.com</a> within six months of the decision. A person who was not involved in the original decision reviews the complaint. You may also turn to an out-of-court dispute settlement body certified under Article 21 DSA, or to the courts.
+                    </p>
                 </section>
 
                 <section>

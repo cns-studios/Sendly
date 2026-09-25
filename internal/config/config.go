@@ -77,7 +77,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                           getEnv("PORT", "8085"),
 		BaseURL:                        getEnv("BASE_URL", "http://localhost:8085"),
-		TOSVersion:                     getEnv("TOS_VERSION", "2026-04-05"),
+		TOSVersion:                     getEnv("TOS_VERSION", "2026-09-25"),
 		PostgresHost:                   getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:                   getEnv("POSTGRES_PORT", "5432"),
 		PostgresUser:                   getEnv("POSTGRES_USER", "sendly"),

@@ -8,7 +8,7 @@
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
-    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
+    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const RETENTION = AUTHENTICATED ? '90d' : '7d';

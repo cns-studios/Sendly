@@ -145,14 +145,15 @@ func (h *PageHandler) ToS(c *gin.Context) {
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
 	h.render(c, "tos.html", gin.H{
-		"title":         translations["title_tos"],
-		"description":   translations["desc_tos"],
-		"baseURL":       h.cfg.BaseURL,
-		"authenticated": authenticated,
-		"authLoginURL":  authLoginURL,
-		"username":      username,
-		"userAvatar":    userAvatar,
-		"accountURL":    accountURL,
+		"title":                 translations["title_tos"],
+		"description":           translations["desc_tos"],
+		"baseURL":               h.cfg.BaseURL,
+		"authenticated":         authenticated,
+		"authLoginURL":          authLoginURL,
+		"username":              username,
+		"userAvatar":            userAvatar,
+		"accountURL":            accountURL,
+		"autoDeleteReportCount": h.cfg.AutoDeleteReportCount,
 	})
 }
 

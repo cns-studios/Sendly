@@ -62,14 +62,14 @@
     }
 
     function hasAcceptedCurrentTOS() {
-        return getCookieValue('sendly_tos_accepted') === (window.CONFIG?.tosVersion || '2026-04-05');
+        return getCookieValue('sendly_tos_accepted') === (window.CONFIG?.tosVersion || '2026-09-25');
     }
 
     function setupTOSGate() {
         if (!tosOverlay) return;
         if (hasAcceptedCurrentTOS()) { tosOverlay.classList.add('hidden'); return; }
         tosOverlay.classList.remove('hidden');
-        tosAcceptBtn?.addEventListener('click', () => { setCookie('sendly_tos_accepted', window.CONFIG?.tosVersion || '2026-04-05', 31536000); tosOverlay.classList.add('hidden'); });
+        tosAcceptBtn?.addEventListener('click', () => { setCookie('sendly_tos_accepted', window.CONFIG?.tosVersion || '2026-09-25', 31536000); tosOverlay.classList.add('hidden'); });
         tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns-studios.com'; });
     }
 
