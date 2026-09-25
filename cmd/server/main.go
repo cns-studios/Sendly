@@ -192,6 +192,7 @@ func main() {
 			me.GET("/transfers/pending-count", recentUploadsHandler.PendingTransferCount)
 			me.POST("/transfers/:file_id/accept", recentUploadsHandler.AcceptTransfer)
 			me.POST("/transfers/:file_id/decline", recentUploadsHandler.DeclineTransfer)
+			me.POST("/transfers/:file_id/report", strictRateLimiter.Handler(), reportHandler.ReportTransfer)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 			me.POST("/tunnels/start", tunnelHandler.Start)
 			me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)

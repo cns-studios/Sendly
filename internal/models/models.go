@@ -160,6 +160,8 @@ type Report struct {
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
 	// ReporterCNSUserID is set when a signed-in user filed the report.
 	ReporterCNSUserID sql.NullInt64 `db:"reporter_cns_user_id" json:"-"`
+	// TransferID is set when the report was filed from a received transfer.
+	TransferID sql.NullString `db:"transfer_id" json:"-"`
 }
 
 type UploadSession struct {
