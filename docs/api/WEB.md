@@ -281,6 +281,9 @@ Each item carries `id`, `file_id`, `filename`, `size_bytes`, `expires_at`, `stat
 ### `POST /api/me/transfers/:file_id/decline`
 Recipient only, once per transfer. `404 TRANSFER_NOT_FOUND`, `409 TRANSFER_ALREADY_ANSWERED`, `410 TRANSFER_FILE_UNAVAILABLE` (accept only).
 
+### `POST /api/me/transfers/:file_id/report`
+Report the file of a transfer the caller received. Recipient only, and only once the transfer is accepted: `404 TRANSFER_NOT_FOUND` for anyone else, `409 TRANSFER_NOT_ACCEPTED` while pending or after a decline. Otherwise it behaves like `POST /api/file/:id/report` (same response, de-duplication, auto-delete threshold and strict rate limiter) and records the transfer on the report. History items from `GET /api/me/transfers` carry `reported: true` once the caller has reported the file.
+
 ## Tunnels
 
 Caller authentication for all tunnel endpoints below:

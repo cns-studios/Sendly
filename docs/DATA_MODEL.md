@@ -48,7 +48,7 @@ Related:
 
 ## Reports
 
-`reports` records abuse reports by file and reporter IP.
+`reports` records abuse reports by file and reporter IP, plus the reporter's CNS user ID when signed in (`reporter_cns_user_id`, unique per file) and the transfer a report was filed from (`transfer_id`, NULL for link-share reports).
 
 Report count on file drives auto-delete threshold logic.
 

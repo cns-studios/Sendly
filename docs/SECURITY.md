@@ -46,6 +46,8 @@ Access checks include:
   - Download
 - Duplicate report prevention per signed-in user + file, or per client IP + file for anonymous reports.
 - Auto-delete threshold for highly reported files; only distinct signed-in reporters count towards it.
+- Transfer recipients can report a file only after accepting it; transfer reports count like any signed-in report.
+- Formal notices of illegal content go to `abuse@cns-studios.com` (the ToS moderation section, DSA Art. 14).
 - Client IPs come from forwarding headers only when the direct peer is a configured trusted proxy (`TRUSTED_PROXIES`, see CONFIGURATION.md).
 - Quick share joins are rate-limited with the strict limiter.
 

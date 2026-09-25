@@ -89,6 +89,7 @@ Files are encrypted in the browser/client; the server never sees plaintext or fi
 
 - `POST /api/file/:id/share-to-user` (owner only) creates a `file_transfers` row (`pending`) plus the recipient's `share` envelope, atomically. A file can go to a given user only once, even after a decline.
 - The recipient accepts or declines via `POST /api/me/transfers/:file_id/{accept,decline}`. The key is withheld until accepted; declining deletes the envelope.
+- The recipient of an accepted transfer can report its file via `POST /api/me/transfers/:file_id/report`. It goes through the same code path as link-share reports (`ReportHandler.reportFile`) and sets `reports.transfer_id`.
 - `GET /api/me/transfers?view=pending|history&direction=all|received|sent` backs the `/transfers` page. History shows received transfers after they're answered, plus every sent transfer.
 - Live updates go over the per-user websocket `/api/me/devices/ws`: `transfers_updated` (recipient's pending count, drives the account-menu badge) and `sent_transfers_updated` (sender's history). `account-menu.js` owns the socket and re-dispatches `sendly:transfers-updated` / `sendly:sent-transfers-updated` window events. The same socket carries `device_enrollment_*` events, so consumers must filter on `type`.
 
