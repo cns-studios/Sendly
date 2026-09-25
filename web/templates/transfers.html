@@ -108,6 +108,21 @@
                 <div id="transfers-history-list" class="transfers-list" aria-busy="true"></div>
                 <button id="transfers-history-more" type="button" class="done-btn transfers-more hidden">{{.t.transfers_load_more}}</button>
             </section>
+
+            <div id="transfers-report-modal" class="tos-overlay hidden" aria-hidden="true">
+                <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="transfers-report-title" aria-describedby="transfers-report-description">
+                    <h2 id="transfers-report-title">{{.t.transfers_report_title}}</h2>
+                    <p id="transfers-report-description" class="tos-modal-description">
+                        <span id="transfers-report-desc"></span>
+                        <br><br>
+                        {{.t.report_abuse_contact}} <a href="mailto:abuse@cns-studios.com">abuse@cns-studios.com</a>
+                    </p>
+                    <div class="tos-modal-actions">
+                        <button id="transfers-report-cancel" type="button" class="btn btn-secondary btn-large">{{.t.transfers_report_cancel}}</button>
+                        <button id="transfers-report-confirm" type="button" class="btn btn-accent btn-large">{{.t.transfers_report_confirm}}</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

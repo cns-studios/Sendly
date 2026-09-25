@@ -58,6 +58,15 @@
   "transfers_empty_received": "Noch nichts empfangen",
   "transfers_empty_sent": "Du hast noch nichts gesendet",
   "transfers_empty_sent_sub": "Dateien, die du anderen Sendly-Nutzern schickst, erscheinen hier – so siehst du, wann sie angenommen werden.",
+  "transfers_report": "Melden",
+  "transfers_report_hint": "Diese Datei wegen Verstoßes gegen unsere Nutzungsbedingungen melden",
+  "transfers_report_title": "Datei melden",
+  "transfers_report_desc": "{name} wegen Verstoßes gegen unsere Nutzungsbedingungen melden? Unsere Moderatoren prüfen die Meldung. {sender} erfährt nicht, wer gemeldet hat.",
+  "transfers_report_cancel": "Abbrechen",
+  "transfers_report_confirm": "Melden",
+  "transfers_reported": "Gemeldet",
+  "transfers_report_toast": "Meldung gesendet. Danke, dass du hilfst, Sendly sicher zu halten.",
+  "transfers_report_failed": "Deine Meldung konnte nicht gesendet werden. Bitte versuche es erneut.",
   "lang_en": "Englisch",
   "lang_de": "Deutsch",
 
@@ -227,6 +236,7 @@
   "shared_report_desc": "Bist du sicher, dass du diese Datei wegen Verstoßes gegen unsere Nutzungsbedingungen melden möchtest?",
   "shared_report_cancel": "Abbrechen",
   "shared_report_confirm": "Melden",
+  "report_abuse_contact": "Formelle Meldungen rechtswidriger Inhalte bitte per E-Mail an",
 
   "limits_title": "Grenzen",
   "limits_last_updated": "Zuletzt aktualisiert: 24. Mai 2026",

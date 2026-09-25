@@ -58,6 +58,15 @@
   "transfers_empty_received": "Nothing received yet",
   "transfers_empty_sent": "You haven't sent anything yet",
   "transfers_empty_sent_sub": "Files you send to other Sendly users show up here, so you can see when they're accepted.",
+  "transfers_report": "Report",
+  "transfers_report_hint": "Report this file for violating our terms of service",
+  "transfers_report_title": "Report file",
+  "transfers_report_desc": "Report {name} for violating our terms of service? Our moderators will review it. {sender} won't be told who reported it.",
+  "transfers_report_cancel": "Cancel",
+  "transfers_report_confirm": "Report",
+  "transfers_reported": "Reported",
+  "transfers_report_toast": "Report submitted. Thank you for helping keep Sendly safe.",
+  "transfers_report_failed": "Couldn't submit your report. Please try again.",
   "lang_en": "English",
   "lang_de": "German",
 
@@ -227,6 +236,7 @@
   "shared_report_desc": "Are you sure you want to report this file for violating our terms of service?",
   "shared_report_cancel": "Cancel",
   "shared_report_confirm": "Report",
+  "report_abuse_contact": "For formal notices of illegal content, email",
 
   "limits_title": "Limits",
   "limits_last_updated": "Last updated: May 24, 2026",
