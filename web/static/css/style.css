@@ -3650,6 +3650,13 @@ body.page-quickshare #fileListEmpty {
     font-weight: 600;
 }
 
+.legal-document h3 {
+    font-size: 1.1rem;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
 .legal-document p {
     margin-bottom: 0.75rem;
     line-height: 1.8;
