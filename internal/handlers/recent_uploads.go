@@ -205,6 +205,10 @@ func (h *RecentUploadsHandler) RejectEnrollment(c *gin.Context) {
 	return
 }
 
+func (h *RecentUploadsHandler) DistributeIdentityKey(c *gin.Context) {
+	sharedDistributeIdentityKey(c, h.db)
+}
+
 func generateVerificationCode(length int) string {
 	if length <= 0 {
 		length = 6

@@ -300,6 +300,11 @@ type DeviceRegisterRequest struct {
 	WrappedIdentityPrivateKeyB64 string          `json:"wrapped_identity_private_key_b64,omitempty"`
 	IdentityKeyWrapAlg           string          `json:"identity_key_wrap_alg,omitempty"`
 	IdentityKeyWrapMeta          json.RawMessage `json:"identity_key_wrap_meta,omitempty"`
+
+	// DiscardIdentityKeyEnvelope drops this device's stored copy of the
+	// identity key; the client sets it when that copy doesn't belong to the
+	// account's identity public key, so another device can supply the right one.
+	DiscardIdentityKeyEnvelope bool `json:"discard_identity_key_envelope,omitempty"`
 }
 
 type DeviceRegisterResponse struct {
@@ -307,6 +312,38 @@ type DeviceRegisterResponse struct {
 	NeedsEnrollment     bool                                   `json:"needs_enrollment"`
 	UserKeyEnvelope     *UserKeyEnvelopeResponse               `json:"user_key_envelope,omitempty"`
 	IdentityKeyEnvelope *UserIdentityKeyDeviceEnvelopeResponse `json:"identity_key_envelope,omitempty"`
+	// IdentityPublicKey is the account's active identity public key, so the
+	// client can check that the private key it holds belongs to it.
+	IdentityPublicKey *IdentityPublicKeyResponse `json:"identity_public_key,omitempty"`
+	// DevicesMissingIdentityKey lists the account's other trusted devices
+	// without a copy of the identity key; only sent to a device that has one.
+	DevicesMissingIdentityKey []DeviceMissingIdentityKey `json:"devices_missing_identity_key,omitempty"`
+}
+
+type IdentityPublicKeyResponse struct {
+	KeyVersion   int             `json:"key_version"`
+	KeyAlgorithm string          `json:"key_algorithm"`
+	PublicKeyJWK json.RawMessage `json:"public_key_jwk"`
+}
+
+type DeviceMissingIdentityKey struct {
+	DeviceID     string          `json:"device_id"`
+	PublicKeyJWK json.RawMessage `json:"public_key_jwk"`
+}
+
+// DistributeIdentityKeyRequest carries copies of the identity private key that
+// DeviceID (a trusted device holding it) wrapped for sibling devices.
+type DistributeIdentityKeyRequest struct {
+	DeviceID  string                        `json:"device_id" binding:"required"`
+	Envelopes []DistributedIdentityEnvelope `json:"envelopes" binding:"required"`
+}
+
+type DistributedIdentityEnvelope struct {
+	DeviceID             string          `json:"device_id"`
+	IdentityKeyVersion   int             `json:"identity_key_version"`
+	WrappedPrivateKeyB64 string          `json:"wrapped_private_key_b64"`
+	WrapAlg              string          `json:"wrap_alg"`
+	WrapMeta             json.RawMessage `json:"wrap_meta"`
 }
 
 type DeviceRenameRequest struct {
@@ -438,6 +475,7 @@ var (
 	ErrFileNotFound             = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
 	ErrIdentityKeyNotFound      = &AppError{Code: "IDENTITY_KEY_NOT_FOUND", Message: "identity key not found"}
 	ErrDeviceEnvelopeNotFound   = &AppError{Code: "DEVICE_ENVELOPE_NOT_FOUND", Message: "identity key device envelope not found"}
+	ErrIdentityKeyNotHeld       = &AppError{Code: "IDENTITY_KEY_NOT_HELD", Message: "device holds no copy of the identity key"}
 	ErrFileAccessNotFound       = &AppError{Code: "FILE_ACCESS_NOT_FOUND", Message: "file access grant not found"}
 	ErrRecipientNotReady        = &AppError{Code: "RECIPIENT_NOT_READY", Message: "recipient has not set up sharing yet"}
 	ErrFileExpired              = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}

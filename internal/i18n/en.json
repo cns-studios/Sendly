@@ -42,7 +42,7 @@
   "transfers_device_untrusted_title": "This device isn't approved yet",
   "transfers_device_untrusted": "Approve it from one of your trusted devices to open files sent to you.",
   "transfers_device_open_home": "Open Sendly",
-  "transfers_no_identity_key": "This device has no sharing key yet. Open Sendly once to set it up.",
+  "transfers_no_identity_key": "This device has no sharing key yet. Open Sendly on one of your other devices, then reload this page.",
   "transfers_key_unavailable": "The key for this file is no longer available.",
   "transfers_download_failed_generic": "Could not download the encrypted file.",
   "transfers_download_failed": "Download failed: {msg}",
