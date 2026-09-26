@@ -28,6 +28,10 @@ type Config struct {
 
 	DataDir  string
 	ChunkDir string
+	// AdoptDataDir lets the server claim storage that already holds data
+	// but has no instance marker. A one-time switch for existing
+	// deployments; see storage.ClaimStorage.
+	AdoptDataDir bool
 
 	BehindCloudflare bool
 	// TrustedProxies lists the proxy IPs/CIDRs whose forwarding headers
@@ -87,6 +91,7 @@ func Load() (*Config, error) {
 		RedisPort:                      getEnv("REDIS_PORT", "6379"),
 		DataDir:                        getEnv("DATA_DIR", "./data"),
 		ChunkDir:                       getEnv("CHUNK_DIR", ""),
+		AdoptDataDir:                   getEnvBool("SENDLY_ADOPT_DATA_DIR", false),
 		BehindCloudflare:               getEnvBool("BEHIND_CLOUDFLARE", false),
 		TrustedProxies:                 getEnvList("TRUSTED_PROXIES"),
 		MaxFileSize:                    getEnvInt64("MAX_FILE_SIZE", 786432000),
