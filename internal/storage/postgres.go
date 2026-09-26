@@ -163,6 +163,14 @@ func (p *Postgres) Close() error {
 	return p.db.Close()
 }
 
+// GetInstanceID returns the random ID that identifies this database; the
+// filesystem uses it to claim DATA_DIR.
+func (p *Postgres) GetInstanceID(ctx context.Context) (string, error) {
+	var id string
+	err := p.db.GetContext(ctx, &id, `SELECT value FROM instance_meta WHERE key = 'instance_id'`)
+	return id, err
+}
+
 func (p *Postgres) CreateFile(ctx context.Context, file *models.File) error {
 	query := `
 		INSERT INTO files (

@@ -30,7 +30,14 @@ Used for upload sessions, chunk tracking, pending flags, assembly status, and ra
 - `DATA_DIR` (required)
 - `CHUNK_DIR` (optional)
 
+- `SENDLY_ADOPT_DATA_DIR` (optional, default `false`)
+
 `CHUNK_DIR` can separate temporary chunk storage from final file storage paths.
+
+Both directories are claimed by the instance's database through a
+`.sendly-instance` marker; the server refuses to start on storage owned by
+another database. Set `SENDLY_ADOPT_DATA_DIR=true` once to claim existing
+storage that predates the marker. See "Storage Ownership" in `OPERATIONS.md`.
 
 ## Auth and Identity
 

@@ -54,6 +54,19 @@ func main() {
 	}
 	log.Println("Filesystem storage initialized")
 
+	// Claim storage before any cleanup runs: cleanup deletes whatever this
+	// database doesn't know, so it must never run against another
+	// instance's files.
+	instanceCtx, instanceCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	instanceID, err := db.GetInstanceID(instanceCtx)
+	instanceCancel()
+	if err != nil {
+		log.Fatalf("Failed to read instance ID: %v", err)
+	}
+	if err := fs.ClaimStorage(instanceID, cfg.AdoptDataDir); err != nil {
+		log.Fatalf("Refusing to start: %v", err)
+	}
+
 	discord := services.NewDiscord(cfg)
 
 	cleanup := services.NewCleanup(cfg, db, rdb, fs)

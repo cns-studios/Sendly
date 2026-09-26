@@ -117,6 +117,7 @@ Files are encrypted in the browser/client; the server never sees plaintext or fi
 - **Background jobs** — file cleanup every 5 min (expire files, remove blobs and orphaned chunks); abandoned upload sessions every 1 min; user-cache reconcile every `USER_CACHE_RECONCILE_INTERVAL_MINUTES`; stats report every `STATS_REPORT_INTERVAL_MINUTES`.
 - **Graceful shutdown** — 30s timeout on SIGINT/SIGTERM.
 - **Frontend** — plain JS, no build step. Icons come from Lucide via unpkg: call `lucide.createIcons()` after inserting `data-lucide` elements. There is no dark mode; mobile breakpoints are in `style.css` media queries.
-- **Docker compose prod override** adds the `/mnt/shareit` host mount for persistent file data.
+- **Docker compose prod override** adds the `/mnt/shareit` host mount for persistent file data. Only prod may use it; staging runs on the base file.
+- **Storage ownership** — `DATA_DIR`/`CHUNK_DIR` carry a `.sendly-instance` marker holding the database's `instance_meta` ID. The server refuses to start on storage owned by another database (orphan cleanup would delete its files); `SENDLY_ADOPT_DATA_DIR=true` claims unmarked storage that already holds data, once.
 - **Desktop WebSocket** at `/desktop/ws` pushes new-file notifications.
 - **Wordlist** at `web/static/wordlist.txt` generates human-readable numeric codes.

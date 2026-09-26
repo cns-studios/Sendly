@@ -26,9 +26,10 @@ On startup, server performs:
 3. Migration run
 4. Redis connect
 5. Filesystem storage init
-6. Cleanup background service start
-7. Upload pending-cleanup background service start
-8. HTTP server listen
+6. Storage claim (instance marker check, see below)
+7. Cleanup background service start
+8. Upload pending-cleanup background service start
+9. HTTP server listen
 
 ## Health and Runtime Checks
 
@@ -52,6 +53,33 @@ Cleanup service runs every 5 minutes and:
 - Cleans orphaned files absent from DB
 
 Upload service cleanup runs every minute for pending/session artifacts.
+
+## Storage Ownership
+
+Orphan cleanup deletes every blob that its database doesn't know about and
+every chunk session that its Redis doesn't know about. Two instances sharing
+storage (for example staging started with the prod compose override, which
+bind-mounts `/mnt/shareit`) therefore delete each other's files within
+minutes.
+
+To prevent this, each database holds a random ID (`instance_meta`), and the
+server writes it to a `.sendly-instance` marker in `DATA_DIR` and in
+`CHUNK_DIR` when that lies outside `DATA_DIR`. On startup:
+
+- Marker matches this database: start normally.
+- No marker, directory holds no data: claim it and start.
+- No marker, directory holds data: refuse to start. If the storage really
+  belongs to this database (an existing deployment), start once with
+  `SENDLY_ADOPT_DATA_DIR=true`, then unset it.
+- Marker from another database: refuse to start. Give the instance its own
+  storage. `SENDLY_ADOPT_DATA_DIR` does not override this; only deleting the
+  marker by hand does.
+
+The admin CLI only verifies the marker and never claims storage.
+
+Staging and other non-prod stacks should use the base `docker-compose.yaml`
+alone (named volumes, namespaced by compose project name), never
+`docker-compose.prod.yaml`.
 
 ## Migration Operations
 
