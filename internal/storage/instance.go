@@ -145,3 +145,41 @@ func isWithin(path, dir string) bool {
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
+
+// CheckHealth proves the storage directories are usable right now: each must
+// accept a durable write, and still carry the marker of instanceID. A bind
+// mount that dropped out would otherwise leave the app writing to the
+// container's own filesystem, and a full or read-only disk fails uploads.
+func (fs *Filesystem) CheckHealth(instanceID string) error {
+	if err := fs.VerifyStorage(instanceID); err != nil {
+		return err
+	}
+	dirs := []string{fs.dataDir, fs.finalDir}
+	if !isWithin(fs.chunkDir, fs.dataDir) {
+		dirs = append(dirs, fs.chunkDir)
+	}
+	for _, dir := range dirs {
+		if err := probeWritable(dir); err != nil {
+			return fmt.Errorf("%s is not writable: %w", dir, err)
+		}
+	}
+	return nil
+}
+
+func probeWritable(dir string) error {
+	f, err := os.CreateTemp(dir, ".healthcheck-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if _, err := f.WriteString("ok"); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}

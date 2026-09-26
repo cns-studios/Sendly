@@ -159,6 +159,10 @@ func NewPostgres(cfg *config.Config) (*Postgres, error) {
 	return &Postgres{db: db}, nil
 }
 
+func (p *Postgres) Ping(ctx context.Context) error {
+	return p.db.PingContext(ctx)
+}
+
 func (p *Postgres) Close() error {
 	return p.db.Close()
 }
