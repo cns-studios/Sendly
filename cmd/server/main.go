@@ -141,9 +141,13 @@ func main() {
 	router.GET("/static/*filepath", serveStatic)
 	router.HEAD("/static/*filepath", serveStatic)
 
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
-	})
+	healthHandler := handlers.NewHealthHandler(
+		handlers.HealthCheck{Name: "postgres", Check: db.Ping},
+		handlers.HealthCheck{Name: "redis", Check: rdb.Ping},
+		handlers.HealthCheck{Name: "storage", Check: func(context.Context) error { return fs.CheckHealth(instanceID) }},
+	)
+	router.GET("/health", healthHandler.Health)
+	router.GET("/livez", healthHandler.Live)
 
 	router.GET("/robots.txt", pageHandler.RobotsTXT)
 	router.GET("/sitemap.xml", pageHandler.Sitemap)

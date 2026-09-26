@@ -33,15 +33,16 @@ On startup, server performs:
 
 ## Health and Runtime Checks
 
-- Health endpoint: `GET /health`
+- `GET /health` probes PostgreSQL (ping), Redis (ping) and storage (durable
+  write into `DATA_DIR` and `CHUNK_DIR`, plus the instance marker) with a 2s
+  timeout each. It answers 200 `{"status":"healthy","checks":{...}}`, or 503
+  `{"status":"unhealthy",...}` with the failing check marked `error`. Error
+  details go to the log (`Health check "redis" failed: ...`), never to the
+  response. Results are cached for 5s. The Docker `HEALTHCHECK` uses it.
+- `GET /livez` only reports that the process answers requests.
 - Logs include component startup milestones.
 
-Recommended checks:
-
-- DB connectivity
-- Redis connectivity
-- Filesystem write permissions on data/chunk paths
-- Migration state consistency
+Not covered by `/health`: migration state consistency.
 
 ## Cleanup Behavior
 

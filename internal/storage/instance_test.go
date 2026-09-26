@@ -111,3 +111,29 @@ func TestIsWithin(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckHealth(t *testing.T) {
+	root := t.TempDir()
+	fs := newTestFilesystem(t, filepath.Join(root, "data"), filepath.Join(root, "chunks"))
+	if err := fs.ClaimStorage("db-a", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.CheckHealth("db-a"); err != nil {
+		t.Fatalf("healthy storage: %v", err)
+	}
+	if entries, _ := os.ReadDir(fs.dataDir); len(entries) != 2 { // files/ and the marker
+		t.Fatalf("probe left files behind: %v", entries)
+	}
+
+	if err := fs.CheckHealth("db-b"); err == nil {
+		t.Fatal("accepted storage owned by another instance")
+	}
+
+	// A vanished mount: the marker is gone, so health must fail.
+	if err := os.Remove(filepath.Join(fs.dataDir, instanceMarkerName)); err != nil {
+		t.Fatal(err)
+	}
+	if err := fs.CheckHealth("db-a"); err == nil {
+		t.Fatal("accepted storage without its marker")
+	}
+}
