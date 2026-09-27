@@ -80,6 +80,18 @@
 
   "recent_files_title": "Hochgeladene Dateien",
   "recent_files_close": "Schließen",
+  "title_uploaded": "Hochgeladene Dateien ➤ Sendly",
+  "desc_uploaded": "Deine hochgeladenen Dateien auf Sendly. Lade sie erneut herunter oder kopiere ihre Freigabelinks.",
+  "uploaded_subtitle": "Diese Dateien hast du auf Sendly hochgeladen",
+  "uploaded_search_placeholder": "Dateien durchsuchen",
+  "uploaded_device_untrusted": "Dieser Browser ist noch nicht freigegeben. Gib ihn auf einem deiner vertrauenswürdigen Geräte frei, um Dateien herunterzuladen und Links zu kopieren.",
+  "uploaded_empty_title": "Noch nichts hochgeladen",
+  "uploaded_empty_desc": "Dateien, die du angemeldet teilst, erscheinen hier, bis sie ablaufen.",
+  "uploaded_load_more": "Mehr laden",
+  "uploaded_locked": "Auf diesem Gerät gesperrt",
+  "uploaded_expires_hours": "Läuft in {n} Std. ab",
+  "uploaded_expires_days_one": "Läuft in {n} Tag ab",
+  "uploaded_expires_days": "Läuft in {n} Tagen ab",
 
   "action_modal_title": "Aktion bestätigen",
   "action_modal_cancel": "Abbrechen",
@@ -306,6 +318,8 @@
   "format_time_remaining_minutes": "{minutes}Min verbleibend",
   "format_soon": "bald",
   "format_tomorrow": "Morgen",
+  "format_today": "Heute",
+  "format_yesterday": "Gestern",
   "format_expires_soon": "Läuft bald ab",
 
   "guest_prefix": "Gast ",

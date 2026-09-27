@@ -25,7 +25,7 @@ type sitemapURLSet struct {
 func (h *PageHandler) RobotsTXT(c *gin.Context) {
 	baseURL := strings.TrimSuffix(h.cfg.BaseURL, "/")
 	c.Header("Content-Type", "text/plain; charset=utf-8")
-	c.String(http.StatusOK, "User-agent: *\nAllow: /\nDisallow: /api\nDisallow: /android\nDisallow: /desktop\nDisallow: /auth\nDisallow: /shared/\n\nSitemap: %s/sitemap.xml\n", baseURL)
+	c.String(http.StatusOK, "User-agent: *\nAllow: /\nDisallow: /api\nDisallow: /android\nDisallow: /desktop\nDisallow: /auth\nDisallow: /shared/\nDisallow: /uploaded\n\nSitemap: %s/sitemap.xml\n", baseURL)
 }
 
 func (h *PageHandler) Sitemap(c *gin.Context) {
