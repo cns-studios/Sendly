@@ -98,11 +98,10 @@
     async function ensureDeviceReady() {
         try {
             authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-            authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            if (!authUserKeyRaw) {
-                authUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
+            // Offer a key in case this is the account's first trusted device. For any other
+            // device the server keeps the envelope it already has and returns that instead.
+            const offeredKey = SecureCrypto.getUserKeyRaw(CNS_USER_ID) || SecureCrypto.generateUserKeyRaw();
+            const wrappedOffer = await SecureCrypto.wrapUserKeyForDevice(offeredKey, authDeviceIdentity.publicKeyJWK);
             const response = await fetch('/api/me/devices/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
@@ -112,22 +111,28 @@
                     public_key_jwk: authDeviceIdentity.publicKeyJWK,
                     key_algorithm: authDeviceIdentity.keyAlgorithm,
                     key_version: authDeviceIdentity.keyVersion,
+                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedOffer),
+                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
+                    uk_wrap_meta: { type: 'self-wrap', device_id: authDeviceIdentity.deviceId },
                 })
             });
             if (!response.ok) throw new Error('Device registration failed');
             const payload = await response.json();
             if (payload.needs_enrollment) {
+                authUserKeyRaw = null;
                 showErrorBanner(t('toast_device_approve'));
                 return false;
             }
-            if (payload.user_key_envelope?.wrapped_uk_b64 && !authUserKeyRaw) {
-                const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
+            // Only ever wrap uploads with the key the server holds, otherwise the share
+            // link can't be recovered later from the uploaded files page.
+            const wrappedUKB64 = payload.user_key_envelope?.wrapped_uk_b64;
+            if (!wrappedUKB64) throw new Error('Missing user key envelope');
+            authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(SecureCrypto.fromBase64(wrappedUKB64), authDeviceIdentity.privateKeyJWK);
+            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
+            authUserKeyRaw = null;
             return false;
         }
     }
