@@ -8,6 +8,13 @@
   "header_login": "Login",
   "header_your_account": "Your account",
   "header_account_menu_label": "Account menu",
+  "header_menu_label": "Menu",
+  "home_mobile_send_desc": "Upload a file, get a link to share",
+  "home_mobile_quickshare_title": "Quick Share",
+  "home_mobile_quickshare_desc": "Share files with a group in real time",
+  "home_mobile_trust_e2e": "End-to-end encrypted",
+  "home_mobile_trust_account": "No account needed",
+  "home_mobile_trust_expiry": "Files expire automatically",
   "lang_en": "English",
   "lang_de": "German",
 
@@ -94,6 +101,7 @@
   "link_share_title": "Your link to share",
   "link_share_discard": "Discard",
   "link_share_copy": "Copy",
+  "link_share_native": "Share",
 
   "status_uploading": "Uploading...",
   "status_eta": "{time} left",

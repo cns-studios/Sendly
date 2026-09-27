@@ -68,6 +68,7 @@
 
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Preconnect to external resources -->
@@ -188,7 +189,54 @@
             {{else}}
             <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
             {{end}}
+            <button type="button" class="mobile-menu-btn" id="mobile-menu-open" aria-controls="mobile-menu" aria-expanded="false" aria-label="{{.t.header_menu_label}}">
+                {{if .authenticated}}
+                <img src="{{.userAvatar}}" alt="" class="mobile-menu-btn-avatar" width="32" height="32" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
+                {{else}}
+                <i data-lucide="menu" aria-hidden="true"></i>
+                {{end}}
+            </button>
         </header>
+    </div>
+
+    <div class="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="{{.t.header_menu_label}}">
+        <div class="mobile-menu-top">
+            <a href="/" class="mobile-menu-logo">{{.t.header_logo}}</a>
+            <button type="button" class="mobile-menu-btn" data-mobile-menu-close aria-label="{{.t.recent_files_close}}"><i data-lucide="x" aria-hidden="true"></i></button>
+        </div>
+        {{if .authenticated}}
+        <a href="{{.accountURL}}" class="mobile-menu-user">
+            <img src="{{.userAvatar}}" alt="" class="mobile-menu-user-avatar" width="44" height="44" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
+            <span class="mobile-menu-user-text">
+                <span class="mobile-menu-user-name">{{.username}}</span>
+                <span class="mobile-menu-user-sub">{{.t.header_your_account}}</span>
+            </span>
+            <i data-lucide="chevron-right" aria-hidden="true"></i>
+        </a>
+        {{end}}
+        <nav class="mobile-menu-nav">
+            <a href="/limits">{{.t.header_pricing}}</a>
+            <a href="/data-encryption">{{.t.header_security}}</a>
+            <a href="/help">{{.t.header_faq}}</a>
+        </nav>
+        <div class="mobile-menu-list">
+            {{if .authenticated}}
+            <button type="button" class="mobile-menu-row" data-open-recent-files data-mobile-menu-close><i data-lucide="history" aria-hidden="true"></i><span>{{.t.header_recent_files}}</span></button>
+            {{end}}
+            <a href="?lang={{.otherLocale}}" class="mobile-menu-row"><i data-lucide="languages" aria-hidden="true"></i><span>{{.otherLocaleLabel}}</span></a>
+            {{if .authenticated}}
+            <a href="/auth/logout" class="mobile-menu-row"><i data-lucide="log-out" aria-hidden="true"></i><span>{{.t.header_logout}}</span></a>
+            {{end}}
+        </div>
+        <div class="mobile-menu-bottom">
+            {{if not .authenticated}}
+            <a href="{{.authLoginURL}}" class="mobile-menu-login">{{.t.header_login}}</a>
+            {{end}}
+            <div class="mobile-menu-legal">
+                <a href="/tos">{{.t.footer_tos}}</a>
+                <a href="/privacy">{{.t.footer_privacy}}</a>
+            </div>
+        </div>
     </div>
 
     <div class="main-content">
@@ -196,6 +244,36 @@
         <div class="hero-section">
             <h1 class="hero-title">{{.t.hero_title}} <span class="hero-highlight">Sendly.</span></h1>
             <p class="hero-subtitle">{{.t.hero_subtitle}}</p>
+        </div>
+
+        <div class="home-mobile-actions">
+            <ul class="home-trust">
+                <li><i data-lucide="shield-check" aria-hidden="true"></i>{{.t.home_mobile_trust_e2e}}</li>
+                <li><i data-lucide="user-x" aria-hidden="true"></i>{{.t.home_mobile_trust_account}}</li>
+                <li><i data-lucide="timer" aria-hidden="true"></i>{{.t.home_mobile_trust_expiry}}</li>
+            </ul>
+            <a href="/link" class="home-action">
+                <span class="home-action-icon"><i data-lucide="link" aria-hidden="true"></i></span>
+                <span class="home-action-text">
+                    <span class="home-action-title">{{.t.card_send_title}}</span>
+                    <span class="home-action-desc">{{.t.home_mobile_send_desc}}</span>
+                </span>
+                <i data-lucide="arrow-right" class="home-action-arrow" aria-hidden="true"></i>
+            </a>
+            <details class="home-action-group">
+                <summary class="home-action">
+                    <span class="home-action-icon home-action-icon-soft"><i data-lucide="users" aria-hidden="true"></i></span>
+                    <span class="home-action-text">
+                        <span class="home-action-title">{{.t.home_mobile_quickshare_title}}</span>
+                        <span class="home-action-desc">{{.t.home_mobile_quickshare_desc}}</span>
+                    </span>
+                    <i data-lucide="chevron-down" class="home-action-arrow" aria-hidden="true"></i>
+                </summary>
+                <div class="home-action-choices">
+                    <a href="/quickshare?action=create" class="home-choice home-choice-primary"><i data-lucide="plus" aria-hidden="true"></i>{{.t.card_quickshare_create}}</a>
+                    <a href="/quickshare?action=join" class="home-choice"><i data-lucide="hash" aria-hidden="true"></i>{{.t.card_quickshare_join}}</a>
+                </div>
+            </details>
         </div>
 
         <div class="action-cards">
