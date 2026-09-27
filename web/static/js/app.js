@@ -1869,10 +1869,11 @@
 
          
 
-        const recentFilesLink = document.querySelector('.recent-files-link');
-        recentFilesLink?.addEventListener('click', (e) => {
-            e.preventDefault();
-            openRecentFilesPopup();
+        document.querySelectorAll('.recent-files-link, [data-open-recent-files]').forEach((recentFilesLink) => {
+            recentFilesLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                openRecentFilesPopup();
+            });
         });
         popupClose?.addEventListener('click', closeRecentFilesPopup);
         recentFilesOverlay?.addEventListener('click', (e) => {

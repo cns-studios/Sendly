@@ -8,6 +8,13 @@
   "header_login": "Anmelden",
   "header_your_account": "Konto",
   "header_account_menu_label": "Kontomenü",
+  "header_menu_label": "Menü",
+  "home_mobile_send_desc": "Datei hochladen, Link teilen",
+  "home_mobile_quickshare_title": "Quick Share",
+  "home_mobile_quickshare_desc": "Dateien in Echtzeit mit einer Gruppe teilen",
+  "home_mobile_trust_e2e": "Ende-zu-Ende verschlüsselt",
+  "home_mobile_trust_account": "Kein Konto nötig",
+  "home_mobile_trust_expiry": "Dateien löschen sich automatisch",
   "lang_en": "Englisch",
   "lang_de": "Deutsch",
 
@@ -94,6 +101,7 @@
   "link_share_title": "Dein Link zum Teilen",
   "link_share_discard": "Verwerfen",
   "link_share_copy": "Kopieren",
+  "link_share_native": "Teilen",
 
   "status_uploading": "Hochladen...",
   "status_eta": "Noch {time}",
