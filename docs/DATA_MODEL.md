@@ -69,6 +69,8 @@ Report count on file drives auto-delete threshold logic.
 - duration and lifecycle status
 - confirmation and ending metadata
 
+`tunnel_participants` holds everyone who joined, with their throwaway public key and whether the host let them in (`approved`). The host alone starts the session. `tunnel_rejections` records joiners the host declined (by CNS user or device) so they can't join again.
+
 Tunnel-linked files can be queried by tunnel ID.
 
 ## Desktop API Ownership Mapping

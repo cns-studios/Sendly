@@ -359,9 +359,10 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("guest confirm without participant token status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	// Only the host starts a quick share.
 	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json", guestHeaders)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("guest peer confirm status=%d body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest joiner confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	// The guest joined but is not approved yet: no key envelope may be
@@ -559,15 +560,12 @@ func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 			t.Fatalf("approve status=%d body=%s", rec.Code, rec.Body.String())
 		}
 	}
-	for _, confirmer := range []int{host, first} {
-		confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: device(confirmer)})
-		if rec := requestAs(router, confirmer, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json"); rec.Code != http.StatusOK {
-			t.Fatalf("confirm status=%d body=%s", rec.Code, rec.Body.String())
-		}
+	confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: device(host)})
+	if rec := requestAs(router, host, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json"); rec.Code != http.StatusOK {
+		t.Fatalf("confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// The second joiner is not the tunnel's peer, but as an approved
-	// participant it may upload.
+	// Any approved participant may upload, not only the first joiner.
 	initBody, _ := json.Marshal(models.UploadInitRequest{FileName: "session.txt", FileSize: 5, TotalChunks: 1, ChunkSize: 5, TunnelID: started.Tunnel.ID})
 	rec = requestAs(router, second, http.MethodPost, "/api/upload/init", initBody, "application/json")
 	if rec.Code != http.StatusOK {

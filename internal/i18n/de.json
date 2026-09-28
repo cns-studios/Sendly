@@ -414,10 +414,9 @@
   "user_default": "Benutzer",
   "nobody_joined": "Noch niemand ist beigetreten",
   "quickshare_approval_heading": "Möchten beitreten",
-  "quickshare_approval_hint": "Lass nur Personen herein, die du eingeladen hast. Der Code neben dem Namen muss mit dem Code auf ihrem Bildschirm übereinstimmen.",
+  "quickshare_approval_hint": "Lass nur Leute rein, die du kennst. Der Code sollte mit dem auf ihrem Bildschirm übereinstimmen.",
   "quickshare_approve": "Hereinlassen",
   "quickshare_decline": "Ablehnen",
-  "quickshare_waiting_approval": "Warte darauf, dass der Host dich hereinlässt. Dein Code: {code}",
   "quickshare_pending_suffix": " (wartet)",
   "quickshare_approve_failed": "Teilnehmer konnte nicht aktualisiert werden: {msg}",
 
@@ -463,5 +462,19 @@
   "app_0_pct": "0%",
 
   "identity_migration_progress": "Verschlüsselung wird aktualisiert … {done} von {total} Dateien",
-  "identity_migration_done": "Deine Verschlüsselung ist aktualisiert."
+  "identity_migration_done": "Deine Verschlüsselung ist aktualisiert.",
+
+  "quickshare_status_wait_title": "Warte auf den Host",
+  "quickshare_status_wait_text": "Nenne dem Host diesen Code, damit klar ist, dass du es bist.",
+  "quickshare_status_in_title": "Du bist dabei",
+  "quickshare_status_in_text": "Es geht los, sobald der Host auf Starten tippt.",
+  "quickshare_declined_title": "Der Host hat deine Anfrage abgelehnt",
+  "quickshare_declined_desc": "Du kannst diesem Quick Share nicht beitreten.",
+  "quickshare_declined_home": "Zur Startseite",
+  "quickshare_approve_all": "Alle hereinlassen",
+  "quickshare_new_request": "{name} möchte beitreten",
+  "quickshare_start_waiting_title": "Ohne sie starten?",
+  "quickshare_start_waiting_desc": "{count} warten noch. Du kannst sie später noch hereinlassen.",
+  "quickshare_start_waiting_desc_one": "1 Person wartet noch. Du kannst sie später noch hereinlassen.",
+  "quickshare_start_anyway": "Trotzdem starten"
 }

@@ -40,6 +40,7 @@
     const joinView = document.getElementById('joinView');
     const sessionView = document.getElementById('sessionView');
     const queueView = document.getElementById('queueView');
+    const declinedView = document.getElementById('declinedView');
     const bottomBar = document.getElementById('bottomBar');
     const joinBottomBar = document.getElementById('joinBottomBar');
     const startBtn = document.getElementById('startBtn');
@@ -64,8 +65,18 @@
         document.getElementById('sessionApprovalRequests')
     ].filter(Boolean);
     const approvalStatus = document.getElementById('approvalStatus');
+    const qsStatusTitle = document.getElementById('qsStatusTitle');
+    const qsStatusText = document.getElementById('qsStatusText');
+    const qsStatusCode = document.getElementById('qsStatusCode');
+    const startConfirm = document.getElementById('start-confirm');
+    const startConfirmDesc = document.getElementById('start-confirm-desc');
+    const startConfirmOk = document.getElementById('start-confirm-ok');
+    const startConfirmCancel = document.getElementById('start-confirm-cancel');
     const fingerprintCache = new Map();
     let approvalRenderKey = null;
+    // Join requests the host has already been told about.
+    const announcedRequests = new Set();
+    const baseTitle = document.title;
     const pageLoading = document.getElementById('page-loading');
     const pageError = document.getElementById('page-error');
     const pageErrorRetry = document.getElementById('page-error-retry');
@@ -232,6 +243,7 @@
         joinView.classList.toggle('active', view === 'join');
         sessionView.classList.toggle('active', view === 'session');
         queueView.classList.toggle('active', view === 'queue');
+        declinedView?.classList.toggle('active', view === 'declined');
         bottomBar.style.display = view === 'create' ? '' : 'none';
         joinBottomBar.style.display = view === 'join' ? '' : 'none';
 
@@ -326,9 +338,25 @@
         return !!(self && self.approved);
     }
 
+    function pendingRequests() {
+        return participants.filter((p) => !p.approved && !isHostParticipant(p));
+    }
+
+    // Tells the host about new join requests, also in the tab title so they
+    // are noticed while the tab is in the background.
+    function announceRequests(pending) {
+        pending.forEach((participant) => {
+            if (announcedRequests.has(participant.id)) return;
+            announcedRequests.add(participant.id);
+            showNotification(tpl('quickshare_new_request', {name: getParticipantName(participant)}), 'info');
+        });
+        document.title = pending.length ? `(${pending.length}) ${baseTitle}` : baseTitle;
+    }
+
     function renderApprovals() {
         if (isHost) {
-            const pending = participants.filter((p) => !p.approved && !isHostParticipant(p));
+            const pending = pendingRequests();
+            announceRequests(pending);
             const renderKey = pending.map((p) => `${p.id}:${keyFingerprint(participantPublicKey(p))}`).join('|');
             if (renderKey === approvalRenderKey) return;
             approvalRenderKey = renderKey;
@@ -338,10 +366,23 @@
                 list.classList.toggle('hidden', pending.length === 0);
                 if (pending.length === 0) return;
 
+                const headingRow = document.createElement('div');
+                headingRow.className = 'approval-heading-row';
                 const heading = document.createElement('h2');
                 heading.className = 'people-heading';
                 heading.textContent = t('quickshare_approval_heading');
-                list.appendChild(heading);
+                const count = document.createElement('span');
+                count.className = 'approval-count';
+                count.textContent = String(pending.length);
+                headingRow.append(heading, count);
+                if (pending.length > 1) {
+                    const allBtn = document.createElement('button');
+                    allBtn.className = 'approval-all-btn';
+                    allBtn.textContent = t('quickshare_approve_all');
+                    allBtn.addEventListener('click', approveAll);
+                    headingRow.appendChild(allBtn);
+                }
+                list.appendChild(headingRow);
                 const hint = document.createElement('p');
                 hint.className = 'approval-hint';
                 hint.textContent = t('quickshare_approval_hint');
@@ -371,35 +412,65 @@
             return;
         }
 
+        renderJoinStatus();
+    }
+
+    // The joiner's status card: waiting to be let in (with the code the host
+    // compares), then let in and waiting for the host to start.
+    function renderJoinStatus() {
         if (!approvalStatus) return;
         const self = findSelfParticipant();
-        const waiting = !!(activeTunnel && self && !self.approved);
-        approvalStatus.classList.toggle('hidden', !waiting);
-        if (!waiting) return;
-        const code = keyFingerprint(ephemeralKeyPair?.publicKeyJWK) || '\u2013';
-        const [before, after = ''] = t('quickshare_waiting_approval').split('{code}');
-        const codeEl = document.createElement('code');
-        codeEl.textContent = code;
-        approvalStatus.replaceChildren(document.createTextNode(before), codeEl, document.createTextNode(after));
+        const visible = !!(activeTunnel && self && !hasStarted);
+        approvalStatus.classList.toggle('hidden', !visible);
+        if (!visible) return;
+        const approved = !!self.approved;
+        approvalStatus.classList.toggle('is-approved', approved);
+        qsStatusTitle.textContent = t(approved ? 'quickshare_status_in_title' : 'quickshare_status_wait_title');
+        qsStatusText.textContent = t(approved ? 'quickshare_status_in_text' : 'quickshare_status_wait_text');
+        qsStatusCode.classList.toggle('hidden', approved);
+        qsStatusCode.textContent = keyFingerprint(ephemeralKeyPair?.publicKeyJWK) || '\u2013';
+    }
+
+    function showDeclined() {
+        clearTunnelState(activeTunnel?.id);
+        setView('declined');
+    }
+
+    async function postParticipantAction(participantId, action) {
+        const response = await fetch(
+            `/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/participants/${encodeURIComponent(participantId)}/${action}`,
+            { method: 'POST', headers: buildHeaders({ 'Content-Type': 'application/json' }) }
+        );
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `HTTP ${response.status}`);
+        }
     }
 
     async function respondToParticipant(participantId, action) {
         if (!activeTunnel?.id || !isHost) return;
         try {
-            const response = await fetch(
-                `/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/participants/${encodeURIComponent(participantId)}/${action}`,
-                { method: 'POST', headers: buildHeaders({ 'Content-Type': 'application/json' }) }
-            );
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({}));
-                throw new Error(error.error || `HTTP ${response.status}`);
-            }
-            approvalRenderKey = null;
-            await refreshTunnelState();
+            await postParticipantAction(participantId, action);
         } catch (error) {
             console.error('Participant update failed:', error);
             showErrorBanner(tpl('quickshare_approve_failed', {msg: error.message}));
         }
+        approvalRenderKey = null;
+        await refreshTunnelState();
+    }
+
+    async function approveAll() {
+        if (!activeTunnel?.id || !isHost) return;
+        try {
+            for (const participant of pendingRequests()) {
+                await postParticipantAction(participant.id, 'approve');
+            }
+        } catch (error) {
+            console.error('Participant update failed:', error);
+            showErrorBanner(tpl('quickshare_approve_failed', {msg: error.message}));
+        }
+        approvalRenderKey = null;
+        await refreshTunnelState();
     }
 
     function renderParticipants(items) {
@@ -421,7 +492,8 @@
             empty.style.padding = '1rem 0';
             container.appendChild(empty);
         } else {
-            allParticipants.forEach(p => {
+            const rank = (p) => (isHostParticipant(p) ? 0 : p.approved ? 1 : 2);
+            [...allParticipants].sort((a, b) => rank(a) - rank(b)).forEach(p => {
                 const person = document.createElement('div');
                 person.className = 'person';
                 const isSelf = extractDeviceID(p) === myCurrentDeviceID;
@@ -788,7 +860,11 @@
             }
 
             if (!response.ok) {
-                const error = await response.json();
+                const error = await response.json().catch(() => ({}));
+                if (error.code === 'PARTICIPANT_REJECTED') {
+                    showDeclined();
+                    return;
+                }
                 throw new Error(error.error || 'Failed to join tunnel');
             }
 
@@ -815,6 +891,27 @@
             joinSubmitBtn.disabled = true;
             joinSubmitBtn.classList.add('disabled');
         }
+    }
+
+    // Asks before starting while people are still waiting to be let in.
+    function requestStart() {
+        if (!activeTunnel?.id || !isHost) return;
+        const waiting = pendingRequests().length;
+        if (!waiting || !startConfirm) {
+            handleStartTunnel();
+            return;
+        }
+        startConfirmDesc.textContent = waiting === 1
+            ? t('quickshare_start_waiting_desc_one')
+            : tpl('quickshare_start_waiting_desc', {count: waiting});
+        startConfirm.classList.remove('hidden');
+        startConfirm.setAttribute('aria-hidden', 'false');
+        startConfirmOk?.focus();
+    }
+
+    function closeStartConfirm() {
+        startConfirm?.classList.add('hidden');
+        startConfirm?.setAttribute('aria-hidden', 'true');
     }
 
     async function handleStartTunnel() {
@@ -886,6 +983,13 @@
             });
 
             if (!response.ok) {
+                if (response.status === 403) {
+                    const error = await response.json().catch(() => ({}));
+                    if (error.code === 'PARTICIPANT_REJECTED') {
+                        showDeclined();
+                        return;
+                    }
+                }
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState(activeTunnel?.id);
                     showErrorBanner(t('quickshare_ended'));
@@ -959,6 +1063,8 @@
         hasStarted = false;
         guestNameMap.clear();
         guestCounter = 0;
+        announcedRequests.clear();
+        document.title = baseTitle;
 
         if (fileList) fileList.innerHTML = '';
         if (fileListEmpty) fileListEmpty.classList.remove('hidden');
@@ -1145,7 +1251,18 @@
     }
 
     function setupEventListeners() {
-        startBtn?.addEventListener('click', handleStartTunnel);
+        startBtn?.addEventListener('click', requestStart);
+        startConfirmCancel?.addEventListener('click', closeStartConfirm);
+        startConfirmOk?.addEventListener('click', () => {
+            closeStartConfirm();
+            handleStartTunnel();
+        });
+        startConfirm?.addEventListener('click', (e) => {
+            if (e.target === startConfirm) closeStartConfirm();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && startConfirm && !startConfirm.classList.contains('hidden')) closeStartConfirm();
+        });
         joinSubmitBtn?.addEventListener('click', handleJoinTunnel);
         leaveBtn?.addEventListener('click', handleLeaveTunnel);
 

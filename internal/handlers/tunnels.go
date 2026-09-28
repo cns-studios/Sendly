@@ -114,19 +114,24 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is not available", Code: "TUNNEL_NOT_AVAILABLE"})
 		return
 	}
+
+	var joinerUserID int64
+	user := middleware.GetCNSUser(c)
+	if user != nil {
+		joinerUserID = int64(user.ID)
+	}
+	// A declined joiner learns it was declined, even once the session runs.
+	if rejected, _ := h.db.IsRejectedFromTunnel(c.Request.Context(), tunnel.ID, joinerUserID, req.DeviceID); rejected {
+		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantRejected.Message, Code: models.ErrParticipantRejected.Code})
+		return
+	}
 	if tunnel.Status == models.TunnelStatusActive {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel is already active and no longer accepting new members", Code: "TUNNEL_ALREADY_ACTIVE"})
 		return
 	}
 
-	var peerUserID int64
-	user := middleware.GetCNSUser(c)
-	if user != nil {
-		peerUserID = int64(user.ID)
-	}
-
 	join := models.TunnelJoin{
-		UserID:             peerUserID,
+		UserID:             joinerUserID,
 		DeviceID:           req.DeviceID,
 		PresentedTokenHash: hashParticipantToken(c.GetHeader(headerParticipantToken)),
 		PublicKeyJWK:       req.PublicKeyJWK,
@@ -134,7 +139,7 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 		KeyVersion:         req.KeyVersion,
 	}
 	var participantToken string
-	if peerUserID == 0 {
+	if joinerUserID == 0 {
 		token, tokenHash, tokenErr := newParticipantToken()
 		if tokenErr != nil {
 			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to join tunnel", Code: "TUNNEL_JOIN_FAILED"})
@@ -145,6 +150,10 @@ func (h *TunnelHandler) Join(c *gin.Context) {
 
 	joined, issued, joinErr := h.db.JoinTunnel(c.Request.Context(), tunnel.ID, join)
 	if joinErr != nil {
+		if joinErr == models.ErrParticipantRejected {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantRejected.Message, Code: models.ErrParticipantRejected.Code})
+			return
+		}
 		if joinErr == models.ErrParticipantConflict {
 			c.JSON(http.StatusConflict, models.ErrorResponse{Error: models.ErrParticipantConflict.Message, Code: models.ErrParticipantConflict.Code})
 			return
@@ -624,6 +633,15 @@ func (h *TunnelHandler) requireTunnelCaller(c *gin.Context, tunnel *models.Tunne
 		return nil, false
 	}
 	if caller == nil {
+		// Tell a declined joiner apart from a stranger, so its page can say so.
+		var userID int64
+		if user := middleware.GetCNSUser(c); user != nil {
+			userID = int64(user.ID)
+		}
+		if rejected, _ := h.db.IsRejectedFromTunnel(c.Request.Context(), tunnel.ID, userID, c.GetHeader(headerDeviceID)); rejected {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantRejected.Message, Code: models.ErrParticipantRejected.Code})
+			return nil, false
+		}
 		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
 		return nil, false
 	}
@@ -657,8 +675,8 @@ func (h *TunnelHandler) ApproveParticipant(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// RejectParticipant lets the host remove a joiner (and any key envelope or
-// peer assignment it had).
+// RejectParticipant lets the host decline a joiner: it is removed with its key
+// envelope and can't join this session again.
 func (h *TunnelHandler) RejectParticipant(c *gin.Context) {
 	tunnel, participantID, ok := h.loadTunnelForHost(c)
 	if !ok {

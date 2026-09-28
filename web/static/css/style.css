@@ -682,8 +682,7 @@ body.page-index {
     max-width: 520px;
 }
 
-.approval-requests.hidden,
-.approval-status.hidden {
+.approval-requests.hidden {
     display: none;
 }
 
@@ -709,8 +708,7 @@ body.page-index {
     flex: 1;
 }
 
-.approval-fingerprint,
-.approval-status code {
+.approval-fingerprint {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 15px;
     letter-spacing: 0.08em;
@@ -733,14 +731,6 @@ body.page-index {
 .approval-request .decline-btn {
     background-color: #D9D9D9;
     color: #000000;
-}
-
-.approval-status {
-    margin-top: 24px;
-    font-family: 'Arimo', sans-serif;
-    font-size: 16px;
-    color: #333333;
-    max-width: 520px;
 }
 
 /* ── Join code squares (quickshare) ── */
@@ -1293,7 +1283,8 @@ body.page-quickshare .join-bottom-bar {
     margin-top: 40px;
 }
 
-body.page-quickshare .queue-view {
+body.page-quickshare .queue-view,
+body.page-quickshare .declined-view {
     display: none;
     padding: 60px 140px 0 140px;
 }
@@ -1302,7 +1293,8 @@ body.page-quickshare .queue-view.active {
     display: block;
 }
 
-body.page-quickshare .queue-view h1 {
+body.page-quickshare .queue-view h1,
+body.page-quickshare .declined-view h1 {
     font-family: 'Arimo', sans-serif;
     font-weight: 600;
     font-size: 32px;
@@ -1310,7 +1302,8 @@ body.page-quickshare .queue-view h1 {
     text-align: left;
 }
 
-body.page-quickshare .queue-view .subtitle {
+body.page-quickshare .queue-view .subtitle,
+body.page-quickshare .declined-view .subtitle {
     font-family: 'Arimo', sans-serif;
     font-weight: 400;
     font-size: 20px;
@@ -3757,7 +3750,8 @@ body.page-quickshare #fileListEmpty {
     body.page-quickshare .create-view,
     body.page-quickshare .session-view,
     body.page-quickshare .join-view,
-    body.page-quickshare .queue-view {
+    body.page-quickshare .queue-view,
+    body.page-quickshare .declined-view {
         padding: 32px 20px 0;
     }
 
@@ -3846,6 +3840,10 @@ body.page-quickshare #fileListEmpty {
 
     body.page-quickshare .queue-view h1 {
         font-size: 32px;
+    }
+
+    body.page-quickshare .declined-view h1 {
+        font-size: 28px;
     }
 
     body.page-quickshare .queue-view .subtitle {
@@ -5776,4 +5774,183 @@ body.page-transfers .sk-line.medium { width: 45%; }
     font-family: 'Arimo', sans-serif;
     font-size: 14px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* ── Quick share: joiner status, declined screen, host approvals ── */
+.qs-status {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-top: 28px;
+    padding: 16px 18px;
+    max-width: 440px;
+    border-radius: 16px;
+    background: #F2F2F7;
+    animation: qs-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qs-status.hidden { display: none; }
+
+.qs-status-indicator {
+    flex-shrink: 0;
+    width: 12px;
+    height: 12px;
+    margin-top: 5px;
+    border-radius: 50%;
+    background: #FF9F0A;
+    color: rgba(255, 159, 10, 0.5);
+    animation: qs-pulse 1.6s ease-out infinite;
+}
+
+.qs-status.is-approved .qs-status-indicator {
+    background: #34C759;
+    color: rgba(52, 199, 89, 0.5);
+}
+
+.qs-status-title {
+    margin: 0;
+    font-family: 'Arimo', sans-serif;
+    font-size: 17px;
+    font-weight: 700;
+    color: #000;
+}
+
+.qs-status-text {
+    margin: 4px 0 0;
+    font-family: 'Arimo', sans-serif;
+    font-size: 15px;
+    line-height: 1.4;
+    color: #3C3C43;
+}
+
+.qs-status-code {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 8px 14px;
+    border-radius: 10px;
+    background: #FFFFFF;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #000;
+}
+
+.qs-status-code.hidden { display: none; }
+
+@keyframes qs-pulse {
+    0% { box-shadow: 0 0 0 0 currentColor; }
+    70% { box-shadow: 0 0 0 10px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+@keyframes qs-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+}
+
+body.page-quickshare .declined-view {
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+body.page-quickshare .declined-view.active {
+    display: flex;
+    animation: qs-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.declined-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 20px;
+    border-radius: 50%;
+    background: #F2F2F7;
+}
+
+.declined-icon svg {
+    width: 30px;
+    height: 30px;
+    color: #FF3B30;
+}
+
+.declined-view .declined-home {
+    margin-top: 28px;
+    text-decoration: none;
+}
+
+.approval-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.approval-heading-row .people-heading {
+    margin: 0;
+}
+
+.approval-count {
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: #FF9F0A;
+    color: #fff;
+    font-family: 'Arimo', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 24px;
+    text-align: center;
+}
+
+.approval-all-btn {
+    margin-left: auto;
+    border: none;
+    border-radius: 999px;
+    padding: 6px 14px;
+    background: #E5F0FF;
+    color: #0A84FF;
+    font-family: 'Arimo', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.approval-request {
+    animation: qs-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.qs-confirm-title {
+    margin: 0 0 12px;
+    font-size: 22px;
+    font-weight: 590;
+}
+
+.qs-confirm-desc {
+    margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+    .qs-status {
+        max-width: none;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .approval-request {
+        flex-wrap: wrap;
+    }
+
+    .approval-request-name {
+        flex-basis: 100%;
+    }
+
+    .approval-request button {
+        flex: 1;
+        padding: 10px 14px;
+    }
 }
