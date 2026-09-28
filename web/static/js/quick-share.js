@@ -80,7 +80,6 @@
     const pageLoading = document.getElementById('page-loading');
     const pageError = document.getElementById('page-error');
     const pageErrorRetry = document.getElementById('page-error-retry');
-    let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -443,7 +442,7 @@
         );
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || `HTTP ${response.status}`);
+            throw SendlyToast.apiError(error, `HTTP ${response.status}`);
         }
     }
 
@@ -453,7 +452,7 @@
             await postParticipantAction(participantId, action);
         } catch (error) {
             console.error('Participant update failed:', error);
-            showErrorBanner(tpl('quickshare_approve_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_approve_failed'));
         }
         approvalRenderKey = null;
         await refreshTunnelState();
@@ -467,7 +466,7 @@
             }
         } catch (error) {
             console.error('Participant update failed:', error);
-            showErrorBanner(tpl('quickshare_approve_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_approve_failed'));
         }
         approvalRenderKey = null;
         await refreshTunnelState();
@@ -681,7 +680,7 @@
                 const contentType = response.headers.get('content-type') || '';
                 if (contentType.includes('application/json')) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || 'Download failed');
+                    throw SendlyToast.apiError(errorData, 'Download failed');
                 }
                 throw new Error(`Download failed (${response.status})`);
             }
@@ -720,7 +719,7 @@
             await new Promise((resolve) => setTimeout(resolve, 600));
         } catch (error) {
             console.error('Tunnel file download failed:', error);
-            showErrorBanner(tpl('quickshare_download_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_download_failed'));
         } finally {
             isDownloadingFile = false;
             if (progressFill && progressFill.parentNode) {
@@ -796,7 +795,7 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to create tunnel');
+                throw SendlyToast.apiError(error, 'Failed to create tunnel');
             }
 
             const payload = await response.json();
@@ -815,7 +814,7 @@
             return true;
         } catch (error) {
             console.error('Create tunnel failed:', error);
-            showErrorBanner(tpl('quickshare_create_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_create_failed'));
             return false;
         }
     }
@@ -865,7 +864,7 @@
                     showDeclined();
                     return;
                 }
-                throw new Error(error.error || 'Failed to join tunnel');
+                throw SendlyToast.apiError(error, 'Failed to join tunnel');
             }
 
             const payload = await response.json();
@@ -884,7 +883,7 @@
             startTunnelPolling();
         } catch (error) {
             console.error('Join tunnel failed:', error);
-            showErrorBanner(tpl('quickshare_join_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_join_failed'));
             joinCodeInput = '';
             setCodeDisplay(joinCodeSquares, '');
             if (joinCodeHiddenInput) joinCodeHiddenInput.value = '';
@@ -926,7 +925,7 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to start');
+                throw SendlyToast.apiError(error, 'Failed to start');
             }
 
             const payload = await response.json();
@@ -944,7 +943,7 @@
             await refreshTunnelState();
         } catch (error) {
             console.error('Start tunnel failed:', error);
-            showErrorBanner(tpl('quickshare_start_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_start_failed'));
         }
     }
 
@@ -1105,7 +1104,7 @@
                     await new Promise(r => setTimeout(r, 1500));
                 }
                 if (!sessionPassword) {
-                    throw new Error('Could not obtain encryption key from host yet. Please try again in a moment.');
+                    throw SendlyToast.userError(t('quickshare_no_decryption_key'));
                 }
             }
 
@@ -1147,7 +1146,7 @@
 
             if (!initRes.ok) {
                 const error = await initRes.json();
-                throw new Error(error.error || 'Init failed');
+                throw SendlyToast.apiError(error, 'Init failed');
             }
 
             const initData = await initRes.json();
@@ -1179,7 +1178,7 @@
 
                             if (!res.ok) {
                                 const error = await res.json();
-                                throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`);
+                                throw SendlyToast.apiError(error, `Chunk ${chunkIndex + 1} failed`);
                             }
 
                             lastError = null;
@@ -1227,7 +1226,7 @@
 
             if (!finalizeRes.ok) {
                 const error = await finalizeRes.json();
-                throw new Error(error.error || 'Finalize failed');
+                throw SendlyToast.apiError(error, 'Finalize failed');
             }
 
             const finalizeData = await finalizeRes.json();
@@ -1242,7 +1241,7 @@
             await refreshTunnelState();
         } catch (error) {
             console.error('Tunnel file upload failed:', error);
-            showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_upload_failed'));
             dropMainText.textContent = t('quickshare_place_files');
             dropSubText.textContent = '';
             isUploading = false;
@@ -1344,49 +1343,13 @@
     }
 
     function showNotification(message, type) {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     function showErrorBanner(message) {
-        showNotification(message, 'error');
+        SendlyToast.error(message);
     }
 
-    function hideErrorBanner() {}
 
     async function init() {
         setupTOSGate();

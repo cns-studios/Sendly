@@ -45,7 +45,6 @@
     // recovered on a device that never held the old key.
     const lockedFiles = new Set();
     const lockChecked = new Set();
-    let notificationTimer = null;
     let reloadTimer = null;
     let pendingLoaded = false;
 
@@ -69,26 +68,9 @@
         return payload;
     }
 
-    // ── Notifications (same pill as the other pages) ──
-    function notify(message, type = 'info') {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-        clearTimeout(notificationTimer);
-        text.textContent = message;
-        if (icon) {
-            icon.setAttribute('data-lucide', type === 'error' ? 'circle-x' : 'circle-check');
-            icon.style.color = type === 'error' ? '#FF3B30' : '#00A36C';
-            window.lucide?.createIcons?.();
-        }
-        pill.classList.remove('hidden');
-        void pill.offsetHeight;
-        pill.classList.add('visible');
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+    // ── Notifications (toast.js) ──
+    function notify(message, type = 'success') {
+        SendlyToast.show(message, { type: type === 'error' ? 'error' : 'success' });
     }
 
     // ── Formatting ──
@@ -387,7 +369,7 @@
             moveToHistory(item, 'accepted');
             notify(tpl('transfers_accepted_toast', { name: item.filename }));
         } catch (error) {
-            notify(error.message, 'error');
+            SendlyToast.fail(error, t('transfers_failed'));
             if (error.status === 409 || error.status === 410 || error.status === 404) refreshAll();
             else card.querySelectorAll('.transfer-btn').forEach(b => { b.disabled = false; });
         } finally {
@@ -420,7 +402,7 @@
             moveToHistory(item, 'declined');
             notify(tpl('transfers_declined_toast', { name: item.filename }));
         } catch (error) {
-            notify(error.message, 'error');
+            SendlyToast.fail(error, t('transfers_failed'));
             if (error.status === 409 || error.status === 404) refreshAll();
             else card.querySelectorAll('.transfer-btn').forEach(b => { b.disabled = false; });
         } finally {
@@ -533,9 +515,9 @@
             console.error('Transfer download failed:', error);
             if (error.code === 'FILE_LOCKED') {
                 markLocked(item);
-                notify(error.message, 'error');
-            } else if (error.code !== 'DEVICE_NOT_TRUSTED') notify(tpl('transfers_download_failed', { msg: error.message }), 'error');
-            else notify(error.message, 'error');
+                SendlyToast.error(t('toast_file_locked'));
+            } else if (error.code !== 'DEVICE_NOT_TRUSTED') SendlyToast.fail(error, t('transfers_download_failed'));
+            else SendlyToast.error(error.message);
         } finally {
             busy.delete(item.file_id);
             setButtonLoading(button, false);
@@ -584,7 +566,7 @@
                 markReported(item);
                 notify(t('transfers_report_toast'));
             } else {
-                notify(error.status ? error.message : t('transfers_report_failed'), 'error');
+                SendlyToast.fail(error, t('transfers_report_failed'));
                 if (error.status === 404 || error.status === 409 || error.status === 410) {
                     closeReportModal();
                     scheduleHistoryReload();

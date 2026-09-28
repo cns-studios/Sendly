@@ -1863,49 +1863,199 @@ body.tos-gate-open {
     line-height: 1.5;
 }
 
-/* ── Notification Pill ── */
-.notification-pill {
+/* ── Toasts (toast.js) ── */
+.toast-stack {
     position: fixed;
-    top: 0;
+    top: calc(14px + env(safe-area-inset-top, 0px));
     left: 50%;
-    transform: translateX(-50%) translateY(-100%);
-    width: 415px;
-    max-width: calc(100vw - 2rem);
-    height: 40px;
-    background: #D9D9D9;
-    border-radius: 21px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    transform: translateX(-50%);
+    z-index: 6000;
+    width: min(420px, calc(100vw - 24px));
     display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 0 18px;
-    z-index: 4000;
-    opacity: 0;
+    flex-direction: column;
+    gap: 8px;
     pointer-events: none;
-    transition: transform 0.35s cubic-bezier(0.23, 1, 0.32, 1), opacity 0.25s;
 }
 
-.notification-pill.visible {
-    transform: translateX(-50%) translateY(20px);
-    opacity: 1;
+.toast {
+    --toast-accent: #0A84FF;
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 8px 12px 14px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.88);
+    -webkit-backdrop-filter: blur(18px) saturate(180%);
+    backdrop-filter: blur(18px) saturate(180%);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
     pointer-events: auto;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+    animation: toast-in 0.5s cubic-bezier(0.2, 1.3, 0.35, 1) backwards;
+    transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s;
 }
 
-.notification-pill .notification-icon {
+.toast.is-dragging {
+    transition: none;
+    cursor: grabbing;
+}
+
+.toast-success { --toast-accent: #34C759; }
+.toast-error { --toast-accent: #FF3B30; }
+
+.toast-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--toast-accent);
+}
+
+.toast-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 8px;
+    padding-top: 1px;
+}
+
+.toast-text {
+    font-family: 'Arimo', sans-serif;
+    font-size: 15px;
+    line-height: 1.35;
+    color: #111111;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.toast-ref {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: #6E6E73;
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 6px;
+    padding: 1px 6px;
+    user-select: all;
+    -webkit-user-select: all;
+}
+
+.toast-close {
     flex-shrink: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: -4px 0 -4px 2px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #8E8E93;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
 }
 
-.notification-pill .notification-text {
-    color: #000;
-    font-size: 16px;
-    font-family: 'Arimo', sans-serif;
-    font-weight: 400;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1;
+.toast-close:hover,
+.toast-close:focus-visible {
+    background: rgba(0, 0, 0, 0.06);
+    color: #111111;
+    outline: none;
+}
+
+.toast-timer {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--toast-accent);
+    opacity: 0.35;
+    transform-origin: left;
+}
+
+.toast.is-paused .toast-timer {
+    animation-play-state: paused !important;
+}
+
+.toast.is-bumped {
+    animation: toast-bump 0.35s cubic-bezier(0.2, 1.3, 0.35, 1);
+}
+
+.toast.is-leaving {
+    pointer-events: none;
+    animation: toast-out-up 0.45s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.toast.is-leaving.leave-left { animation-name: toast-out-left; }
+.toast.is-leaving.leave-right { animation-name: toast-out-right; }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(-28px) scale(0.92); }
+}
+
+@keyframes toast-bump {
+    40% { transform: scale(1.03); }
+}
+
+@keyframes toast-timer {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+}
+
+@keyframes toast-out-up {
+    55% { opacity: 0; transform: translateY(-24px) scale(0.94); max-height: var(--toast-h); }
+    100% { opacity: 0; transform: translateY(-24px) scale(0.94); max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -8px; border-width: 0; }
+}
+
+@keyframes toast-out-left {
+    55% { opacity: 0; transform: translateX(-110%); max-height: var(--toast-h); }
+    100% { opacity: 0; transform: translateX(-110%); max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -8px; border-width: 0; }
+}
+
+@keyframes toast-out-right {
+    55% { opacity: 0; transform: translateX(110%); max-height: var(--toast-h); }
+    100% { opacity: 0; transform: translateX(110%); max-height: 0; padding-top: 0; padding-bottom: 0; margin-bottom: -8px; border-width: 0; }
+}
+
+@media (max-width: 768px) {
+    .toast-stack {
+        top: calc(8px + env(safe-area-inset-top, 0px));
+        width: calc(100vw - 16px);
+    }
+
+    .toast {
+        padding: 13px 8px 13px 14px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast,
+    .toast.is-bumped {
+        animation: toast-fade 0.2s ease-out backwards;
+    }
+
+    .toast.is-leaving,
+    .toast.is-leaving.leave-left,
+    .toast.is-leaving.leave-right {
+        animation: toast-fade 0.2s ease-in reverse forwards;
+    }
+
+    .toast-timer {
+        display: none;
+    }
+}
+
+@keyframes toast-fade {
+    from { opacity: 0; }
 }
 
 /* ── Buttons ── */
@@ -5756,24 +5906,6 @@ body.page-transfers .sk-line.medium { width: 45%; }
             height: auto;
         }
     }
-}
-
-/* Temporary: progress of moving an account's files onto its identity key
-   (identity-migration.js). */
-.identity-migration-notice {
-    position: fixed;
-    left: 50%;
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-    transform: translateX(-50%);
-    z-index: 2000;
-    max-width: calc(100vw - 32px);
-    padding: 10px 16px;
-    border-radius: 999px;
-    background: #1A1A1F;
-    color: #fff;
-    font-family: 'Arimo', sans-serif;
-    font-size: 14px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 
 /* ── Quick share: joiner status, declined screen, host approvals ── */
