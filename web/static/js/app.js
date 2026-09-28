@@ -9,7 +9,7 @@
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
-    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
+    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const RETENTION = AUTHENTICATED ? '90d' : '7d';
@@ -35,12 +35,11 @@
     let pendingAutoCopyText = null;
     let pendingAutoCopyBanner = false;
     let pendingAutoCopyBound = false;
-    let notificationTimer = null;
     let finalizeEnvelopePayload = null;
     let ephemeralKeyPair = null;
 
     let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
+    let authIdentityKey = null;
     let recentSearchQuery = '';
     let recentCurrentPage = 1;
     let recentTotalPages = 0;
@@ -228,7 +227,13 @@
 
     async function ensureDeviceReady() {
         try {
-        const payload = await registerCurrentDevice(true);
+        const payload = await registerCurrentDevice();
+        if (payload?.needs_identity_migration) {
+            // The account predates identity keys; a device holding its legacy
+            // user key has to migrate it before this device can be trusted.
+            isDeviceUntrusted = true;
+            return false;
+        }
         if (payload?.needs_enrollment) {
             isDeviceUntrusted = true;
             setRecoveryActionVisible(true);
@@ -272,6 +277,10 @@
                 return false;
             }
 
+            if (!authIdentityKey) {
+                showErrorBanner(t('toast_approval_key_setup_failed'));
+                return false;
+            }
             isDeviceUntrusted = false;
             setRecoveryActionVisible(false);
             return true;
@@ -282,76 +291,18 @@
         }
     }
 
-    async function registerCurrentDevice(allowEnrollmentRequest = true, endpoint = '/api/me/devices/register') {
-        authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-        authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-
-        let bootstrapUserKeyRaw = null;
-        let wrappedUserKeyB64 = '';
-        let ukWrapAlg = '';
-        let ukWrapMeta = {};
-
-        if (allowEnrollmentRequest) {
-            if (!authUserKeyRaw) {
-                bootstrapUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-                authUserKeyRaw = bootstrapUserKeyRaw;
-            }
-
-            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, authDeviceIdentity.publicKeyJWK);
-            wrappedUserKeyB64 = SecureCrypto.toBase64(wrappedUserKey);
-            ukWrapAlg = 'RSA-OAEP-2048-v1';
-            ukWrapMeta = { type: 'self-wrap', device_id: authDeviceIdentity.deviceId };
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                device_id: authDeviceIdentity.deviceId,
-                device_label: `${CNS_USERNAME || t('user_default')} device`,
-                public_key_jwk: authDeviceIdentity.publicKeyJWK,
-                key_algorithm: authDeviceIdentity.keyAlgorithm,
-                key_version: authDeviceIdentity.keyVersion,
-                wrapped_user_key_b64: wrappedUserKeyB64,
-                uk_wrap_alg: ukWrapAlg,
-                uk_wrap_meta: ukWrapMeta
-            })
+    async function registerCurrentDevice(endpoint = '/api/me/devices/register') {
+        const result = await SecureCrypto.registerAuthenticatedDevice({
+            endpoint,
+            userId: CNS_USER_ID,
+            username: CNS_USERNAME,
+            csrfToken: getCookieValue('csrf_token')
         });
-
-        if (!response.ok) {
-            const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Device registration failed');
-        }
-
-        const payload = await response.json().catch(() => ({}));
-        isDeviceUntrusted = !!payload.needs_enrollment;
-        setRecoveryActionVisible(isDeviceUntrusted);
-
-        if (!payload.needs_enrollment) {
-            // The server's envelope is authoritative: a locally stored key can be stale
-            // (e.g. generated on a page that never got it registered), and wrapping new
-            // uploads with it would make them unreadable everywhere else.
-            if (payload.user_key_envelope?.wrapped_uk_b64) {
-                try {
-                    const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                    authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                } catch (error) {
-                    console.error('Failed to unwrap server user key envelope:', error);
-                }
-            }
-
-            if (!authUserKeyRaw && bootstrapUserKeyRaw) {
-                authUserKeyRaw = bootstrapUserKeyRaw;
-            }
-
-            if (authUserKeyRaw) {
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
-        }
-
+        authDeviceIdentity = result.identity;
+        authIdentityKey = result.identityKey;
+        const payload = result.payload;
+        isDeviceUntrusted = !authIdentityKey;
+        setRecoveryActionVisible(!!payload.needs_enrollment);
         return payload;
     }
 
@@ -374,7 +325,7 @@
             if (errorPayload.code === 'ENROLLMENT_CREATE_FAILED') {
                 return null;
             }
-            throw new Error(errorPayload.error || 'Failed to request device approval');
+            throw SendlyToast.apiError(errorPayload, 'Failed to request device approval');
         } catch (error) {
             console.error('Failed to request enrollment:', error);
             return null;
@@ -596,11 +547,8 @@
             if (!authDeviceIdentity) {
                 await ensureDeviceReady();
             }
-            if (!authUserKeyRaw) {
-                authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            }
-            if (!authUserKeyRaw) {
-                throw new Error('Trusted user key is not available on this device');
+            if (!authIdentityKey?.privateKeyJWK) {
+                throw new Error('This device has no identity key to hand over');
             }
 
             const requestDevice = activePendingEnrollment.request_device || {};
@@ -609,29 +557,32 @@
                 throw new Error('Request device public key is missing');
             }
 
-            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, requestPublicKey);
+            const wrappedIdKey = await SecureCrypto.wrapIdentityKeyForDevice(authIdentityKey.privateKeyJWK, requestPublicKey);
+            const approveBody = {
+                approver_device_id: authDeviceIdentity.deviceId,
+                verification_code: activePendingEnrollment.enrollment.verification_code,
+                wrapped_identity_private_key_b64: SecureCrypto.toBase64(wrappedIdKey),
+                identity_key_wrap_alg: 'RSA-OAEP-2048+AES-GCM-256-v1',
+                identity_key_wrap_meta: {
+                    type: 'enrollment-approval',
+                    approver_device_id: authDeviceIdentity.deviceId,
+                    request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
+                },
+                identity_key_version: authIdentityKey.keyVersion
+            };
+
             const response = await fetch(`/api/me/devices/enrollments/${encodeURIComponent(activePendingEnrollment.enrollment.id)}/approve`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-Token': getCookieValue('csrf_token')
                 },
-                body: JSON.stringify({
-                    approver_device_id: authDeviceIdentity.deviceId,
-                    verification_code: activePendingEnrollment.enrollment.verification_code,
-                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedUserKey),
-                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
-                    uk_wrap_meta: {
-                        type: 'enrollment-approval',
-                        approver_device_id: authDeviceIdentity.deviceId,
-                        request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
-                    }
-                })
+                body: JSON.stringify(approveBody)
             });
 
             if (!response.ok) {
                 const errorPayload = await response.json().catch(() => ({}));
-                throw new Error(errorPayload.error || 'Failed to approve device');
+                throw SendlyToast.apiError(errorPayload, 'Failed to approve device');
             }
 
             isDeviceUntrusted = false;
@@ -640,7 +591,7 @@
             await loadRecentUploads();
         } catch (error) {
             console.error('Approve enrollment failed:', error);
-            showErrorBanner(tpl('toast_approval_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_approval_failed'));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -675,13 +626,13 @@
 
             if (!response.ok) {
                 const errorPayload = await response.json().catch(() => ({}));
-                throw new Error(errorPayload.error || 'Failed to decline device');
+                throw SendlyToast.apiError(errorPayload, 'Failed to decline device');
             }
 
             await loadPendingEnrollments();
         } catch (error) {
             console.error('Reject enrollment failed:', error);
-            showErrorBanner(tpl('toast_decline_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_decline_failed'));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -711,7 +662,7 @@
         if (deviceApprovalRecover) deviceApprovalRecover.disabled = true;
 
         try {
-            const payload = await registerCurrentDevice(true, '/api/me/devices/recover');
+            const payload = await registerCurrentDevice('/api/me/devices/recover');
             if (!payload?.device_id) {
                 throw new Error('Recovery failed');
             }
@@ -726,7 +677,7 @@
             await loadRecentUploads();
         } catch (error) {
             console.error('Lost-device recovery failed:', error);
-            showErrorBanner(tpl('toast_recovery_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_recovery_failed'));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -742,8 +693,8 @@
         }
 
         try {
-            const payload = await registerCurrentDevice(false);
-            if (payload.needs_enrollment) {
+            await registerCurrentDevice();
+            if (!authIdentityKey) {
                 isDeviceUntrusted = true;
                 setRecoveryActionVisible(true);
                 hidePendingEnrollmentModal();
@@ -820,6 +771,10 @@
         }
 
         const eventType = payload?.type || '';
+        // The same socket carries transfer events for the account menu.
+        if (!eventType.startsWith('device_enrollment_')) {
+            return;
+        }
         if (eventType === 'device_enrollment_created') {
             loadPendingEnrollments();
             return;
@@ -1111,7 +1066,7 @@
             await downloadOwnedFile(fileId, fileName, tunnelId, item);
         } catch (error) {
             console.error('Tunnel download failed:', error);
-            showErrorBanner(error.message || t('toast_tunnel_download_failed'));
+            SendlyToast.fail(error, t('toast_tunnel_download_failed'));
         } finally {
             button.disabled = false;
         }
@@ -1155,9 +1110,9 @@
     async function handleStartTunnel() {
         if (!authDeviceIdentity) {
             try {
-                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
             } catch (error) {
-                showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
+                SendlyToast.fail(error, t('toast_device_identity_failed'));
                 return;
             }
         }
@@ -1177,7 +1132,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to start tunnel');
+            throw SendlyToast.apiError(error, 'Failed to start tunnel');
         }
 
         const payload = await response.json();
@@ -1200,9 +1155,9 @@
     async function handleJoinTunnel() {
         if (!authDeviceIdentity) {
             try {
-                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
+                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
             } catch (error) {
-                showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
+                SendlyToast.fail(error, t('toast_device_identity_failed'));
                 return;
             }
         }
@@ -1227,7 +1182,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to join tunnel');
+            throw SendlyToast.apiError(error, 'Failed to join tunnel');
         }
 
         const payload = await response.json();
@@ -1251,7 +1206,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to confirm tunnel');
+            throw SendlyToast.apiError(error, 'Failed to confirm tunnel');
         }
 
         const payload = await response.json().catch(() => ({}));
@@ -1285,7 +1240,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to end tunnel');
+            throw SendlyToast.apiError(error, 'Failed to end tunnel');
         }
 
         clearTunnelState();
@@ -1357,10 +1312,11 @@
             console.error(error);
             if (isLockedFileError(error)) {
                 markRecentFileLocked(fileId, error.message);
-                showErrorBanner(error.message);
+                SendlyToast.error(t('toast_file_locked'));
                 return;
             }
-            showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
+
+            SendlyToast.fail(error, t('toast_action_failed'));
         }
     }
 
@@ -1520,6 +1476,15 @@
         }
     }
 
+    function lockedFileError() {
+        const error = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
+        error.code = 'FILE_LOCKED';
+        return error;
+    }
+
+    // Returns a file's passphrase: the signed-in owner's (or an accepted
+    // transfer's) copy, opened with this device's identity key, or, for a
+    // quick share guest's upload, the copy wrapped for this page's throwaway key.
     async function getOwnedFilePassphrase(fileId, tunnelId = '') {
         const cached = SecureCrypto.getCachedFileKey(fileId);
         if (cached) {
@@ -1529,159 +1494,64 @@
         if (initialDeviceReady) {
             await initialDeviceReady;
         }
-        if (!authDeviceIdentity) {
+
+        if (tunnelId) {
+            const response = await fetch(`/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`, {
+                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+            });
+            if (!response.ok) {
+                const errorPayload = await response.json().catch(() => ({}));
+                throw SendlyToast.apiError(errorPayload, 'Unable to access decryption key for this file.');
+            }
+            const payload = await response.json();
+            const dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
+                authenticated: false,
+                ephemeralPrivateKey: ephemeralKeyPair?.privateKey
+            });
+            const passphrase = new TextDecoder().decode(dekBytes);
+            SecureCrypto.cacheFileKey(fileId, passphrase);
+            return passphrase;
+        }
+
+        if (!AUTHENTICATED) {
+            throw new Error('A tunnel is required to access this file.');
+        }
+        if (!authIdentityKey) {
             const ready = await ensureDeviceReady();
-            if (!ready && isDeviceUntrusted) {
+            if (!ready) {
                 throw new Error('Approve this device from a trusted device to access your files.');
             }
         }
 
-        let accessUrl = '';
-        if (tunnelId) {
-            accessUrl = `/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`;
-        } else if (AUTHENTICATED) {
-            accessUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
-        } else {
-            throw new Error('A tunnel is required to access this file.');
-        }
-
-        const response = await fetch(accessUrl, {
+        const response = await fetch(`/api/me/files/${encodeURIComponent(fileId)}/access`, {
             headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
         });
+        if (response.status === 404) {
+            // Listed as ours, but there is no key for our identity: it was
+            // wrapped before the account's last recovery or migration.
+            throw lockedFileError();
+        }
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
-            if (tunnelId && AUTHENTICATED && errorPayload.code !== 'TUNNEL_NOT_AVAILABLE') {
-                const fallbackUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
-                const fallbackRes = await fetch(fallbackUrl, {
-                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-                });
-                if (fallbackRes.ok) {
-                    const payload = await fallbackRes.json();
-                    const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
-                    const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
-                    let dekBytes;
-                    if (dekWrapAlg.startsWith('RAW-DEK')) {
-                        dekBytes = wrappedDEK;
-                    } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
-                        if (!AUTHENTICATED) {
-                            if (!ephemeralKeyPair) throw new Error('Ephemeral key not available for guest decryption.');
-                            const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
-                            dekBytes = new Uint8Array(raw);
-                        } else {
-                            dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
-                        }
-                    } else {
-                        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-                        if (!userKeyRaw) {
-                            const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
-                            if (!wrappedUKB64) throw new Error('Unable to access decryption key for this file on this device.');
-                            const wrappedUK = SecureCrypto.fromBase64(wrappedUKB64);
-                            userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-                        }
-                        const nonce = payload.file_key_envelope.dek_wrap_nonce_b64 ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64) : new Uint8Array();
-                        dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
-                    }
-                    const passphrase = new TextDecoder().decode(dekBytes);
-                    SecureCrypto.cacheFileKey(fileId, passphrase);
-                    return passphrase;
-                }
-            }
-            throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
+            throw SendlyToast.apiError(errorPayload, 'Unable to access decryption key for this file.');
         }
 
         const payload = await response.json();
-        const wrappedDEK = SecureCrypto.fromBase64(payload.file_key_envelope.wrapped_dek_b64);
-        const dekWrapAlg = (payload.file_key_envelope.dek_wrap_alg || '').toUpperCase();
+        if (payload.identity_key_version !== authIdentityKey.keyVersion) {
+            throw lockedFileError();
+        }
         let dekBytes;
-
-        if (dekWrapAlg.startsWith('RAW-DEK')) {
-            dekBytes = wrappedDEK;
-        } else if (dekWrapAlg.startsWith('RSA-OAEP')) {
-            if (ephemeralKeyPair?.privateKey) {
-                try {
-                    const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, ephemeralKeyPair.privateKey, wrappedDEK);
-                    dekBytes = new Uint8Array(raw);
-                } catch (error) {
-                    throw new Error('Failed to decrypt file key with ephemeral key.');
-                }
-            } else if (!AUTHENTICATED) {
-                throw new Error('Ephemeral key not available for guest decryption.');
-            } else {
-                try {
-                    dekBytes = await SecureCrypto.unwrapUserKeyForDevice(wrappedDEK, authDeviceIdentity.privateKeyJWK);
-                } catch (error) {
-                    const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                    lockedError.code = 'FILE_LOCKED';
-                    throw lockedError;
-                }
-            }
-        } else {
-            if (!AUTHENTICATED) {
-                throw new Error('Unsupported key envelope for guest decryption.');
-            }
-            let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            if (!userKeyRaw) {
-                const wrappedUKB64 = payload?.user_key_envelope?.wrapped_uk_b64;
-                if (!wrappedUKB64) {
-                    throw new Error('Unable to access decryption key for this file on this device.');
-                }
-
-                const wrappedUK = SecureCrypto.fromBase64(wrappedUKB64);
-                try {
-                    userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                } catch (error) {
-                    const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                    lockedError.code = 'FILE_LOCKED';
-                    throw lockedError;
-                }
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-            }
-
-            const nonce = payload.file_key_envelope.dek_wrap_nonce_b64
-                ? SecureCrypto.fromBase64(payload.file_key_envelope.dek_wrap_nonce_b64)
-                : new Uint8Array();
-            try {
-                dekBytes = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, userKeyRaw);
-            } catch (error) {
-                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                lockedError.code = 'FILE_LOCKED';
-                throw lockedError;
-            }
+        try {
+            dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_access_key_envelope, {
+                authenticated: true,
+                identityPrivateKeyJWK: authIdentityKey.privateKeyJWK
+            });
+        } catch (error) {
+            throw lockedFileError();
         }
         const passphrase = new TextDecoder().decode(dekBytes);
         SecureCrypto.cacheFileKey(fileId, passphrase);
         return passphrase;
-    }
-
-    async function buildTunnelPeerEnvelope(secretBytes) {
-        if (!AUTHENTICATED || !activeTunnel?.id || !secretBytes) {
-            return null;
-        }
-
-        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/peer-wrap-key`, {
-            headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-        });
-
-        if (!response.ok) {
-            const errorPayload = await response.json().catch(() => ({}));
-            if (errorPayload.code === 'PEER_KEY_NOT_REQUIRED') {
-                return null;
-            }
-            throw new Error(errorPayload.error || 'Failed to fetch tunnel peer key material');
-        }
-
-        const payload = await response.json();
-        if (!payload?.public_key_jwk) {
-            return null;
-        }
-
-        const wrappedForPeer = await SecureCrypto.wrapUserKeyForDevice(secretBytes, payload.public_key_jwk);
-        return {
-            peer_wrapped_dek_b64: SecureCrypto.toBase64(wrappedForPeer),
-            peer_dek_wrap_alg: 'RSA-OAEP-2048-v1',
-            peer_dek_wrap_version: 1
-        };
     }
 
     function isLockedFileError(error) {
@@ -1811,14 +1681,14 @@
             try {
                 await handleStartTunnel();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_start'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_start'));
             }
         });
         tunnelJoinBtn?.addEventListener('click', async () => {
             try {
                 await handleJoinTunnel();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_join'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_join'));
             }
         });
         tunnelConfirmBtn?.addEventListener('click', async () => {
@@ -1826,14 +1696,14 @@
                 await handleConfirmTunnel();
                 await refreshTunnelState();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_confirm'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_confirm'));
             }
         });
         tunnelEndBtn?.addEventListener('click', async () => {
             try {
                 await handleEndTunnel();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_end'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_end'));
             }
         });
     }
@@ -1927,7 +1797,7 @@
             updateFinalizeButtonState();
             stageProcessing.classList.add('hidden');
             stagePending.classList.remove('hidden');
-            showErrorBanner(tpl('toast_upload_failed', {msg: uploadError}));
+            SendlyToast.fail(uploadError, t('toast_upload_failed'));
         } else {
             const poll = setInterval(() => {
                 if (uploadComplete) {
@@ -1941,7 +1811,7 @@
                     stagePending.classList.remove('hidden');
                     statusText.textContent = t('status_ready');
                     statusText.style.color = 'var(--accent)';
-                    showErrorBanner(tpl('toast_upload_failed', {msg: uploadError}));
+                    SendlyToast.fail(uploadError, t('toast_upload_failed'));
                 }
             }, 500);
         }
@@ -1997,32 +1867,13 @@
             }
 
             if (AUTHENTICATED) {
-                if (!authUserKeyRaw) {
+                if (!authIdentityKey) {
                     await ensureDeviceReady();
-                    authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
                 }
-                if (!authUserKeyRaw) {
+                if (!authIdentityKey) {
                     throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
                 }
-                if (authUserKeyRaw) {
-                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
-                    finalizeEnvelopePayload = {
-                        wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
-                        dek_wrap_alg: 'AES-GCM-UK-v1',
-                        dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
-                        dek_wrap_version: 1
-                    };
-
-                    if (activeTunnel?.id) {
-                        const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
-                        if (peerEnvelope) {
-                            finalizeEnvelopePayload = {
-                                ...finalizeEnvelopePayload,
-                                ...peerEnvelope
-                            };
-                        }
-                    }
-                }
+                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             }
             totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
             const initResponse = await initUpload(selectedFile.size, totalChunks);
@@ -2064,7 +1915,7 @@
             stageEntry.classList.remove('hidden');
             statusText.textContent = t('status_ready');
             statusText.style.color = 'var(--accent)';
-            showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_upload_failed'));
         }
     }
 
@@ -2123,7 +1974,7 @@
             showPendingUI();
         } catch (error) {
             console.error('Something failed:', error);
-            showErrorBanner(tpl('toast_something_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_something_failed'));
         }
     }
 
@@ -2151,7 +2002,7 @@
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.error || `Failed to upload chunk ${chunkIndex + 1}`);
+                    throw SendlyToast.apiError(error, `Failed to upload chunk ${chunkIndex + 1}`);
                 }
 
                 return;
@@ -2181,7 +2032,7 @@
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to initialize upload');
+            throw SendlyToast.apiError(error, 'Failed to initialize upload');
         }
 
         return response.json();
@@ -2204,7 +2055,7 @@
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to complete upload');
+            throw SendlyToast.apiError(error, 'Failed to complete upload');
         }
 
         updateProgress(100, t('app_yippe'), t('status_complete'));
@@ -2247,17 +2098,6 @@
             };
             if (activeTunnel?.id) {
                 finalizePayload.tunnel_id = activeTunnel.id;
-
-                if (AUTHENTICATED && generatedPassword && activeTunnel?.peer_cns_user_id && activeTunnel.peer_cns_user_id !== CNS_USER_ID) {
-                    if (!finalizePayload.peer_wrapped_dek_b64) {
-                        const dekBytes = new TextEncoder().encode(generatedPassword);
-                        const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
-                        if (!peerEnvelope) {
-                            throw new Error('Cross-account tunnel upload requires a peer key envelope. Peer may not be ready yet.');
-                        }
-                        Object.assign(finalizePayload, peerEnvelope);
-                    }
-                }
             } else {
                 finalizePayload.duration = selectedDuration();
             }
@@ -2273,7 +2113,7 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to finalize upload');
+                throw SendlyToast.apiError(error, 'Failed to finalize upload');
             }
 
             const payload = await response.json();
@@ -2289,7 +2129,7 @@
             stagePending.classList.remove('hidden');
             statusText.textContent = t('status_ready');
             statusText.style.color = 'var(--accent)';
-            showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_finalize_failed'));
         }
     }
 
@@ -2339,42 +2179,7 @@
     }
 
     function showNotification(message, type = 'error') {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     function showErrorBanner(message) {
@@ -2391,7 +2196,6 @@
         showInfoBanner(message);
     }
 
-    function hideErrorBanner() {}
 
     function updateProgress(percent, sub, main) {
         const boundedPercent = Math.floor(Math.min(100, Math.max(0, percent)));
@@ -2538,7 +2342,7 @@
     }
 
     function showToast(message) {
-        showNotification(message, 'info');
+        SendlyToast.success(message);
     }
 
     function resetUpload() {

@@ -88,7 +88,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 	// Build account URL from CNS Auth base URL
 	accountURL := ""
 	if h.cfg.CNSAuthURL != "" {
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/")
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,
@@ -140,19 +140,20 @@ func (h *PageHandler) ToS(c *gin.Context) {
 	}
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
 	h.render(c, "tos.html", gin.H{
-		"title":         translations["title_tos"],
-		"description":   translations["desc_tos"],
-		"baseURL":       h.cfg.BaseURL,
-		"authenticated": authenticated,
-		"authLoginURL":  authLoginURL,
-		"username":      username,
-		"userAvatar":    userAvatar,
-		"accountURL":    accountURL,
+		"title":                 translations["title_tos"],
+		"description":           translations["desc_tos"],
+		"baseURL":               h.cfg.BaseURL,
+		"authenticated":         authenticated,
+		"authLoginURL":          authLoginURL,
+		"username":              username,
+		"userAvatar":            userAvatar,
+		"accountURL":            accountURL,
+		"autoDeleteReportCount": h.cfg.AutoDeleteReportCount,
 	})
 }
 
@@ -170,7 +171,7 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -200,7 +201,7 @@ func (h *PageHandler) LimitsPage(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -230,7 +231,7 @@ func (h *PageHandler) DataEncryption(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -260,7 +261,7 @@ func (h *PageHandler) HelpPage(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
@@ -291,7 +292,7 @@ func (h *PageHandler) QuickShare(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,
@@ -344,7 +345,7 @@ func (h *PageHandler) Link(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	configData := map[string]interface{}{
 		"baseURL":          h.cfg.BaseURL,
@@ -397,7 +398,7 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 	authLoginURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
-		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
 	}
 	configData := map[string]interface{}{
 		"baseURL":       h.cfg.BaseURL,
@@ -503,4 +504,45 @@ func userIDOrZero(user *middleware.CNSUser) int {
 		return 0
 	}
 	return user.ID
+}
+
+// Transfers renders the received-transfers page. It is only meaningful for a
+// signed-in user, so anonymous visitors are sent to log in first.
+func (h *PageHandler) Transfers(c *gin.Context) {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		if h.cfg.CNSAuthURL != "" {
+			c.Redirect(http.StatusFound, "/auth/login")
+		} else {
+			c.Redirect(http.StatusFound, "/")
+		}
+		return
+	}
+	setCSRFTokenCookie(c)
+	accountURL := strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	configJSON, err := json.Marshal(map[string]interface{}{
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": true,
+		"cnsUserId":     user.ID,
+		"cnsUsername":   user.Username,
+		"tosVersion":    h.cfg.TOSVersion,
+		"t":             translations,
+	})
+	if err != nil {
+		configJSON = []byte("{}")
+	}
+	h.render(c, "transfers.html", gin.H{
+		"title":         translations["title_transfers"],
+		"description":   translations["desc_transfers"],
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": true,
+		"authLoginURL":  "/auth/login",
+		"username":      user.Username,
+		"userAvatar":    user.Avatar,
+		"accountURL":    accountURL,
+		"noindex":       true,
+		"configJSON":    template.JS(string(configJSON)),
+	})
 }

@@ -73,6 +73,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
     <script src="/static/js/mobile-menu.js" defer></script>
+    <script src="/static/js/toast.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Preconnect to external resources -->
@@ -97,6 +98,17 @@
 </head>
 <body class="page-quickshare">
 
+    <div id="start-confirm" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="start-confirm-title" aria-describedby="start-confirm-desc">
+            <h2 id="start-confirm-title" class="qs-confirm-title">{{.t.quickshare_start_waiting_title}}</h2>
+            <p id="start-confirm-desc" class="tos-modal-description qs-confirm-desc"></p>
+            <div class="tos-modal-actions">
+                <button id="start-confirm-cancel" class="btn btn-secondary btn-large">{{.t.action_modal_cancel}}</button>
+                <button id="start-confirm-ok" class="btn btn-accent btn-large">{{.t.quickshare_start_anyway}}</button>
+            </div>
+        </div>
+    </div>
+
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
             <h2 id="tos-modal-title">{{.t.tos_accept_title}}</h2>
@@ -117,11 +129,6 @@
         </button>
     </div>
 
-    <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
-        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
-        <span id="notification-text" class="notification-text"></span>
-    </div>
-
     <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
     <div class="header-wrapper">
         <header class="header">
@@ -134,96 +141,12 @@
                     <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
-            {{if .authenticated}}
-            <!-- Account Menu Trigger -->
-            <button type="button"
-                    class="account-menu-trigger"
-                    id="account-menu-trigger"
-                    aria-haspopup="true"
-                    aria-expanded="false"
-                    aria-label="{{.t.header_account_menu_label}}"
-                    style="background:#333;border:none;position:relative;display:inline-flex;align-items:center;gap:8px;padding:8px 12px 8px 8px;border-radius:34px;cursor:pointer;color:#fff;">
-                <!-- Avatar -->
-                <span class="account-menu-avatar" data-username="{{.username}}">
-                    <img src="{{.userAvatar}}" alt="" class="account-menu-avatar-img" width="24" height="24" style="border-radius:50%;object-fit:cover;display:block;" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
-                </span>
-                <!-- Username with truncation -->
-                <span class="account-menu-username" style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;font-weight:400;line-height:1.4;" title="{{.username}}">{{.username}}</span>
-                <!-- Chevron -->
-                <i data-lucide="chevron-down" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;"></i>
-            </button>
-
-            <!-- Account Menu Dropdown -->
-            <div class="account-menu" role="menu" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:0 0 12px 12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;overflow:hidden;z-index:1000;">
-                <div style="border-bottom:1px solid #e0e0e0;">
-                    <a href="{{.accountURL}}" role="menuitem" class="account-menu-item" style="display:flex;align-items:center;gap:10px;padding:12px 16px;color:#1a1a1a;text-decoration:none;font-size:14px;transition:background 0.15s;">
-                        <i data-lucide="user" aria-hidden="true" style="width:18px;height:18px;color:#666;flex-shrink:0;"></i>
-                        <span>{{.t.header_your_account}}</span>
-                    </a>
-                    <a href="/uploaded" role="menuitem" class="account-menu-item" style="display:flex;align-items:center;gap:10px;padding:12px 16px;color:#1a1a1a;text-decoration:none;font-size:14px;transition:background 0.15s;">
-                        <i data-lucide="history" aria-hidden="true" style="width:18px;height:18px;color:#666;flex-shrink:0;"></i>
-                        <span>{{.t.header_recent_files}}</span>
-                    </a>
-                </div>
-                <div>
-                    <a href="/auth/logout" role="menuitem" class="account-menu-item" style="display:flex;align-items:center;gap:10px;padding:12px 16px;color:#1a1a1a;text-decoration:none;font-size:14px;transition:background 0.15s;">
-                        <i data-lucide="log-out" aria-hidden="true" style="width:18px;height:18px;color:#666;flex-shrink:0;"></i>
-                        <span>{{.t.header_logout}}</span>
-                    </a>
-                </div>
-            </div>
-            {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
-            {{end}}
-            <button type="button" class="mobile-menu-btn" id="mobile-menu-open" aria-controls="mobile-menu" aria-expanded="false" aria-label="{{.t.header_menu_label}}">
-                {{if .authenticated}}
-                <img src="{{.userAvatar}}" alt="" class="mobile-menu-btn-avatar" width="32" height="32" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
-                {{else}}
-                <i data-lucide="menu" aria-hidden="true"></i>
-                {{end}}
-            </button>
+            {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
         </header>
     </div>
 
-    <div class="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="{{.t.header_menu_label}}">
-        <div class="mobile-menu-top">
-            <a href="/" class="mobile-menu-logo">{{.t.header_logo}}</a>
-            <button type="button" class="mobile-menu-btn" data-mobile-menu-close aria-label="{{.t.recent_files_close}}"><i data-lucide="x" aria-hidden="true"></i></button>
-        </div>
-        {{if .authenticated}}
-        <a href="{{.accountURL}}" class="mobile-menu-user">
-            <img src="{{.userAvatar}}" alt="" class="mobile-menu-user-avatar" width="44" height="44" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
-            <span class="mobile-menu-user-text">
-                <span class="mobile-menu-user-name">{{.username}}</span>
-                <span class="mobile-menu-user-sub">{{.t.header_your_account}}</span>
-            </span>
-            <i data-lucide="chevron-right" aria-hidden="true"></i>
-        </a>
-        {{end}}
-        <nav class="mobile-menu-nav">
-            <a href="/limits">{{.t.header_pricing}}</a>
-            <a href="/data-encryption">{{.t.header_security}}</a>
-            <a href="/help">{{.t.header_faq}}</a>
-        </nav>
-        <div class="mobile-menu-list">
-            {{if .authenticated}}
-            <a href="/uploaded" class="mobile-menu-row"><i data-lucide="history" aria-hidden="true"></i><span>{{.t.header_recent_files}}</span></a>
-            {{end}}
-            <a href="?lang={{.otherLocale}}" class="mobile-menu-row"><i data-lucide="languages" aria-hidden="true"></i><span>{{.otherLocaleLabel}}</span></a>
-            {{if .authenticated}}
-            <a href="/auth/logout" class="mobile-menu-row"><i data-lucide="log-out" aria-hidden="true"></i><span>{{.t.header_logout}}</span></a>
-            {{end}}
-        </div>
-        <div class="mobile-menu-bottom">
-            {{if not .authenticated}}
-            <a href="{{.authLoginURL}}" class="mobile-menu-login">{{.t.header_login}}</a>
-            {{end}}
-            <div class="mobile-menu-legal">
-                <a href="/tos">{{.t.footer_tos}}</a>
-                <a href="/privacy">{{.t.footer_privacy}}</a>
-            </div>
-        </div>
-    </div>
+    {{template "mobile_menu" .}}
 
     <div class="main-content">
 
@@ -238,30 +161,36 @@
         </div>
 
         <div class="create-view" id="createView">
-            <h1>{{.t.quickshare_invite_title}}</h1>
-            <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
+            <div class="qs-main">
+                <h1>{{.t.quickshare_invite_title}}</h1>
+                <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
 
-            <div class="code-squares" id="codeSquares">
-                <div class="code-square" id="code0">–</div>
-                <div class="code-square" id="code1">–</div>
-                <div class="code-square" id="code2">–</div>
-                <div class="code-square" id="code3">–</div>
-            </div>
+                <div class="code-squares" id="codeSquares">
+                    <div class="code-square" id="code0">–</div>
+                    <div class="code-square" id="code1">–</div>
+                    <div class="code-square" id="code2">–</div>
+                    <div class="code-square" id="code3">–</div>
+                </div>
 
-            <h2 class="people-heading">{{.t.quickshare_people}}</h2>
+                <h2 class="people-heading">{{.t.quickshare_people}}</h2>
 
-            <div class="people-row" id="peopleRow">
-                <div class="person">
-                    <div class="person-circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
-                            <circle cx="12" cy="7" r="4"/>
-                        </svg>
+                <div class="people-row" id="peopleRow">
+                    <div class="person is-self" aria-label="{{.t.quickshare_you}}">
+                        <div class="person-circle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <span class="person-name"></span>
                     </div>
-                    <span class="person-name">{{.t.quickshare_you}}</span>
                 </div>
             </div>
+
+            <aside class="qs-side">
+                <div class="approval-requests hidden" id="approvalRequests"></div>
+            </aside>
         </div>
 
         <div class="bottom-bar" id="bottomBar" style="display:none;">
@@ -270,6 +199,7 @@
 
         <div class="session-view" id="sessionView">
             <div class="session-left">
+                <div class="approval-requests hidden" id="sessionApprovalRequests"></div>
                 <h2>{{.t.quickshare_session_title}}</h2>
                 <div class="file-list" id="fileList"></div>
                 <div id="fileListEmpty" class="recent-state">{{.t.quickshare_no_files}}</div>
@@ -312,30 +242,49 @@
         </div>
 
         <div class="queue-view" id="queueView">
-            <h1>{{.t.quickshare_invite_title}}</h1>
-            <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
+            <div class="qs-main">
+                <h1>{{.t.quickshare_invite_title}}</h1>
+                <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
 
-            <div class="code-squares" id="queueCodeSquares">
-                <div class="code-square" id="queueCode0">–</div>
-                <div class="code-square" id="queueCode1">–</div>
-                <div class="code-square" id="queueCode2">–</div>
-                <div class="code-square" id="queueCode3">–</div>
-            </div>
+                <div class="code-squares" id="queueCodeSquares">
+                    <div class="code-square" id="queueCode0">–</div>
+                    <div class="code-square" id="queueCode1">–</div>
+                    <div class="code-square" id="queueCode2">–</div>
+                    <div class="code-square" id="queueCode3">–</div>
+                </div>
 
-            <h2 class="people-heading">{{.t.quickshare_people}}</h2>
+                <h2 class="people-heading">{{.t.quickshare_people}}</h2>
 
-            <div class="people-row" id="queue{{.t.quickshare_people}}Row">
-                <div class="person">
-                    <div class="person-circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
-                            <circle cx="12" cy="7" r="4"/>
-                        </svg>
+                <div class="people-row" id="queuePeopleRow">
+                    <div class="person is-self" aria-label="{{.t.quickshare_you}}">
+                        <div class="person-circle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <span class="person-name"></span>
                     </div>
-                    <span class="person-name">{{.t.quickshare_you}}</span>
                 </div>
             </div>
+
+            <aside class="qs-side">
+                <div class="qs-status hidden" id="approvalStatus" role="status" aria-live="polite">
+                    <div class="qs-status-body">
+                        <p class="qs-status-title" id="qsStatusTitle"></p>
+                        <p class="qs-status-text" id="qsStatusText"></p>
+                        <code class="qs-status-code hidden" id="qsStatusCode"></code>
+                    </div>
+                </div>
+            </aside>
+        </div>
+
+        <div class="declined-view" id="declinedView">
+            <div class="declined-icon" aria-hidden="true"><i data-lucide="user-x"></i></div>
+            <h1>{{.t.quickshare_declined_title}}</h1>
+            <p class="subtitle">{{.t.quickshare_declined_desc}}</p>
+            <a href="/" class="blue-btn declined-home">{{.t.quickshare_declined_home}}</a>
         </div>
 
     </div>
@@ -360,142 +309,10 @@
             }
         });
 
-        // Account Menu Logic
-        (function() {
-            var trigger = document.getElementById('account-menu-trigger');
-            var menu = trigger ? trigger.nextElementSibling : null;
-            if (!trigger || !menu) return;
-
-            var isOpen = false;
-            var focusableItems = menu.querySelectorAll('[role="menuitem"]');
-            var focusIndex = -1;
-
-            function openMenu() {
-                if (isOpen) return;
-                isOpen = true;
-                menu.style.display = 'block';
-                trigger.setAttribute('aria-expanded', 'true');
-                trigger.focus();
-                focusIndex = -1;
-            }
-
-            function closeMenu() {
-                if (!isOpen) return;
-                isOpen = false;
-                menu.style.display = 'none';
-                trigger.setAttribute('aria-expanded', 'false');
-                focusIndex = -1;
-            }
-
-            function toggleMenu() {
-                if (isOpen) closeMenu(); else openMenu();
-            }
-
-            function focusItem(index) {
-                if (index < 0) index = focusableItems.length - 1;
-                if (index >= focusableItems.length) index = 0;
-                focusIndex = index;
-                focusableItems[focusIndex].focus();
-            }
-
-            trigger.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMenu();
-            });
-
-            trigger.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closeMenu();
-                } else if (e.key === 'ArrowDown' && !isOpen) {
-                    e.preventDefault();
-                    openMenu();
-                    focusItem(0);
-                } else if (e.key === 'ArrowDown' && isOpen) {
-                    e.preventDefault();
-                    focusItem(focusIndex + 1);
-                } else if (e.key === 'ArrowUp' && isOpen) {
-                    e.preventDefault();
-                    focusItem(focusIndex - 1);
-                } else if (e.key === 'Tab' && isOpen) {
-                    // Let focus move naturally, but close if leaving menu
-                    setTimeout(function() {
-                        if (!menu.contains(document.activeElement) && document.activeElement !== trigger) {
-                            closeMenu();
-                        }
-                    }, 0);
-                }
-            });
-
-            focusableItems.forEach(function(item, i) {
-                item.addEventListener('keydown', function(e) {
-                    if (e.key === 'Escape') {
-                        closeMenu();
-                        trigger.focus();
-                    } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        focusItem(i + 1);
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        focusItem(i - 1);
-                    }
-                });
-            });
-
-            // Close on click outside
-            document.addEventListener('click', function(e) {
-                if (isOpen && !trigger.contains(e.target) && !menu.contains(e.target)) {
-                    closeMenu();
-                }
-            });
-
-            // Ensure Lucide icons in menu are initialized when menu opens (menu is server-rendered,
-            // so global DOMContentLoaded already handles it, but this is a safety net for
-            // any edge case where icons weren't initialized yet)
-            var iconsInitialized = false;
-            var originalOpenMenu = openMenu;
-            openMenu = function() {
-                originalOpenMenu();
-                if (!iconsInitialized && window.lucide && lucide.createIcons) {
-                    lucide.createIcons();
-                    iconsInitialized = true;
-                }
-            };
-        })();
-
-        // Build initials avatar fallback
-        function buildInitialsAvatar(username) {
-            if (!username) username = '?';
-            var initials = username.trim().split(/\s+/).map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
-            // Deterministic color from username - WCAG AA compliant (≥4.5:1 against white)
-            var hash = 0;
-            for (var i = 0; i < username.length; i++) {
-                hash = username.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            var palette = [
-                '#004AAD', '#006B3F', '#8B0000', '#6B3A00', '#4B0082',
-                '#800040', '#005A7A', '#2E6B2E', '#6B4000', '#4A006B'
-            ];
-            var color = palette[Math.abs(hash) % palette.length];
-            var span = document.createElement('span');
-            span.textContent = initials;
-            span.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:600;color:#fff;background:' + color + ';';
-            return span;
-        }
-
-        // Hydrate initials placeholders on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.account-menu-avatar-placeholder').forEach(function(el) {
-                var username = el.closest('[data-username]')?.dataset.username || '';
-                if (username) {
-                    var avatar = buildInitialsAvatar(username);
-                    el.replaceWith(avatar);
-                }
-            });
-        });
-
         (function(){var ua=navigator.userAgent,o=false;if(/MSIE|Trident/.test(ua))o=true;else if(!/Edg/.test(ua)&&/Chrome\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<80)o=true;else if(/Firefox\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<74)o=true;else if(/Version\/(\d+\.?\d*).*Safari/.test(ua)&&parseFloat(RegExp.$1)<13.1)o=true;if(o)document.getElementById('browser-old-nudge').classList.remove('hidden')})();
     </script>
     <script src="/static/js/crypto.js"></script>
+    <script src="/static/js/identity-migration.js"></script>
     <script src="/static/js/quick-share.js"></script>
 </body>
 </html>

@@ -62,14 +62,14 @@
     }
 
     function hasAcceptedCurrentTOS() {
-        return getCookieValue('sendly_tos_accepted') === (window.CONFIG?.tosVersion || '2026-04-05');
+        return getCookieValue('sendly_tos_accepted') === (window.CONFIG?.tosVersion || '2026-09-25');
     }
 
     function setupTOSGate() {
         if (!tosOverlay) return;
         if (hasAcceptedCurrentTOS()) { tosOverlay.classList.add('hidden'); return; }
         tosOverlay.classList.remove('hidden');
-        tosAcceptBtn?.addEventListener('click', () => { setCookie('sendly_tos_accepted', window.CONFIG?.tosVersion || '2026-04-05', 31536000); tosOverlay.classList.add('hidden'); });
+        tosAcceptBtn?.addEventListener('click', () => { setCookie('sendly_tos_accepted', window.CONFIG?.tosVersion || '2026-09-25', 31536000); tosOverlay.classList.add('hidden'); });
         tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns-studios.com'; });
     }
 
@@ -241,7 +241,7 @@
         });
         if (!firstResponse.ok) {
             const error = await firstResponse.json().catch(() => ({}));
-            throw new Error(error.error || t('toast_download_failed'));
+            throw SendlyToast.apiError(error, t('toast_download_failed'));
         }
 
         const contentRange = firstResponse.headers.get('Content-Range') || '';
@@ -307,7 +307,7 @@
                 });
                 if (!response.ok && response.status !== 206) {
                     const error = await response.json().catch(() => ({}));
-                    throw new Error(error.error || `Download chunk ${start} failed`);
+                    throw SendlyToast.apiError(error, `Download chunk ${start} failed`);
                 }
                 const data = new Uint8Array(await response.arrayBuffer());
                 if (data.length !== end - start + 1) throw new Error(`Incomplete download chunk ${start}`);
@@ -351,9 +351,9 @@
 
             if (response.ok) {
                 reportModal.classList.add('hidden');
-                showNotification(t('toast_report_submitted'), 'info');
+                SendlyToast.success(t('toast_report_submitted'));
             } else {
-                showNotification(result.error || t('toast_report_failed'), 'error');
+                SendlyToast.fail(SendlyToast.apiError(result), t('toast_report_failed'));
             }
         } catch (error) {
             console.error('Report failed:', error);
@@ -441,7 +441,6 @@
         }
     }
 
-    let notificationTimer = null;
 
     function showFileError(icon, title, subtitle) {
         loadingSection.classList.add('hidden');
@@ -486,47 +485,12 @@
                 showFileError('file-question-mark', t('error_file_expired_title'), t('error_file_expired_desc'));
                 break;
             default:
-                showNotification(error.error || t('toast_unexpected_error'), 'error');
+                SendlyToast.fail(SendlyToast.apiError(error), t('toast_unexpected_error'));
         }
     }
 
     function showNotification(message, type) {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     async function init() {

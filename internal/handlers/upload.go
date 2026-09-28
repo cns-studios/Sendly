@@ -141,11 +141,9 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 		}
 	}
 
-	if req.WrappedDEKB64 != "" {
-		if opts == nil {
-			opts = &services.FinalizeUploadOptions{}
-		}
-
+	if user == nil && req.WrappedDEKB64 != "" {
+		// A guest's quick share upload, wrapped for its throwaway participant key.
+		opts = &services.FinalizeUploadOptions{}
 		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
 		if decodeErr != nil {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -155,6 +153,7 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			})
 			return
 		}
+
 		opts.WrappedDEK = wrappedDEK
 		opts.DEKWrapAlg = req.DEKWrapAlg
 		opts.DEKWrapVersion = req.DEKWrapVersion
@@ -172,18 +171,15 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			opts.DEKWrapNonce = nonce
 		}
 	}
+	if user != nil {
+		if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
+			return
+		}
+	}
 	if req.TunnelID != "" {
 		if opts == nil {
 			opts = &services.FinalizeUploadOptions{}
-		}
-		if user != nil {
-			if req.WrappedDEKB64 == "" {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{
-					Error: "Trusted device approval is required before authenticated uploads can be finalized",
-					Code:  "WRAPPED_DEK_REQUIRED",
-				})
-				return
-			}
 		}
 
 		tunnel, err := h.db.GetTunnelByID(c.Request.Context(), req.TunnelID)
@@ -199,28 +195,19 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		if user != nil {
-			if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
-				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
-				return
-			}
-
-			if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
-				peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
-					req.SessionID,
-					peerUserID,
-					peerDeviceID,
-					req.PeerWrappedDEKB64,
-					req.PeerDEKWrapAlg,
-					req.PeerDEKWrapNonceB64,
-					req.PeerDEKWrapVersion,
-				)
-				if peerErr != nil {
-					c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Cross-account tunnel upload requires a peer key envelope", Code: "PEER_WRAPPED_DEK_REQUIRED", Details: peerErr.Error()})
-					return
-				}
-				opts.RecipientEnvelopes = append(opts.RecipientEnvelopes, peerEnvelope)
-			}
+		// Files may only be added by the host or participants it approved.
+		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
+		if authErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+			return
+		}
+		if caller == nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+		if !caller.approved() {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
+			return
 		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt
@@ -261,6 +248,30 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func applyIdentityFinalizeEnvelope(req *models.UploadFinalizeRequest, opts *services.FinalizeUploadOptions) error {
+	if req.IdentityWrappedDEKB64 == "" {
+		return nil
+	}
+	if opts == nil {
+		return fmt.Errorf("identity envelope requires an authenticated owner")
+	}
+	wrapped, err := base64.StdEncoding.DecodeString(req.IdentityWrappedDEKB64)
+	if err != nil {
+		return err
+	}
+	opts.IdentityWrappedDEK = wrapped
+	opts.IdentityDEKWrapAlg = req.IdentityDEKWrapAlg
+	opts.IdentityDEKWrapVersion = req.IdentityDEKWrapVersion
+	opts.IdentityKeyVersion = req.IdentityKeyVersion
+	if req.IdentityDEKWrapNonceB64 != "" {
+		opts.IdentityDEKWrapNonce, err = base64.StdEncoding.DecodeString(req.IdentityDEKWrapNonceB64)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *UploadHandler) Chunk(c *gin.Context) {

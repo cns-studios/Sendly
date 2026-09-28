@@ -41,17 +41,6 @@ type FileKeyEnvelope struct {
 	CreatedAt      time.Time `db:"created_at" json:"created_at"`
 }
 
-type FileRecipientKeyEnvelope struct {
-	FileID            string    `db:"file_id" json:"file_id"`
-	RecipientCNSUserID int64    `db:"recipient_cns_user_id" json:"recipient_cns_user_id"`
-	RecipientDeviceID string    `db:"recipient_device_id" json:"recipient_device_id"`
-	WrappedDEK        []byte    `db:"wrapped_dek" json:"-"`
-	DEKWrapAlg        string    `db:"dek_wrap_alg" json:"dek_wrap_alg"`
-	DEKWrapNonce      []byte    `db:"dek_wrap_nonce" json:"-"`
-	DEKWrapVersion    int       `db:"dek_wrap_version" json:"dek_wrap_version"`
-	CreatedAt         time.Time `db:"created_at" json:"created_at"`
-}
-
 type UserDevice struct {
 	ID           string          `db:"id" json:"id"`
 	CNSUserID    int64           `db:"cns_user_id" json:"cns_user_id"`
@@ -73,6 +62,70 @@ type UserKeyEnvelope struct {
 	UKWrapMeta     json.RawMessage `db:"uk_wrap_meta" json:"uk_wrap_meta"`
 	KeyVersion     int             `db:"key_version" json:"key_version"`
 	CreatedAt      time.Time       `db:"created_at" json:"created_at"`
+}
+
+type UserIdentityKey struct {
+	CNSUserID    int64           `db:"cns_user_id" json:"cns_user_id"`
+	KeyVersion   int             `db:"key_version" json:"key_version"`
+	PublicKeyJWK json.RawMessage `db:"public_key_jwk" json:"public_key_jwk"`
+	KeyAlgorithm string          `db:"key_algorithm" json:"key_algorithm"`
+	Status       string          `db:"status" json:"status"`
+	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
+	ActivatedAt  sql.NullTime    `db:"activated_at" json:"-"`
+	RetiredAt    sql.NullTime    `db:"retired_at" json:"-"`
+}
+
+type UserIdentityKeyDeviceEnvelope struct {
+	ID                 string          `db:"id" json:"id"`
+	CNSUserID          int64           `db:"cns_user_id" json:"cns_user_id"`
+	DeviceID           string          `db:"device_id" json:"device_id"`
+	IdentityKeyVersion int             `db:"identity_key_version" json:"identity_key_version"`
+	WrappedPrivateKey  []byte          `db:"wrapped_private_key" json:"-"`
+	WrapAlg            string          `db:"wrap_alg" json:"wrap_alg"`
+	WrapMeta           json.RawMessage `db:"wrap_meta" json:"wrap_meta"`
+	CreatedAt          time.Time       `db:"created_at" json:"created_at"`
+}
+
+type FileAccessKeyEnvelope struct {
+	FileID              string         `db:"file_id" json:"file_id"`
+	RecipientCNSUserID  int64          `db:"recipient_cns_user_id" json:"recipient_cns_user_id"`
+	WrappedDEK          []byte         `db:"wrapped_dek" json:"-"`
+	DEKWrapAlg          string         `db:"dek_wrap_alg" json:"dek_wrap_alg"`
+	DEKWrapNonce        []byte         `db:"dek_wrap_nonce" json:"-"`
+	DEKWrapVersion      int            `db:"dek_wrap_version" json:"dek_wrap_version"`
+	RecipientKeyVersion int            `db:"recipient_key_version" json:"recipient_key_version"`
+	AccessKind          string         `db:"access_kind" json:"access_kind"`
+	SourceTunnelID      sql.NullString `db:"source_tunnel_id" json:"source_tunnel_id"`
+	GrantedAt           time.Time      `db:"granted_at" json:"granted_at"`
+	CreatedAt           time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time      `db:"updated_at" json:"updated_at"`
+}
+
+// RewrappedFileKey is a file key a client re-wrapped for the account's active
+// identity key, from an older one (rescue) or the legacy user key (migration).
+type RewrappedFileKey struct {
+	FileID                string `json:"file_id"`
+	IdentityWrappedDEKB64 string `json:"identity_wrapped_dek_b64"`
+	IdentityDEKWrapAlg    string `json:"identity_dek_wrap_alg"`
+}
+
+type LockedFileKeyItem struct {
+	FileID        string `json:"file_id"`
+	WrappedDEKB64 string `json:"wrapped_dek_b64"`
+	DEKWrapAlg    string `json:"dek_wrap_alg"`
+}
+
+type LockedFileKeysResponse struct {
+	Items     []LockedFileKeyItem `json:"items"`
+	Remaining int                 `json:"remaining"`
+}
+
+// RescueFileKeysRequest carries file keys re-wrapped from an older identity
+// key version (FromVersion) for the account's active one.
+type RescueFileKeysRequest struct {
+	FromVersion int                `json:"from_version" binding:"required"`
+	ToVersion   int                `json:"to_version" binding:"required"`
+	Items       []RewrappedFileKey `json:"items" binding:"required"`
 }
 
 type DeviceEnrollment struct {
@@ -121,6 +174,10 @@ type Report struct {
 	FileID     string    `db:"file_id" json:"file_id"`
 	ReporterIP string    `db:"reporter_ip" json:"reporter_ip"`
 	CreatedAt  time.Time `db:"created_at" json:"created_at"`
+	// ReporterCNSUserID is set when a signed-in user filed the report.
+	ReporterCNSUserID sql.NullInt64 `db:"reporter_cns_user_id" json:"-"`
+	// TransferID is set when the report was filed from a received transfer.
+	TransferID sql.NullString `db:"transfer_id" json:"-"`
 }
 
 type UploadSession struct {
@@ -166,18 +223,23 @@ type UploadCompleteResponse struct {
 }
 
 type UploadFinalizeRequest struct {
-	SessionID       string `json:"session_id" binding:"required"`
-	Duration        string `json:"duration"`
-	TunnelID        string `json:"tunnel_id"`
-	DeviceID        string `json:"device_id"`
+	SessionID string `json:"session_id" binding:"required"`
+	Duration  string `json:"duration"`
+	TunnelID  string `json:"tunnel_id"`
+	DeviceID  string `json:"device_id"`
+	// WrappedDEK* is only accepted from guests, for quick share uploads
+	// wrapped to their throwaway participant key.
 	WrappedDEKB64   string `json:"wrapped_dek_b64"`
-	PeerWrappedDEKB64   string `json:"peer_wrapped_dek_b64"`
 	DEKWrapAlg      string `json:"dek_wrap_alg"`
 	DEKWrapNonceB64 string `json:"dek_wrap_nonce_b64"`
 	DEKWrapVersion  int    `json:"dek_wrap_version"`
-	PeerDEKWrapAlg      string `json:"peer_dek_wrap_alg"`
-	PeerDEKWrapNonceB64 string `json:"peer_dek_wrap_nonce_b64"`
-	PeerDEKWrapVersion  int    `json:"peer_dek_wrap_version"`
+	// Identity* is the uploader's own copy of the file key, wrapped with
+	// their identity public key; required for signed-in uploads.
+	IdentityWrappedDEKB64   string `json:"identity_wrapped_dek_b64"`
+	IdentityDEKWrapAlg      string `json:"identity_dek_wrap_alg"`
+	IdentityDEKWrapNonceB64 string `json:"identity_dek_wrap_nonce_b64"`
+	IdentityDEKWrapVersion  int    `json:"identity_dek_wrap_version"`
+	IdentityKeyVersion      int    `json:"identity_key_version"`
 }
 
 type UploadFinalizeResponse struct {
@@ -195,10 +257,38 @@ type RecentUploadsResponse struct {
 	Query      string              `json:"query,omitempty"`
 }
 
+// FileAccessResponse hands a signed-in user their identity-wrapped copy of a
+// file key: the uploader's own ('owner') or an accepted transfer ('share').
 type FileAccessResponse struct {
+	File                  FileMetadata            `json:"file"`
+	FileAccessKeyEnvelope FileKeyEnvelopeResponse `json:"file_access_key_envelope"`
+	// IdentityKeyVersion is the identity key the envelope is wrapped for; a
+	// device holding another version (e.g. after recovery) can't open it.
+	IdentityKeyVersion int    `json:"identity_key_version"`
+	AccessKind         string `json:"access_kind"`
+}
+
+// TunnelFileAccessResponse hands a quick share participant the envelope a
+// guest uploader wrapped for its throwaway key.
+type TunnelFileAccessResponse struct {
 	File            FileMetadata            `json:"file"`
 	FileKeyEnvelope FileKeyEnvelopeResponse `json:"file_key_envelope"`
-	UserKeyEnvelope UserKeyEnvelopeResponse `json:"user_key_envelope"`
+}
+
+type ShareFileRequest struct {
+	RecipientUserID     int64  `json:"recipient_user_id" binding:"required"`
+	WrappedDEK          string `json:"wrapped_dek" binding:"required"`
+	DEKWrapAlg          string `json:"dek_wrap_alg" binding:"required"`
+	DEKWrapNonce        string `json:"dek_wrap_nonce"`
+	RecipientKeyVersion int    `json:"recipient_key_version" binding:"required"`
+}
+
+type SharedFilesResponse struct {
+	Items      []OwnedFileListItem `json:"items"`
+	Page       int                 `json:"page"`
+	PerPage    int                 `json:"per_page"`
+	Total      int                 `json:"total"`
+	TotalPages int                 `json:"total_pages"`
 }
 
 type FileKeyEnvelopeResponse struct {
@@ -208,28 +298,55 @@ type FileKeyEnvelopeResponse struct {
 	DEKWrapVersion  int    `json:"dek_wrap_version"`
 }
 
-type UserKeyEnvelopeResponse struct {
-	WrappedUKB64 string          `json:"wrapped_uk_b64"`
-	UKWrapAlg    string          `json:"uk_wrap_alg"`
-	UKWrapMeta   json.RawMessage `json:"uk_wrap_meta"`
-	KeyVersion   int             `json:"key_version"`
+type UserIdentityKeyDeviceEnvelopeResponse struct {
+	WrappedPrivateKeyB64 string          `json:"wrapped_private_key_b64"`
+	WrapAlg              string          `json:"wrap_alg"`
+	WrapMeta             json.RawMessage `json:"wrap_meta"`
+	IdentityKeyVersion   int             `json:"identity_key_version"`
 }
 
 type DeviceRegisterRequest struct {
-	DeviceID          string          `json:"device_id" binding:"required"`
-	DeviceLabel       string          `json:"device_label"`
-	PublicKeyJWK      json.RawMessage `json:"public_key_jwk" binding:"required"`
-	KeyAlgorithm      string          `json:"key_algorithm" binding:"required"`
-	KeyVersion        int             `json:"key_version"`
-	WrappedUserKeyB64 string          `json:"wrapped_user_key_b64"`
-	UKWrapAlg         string          `json:"uk_wrap_alg"`
-	UKWrapMeta        json.RawMessage `json:"uk_wrap_meta"`
+	DeviceID     string          `json:"device_id" binding:"required"`
+	DeviceLabel  string          `json:"device_label"`
+	PublicKeyJWK json.RawMessage `json:"public_key_jwk" binding:"required"`
+	KeyAlgorithm string          `json:"key_algorithm" binding:"required"`
+	KeyVersion   int             `json:"key_version"`
+
+	// A new identity keypair and this device's self-wrapped copy of its
+	// private key: sent to create a brand-new account's identity key (after
+	// the server answered needs_identity_setup) and on recovery.
+	IdentityPublicKeyJWK         json.RawMessage `json:"identity_public_key_jwk,omitempty"`
+	IdentityKeyAlgorithm         string          `json:"identity_key_algorithm,omitempty"`
+	IdentityKeyVersion           int             `json:"identity_key_version,omitempty"`
+	WrappedIdentityPrivateKeyB64 string          `json:"wrapped_identity_private_key_b64,omitempty"`
+	IdentityKeyWrapAlg           string          `json:"identity_key_wrap_alg,omitempty"`
+	IdentityKeyWrapMeta          json.RawMessage `json:"identity_key_wrap_meta,omitempty"`
 }
 
+// DeviceRegisterResponse tells a device where it stands. A trusted device
+// gets its copy of the identity key; otherwise exactly one of the needs_*
+// flags says what has to happen first.
 type DeviceRegisterResponse struct {
-	DeviceID        string                   `json:"device_id"`
-	NeedsEnrollment bool                     `json:"needs_enrollment"`
-	UserKeyEnvelope *UserKeyEnvelopeResponse `json:"user_key_envelope,omitempty"`
+	DeviceID            string                                 `json:"device_id"`
+	IdentityKeyEnvelope *UserIdentityKeyDeviceEnvelopeResponse `json:"identity_key_envelope,omitempty"`
+	// IdentityPublicKey is the account's active identity public key, so the
+	// client can check that the private key it holds belongs to it.
+	IdentityPublicKey *IdentityPublicKeyResponse `json:"identity_public_key,omitempty"`
+	// NeedsEnrollment: the account has an identity key this device doesn't
+	// hold yet; a trusted device has to approve it.
+	NeedsEnrollment bool `json:"needs_enrollment"`
+	// NeedsIdentitySetup: a brand-new account; register again with a new
+	// identity keypair to create it.
+	NeedsIdentitySetup bool `json:"needs_identity_setup,omitempty"`
+	// NeedsIdentityMigration: an account from before identity keys; a device
+	// holding its legacy user key has to migrate it.
+	NeedsIdentityMigration bool `json:"needs_identity_migration,omitempty"`
+}
+
+type IdentityPublicKeyResponse struct {
+	KeyVersion   int             `json:"key_version"`
+	KeyAlgorithm string          `json:"key_algorithm"`
+	PublicKeyJWK json.RawMessage `json:"public_key_jwk"`
 }
 
 type DeviceRenameRequest struct {
@@ -246,12 +363,15 @@ type CreateEnrollmentResponse struct {
 	ExpiresAt        time.Time `json:"expires_at"`
 }
 
+// ApproveEnrollmentRequest carries the identity private key, wrapped by the
+// approving device for the requesting device's public key.
 type ApproveEnrollmentRequest struct {
-	ApproverDeviceID  string          `json:"approver_device_id" binding:"required"`
-	VerificationCode  string          `json:"verification_code" binding:"required"`
-	WrappedUserKeyB64 string          `json:"wrapped_user_key_b64" binding:"required"`
-	UKWrapAlg         string          `json:"uk_wrap_alg" binding:"required"`
-	UKWrapMeta        json.RawMessage `json:"uk_wrap_meta" binding:"required"`
+	ApproverDeviceID             string          `json:"approver_device_id" binding:"required"`
+	VerificationCode             string          `json:"verification_code" binding:"required"`
+	WrappedIdentityPrivateKeyB64 string          `json:"wrapped_identity_private_key_b64" binding:"required"`
+	IdentityKeyWrapAlg           string          `json:"identity_key_wrap_alg" binding:"required"`
+	IdentityKeyWrapMeta          json.RawMessage `json:"identity_key_wrap_meta"`
+	IdentityKeyVersion           int             `json:"identity_key_version" binding:"required"`
 }
 
 type RejectEnrollmentRequest struct {
@@ -350,20 +470,38 @@ func (e *AppError) Error() string {
 }
 
 var (
-	ErrInvalidDuration    = &AppError{Code: "INVALID_DURATION", Message: "invalid duration specified"}
-	ErrFileTooLarge       = &AppError{Code: "FILE_TOO_LARGE", Message: "file exceeds maximum size limit"}
-	ErrFileNotFound       = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
-	ErrFileExpired        = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}
-	ErrFileDeleted        = &AppError{Code: "FILE_DELETED", Message: "file has been deleted"}
-	ErrDeviceNotFound     = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}
-	ErrSessionNotFound    = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
-	ErrSessionExpired     = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}
-	ErrUploadNotPending   = &AppError{Code: "UPLOAD_NOT_PENDING", Message: "upload is no longer pending"}
-	ErrInvalidChunk       = &AppError{Code: "INVALID_CHUNK", Message: "invalid chunk index"}
-	ErrChunkAlreadyExists = &AppError{Code: "CHUNK_EXISTS", Message: "chunk already uploaded"}
-	ErrUploadIncomplete   = &AppError{Code: "UPLOAD_INCOMPLETE", Message: "not all chunks have been uploaded"}
-	ErrRateLimited        = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
-	ErrInvalidCode        = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
+	ErrInvalidDuration          = &AppError{Code: "INVALID_DURATION", Message: "invalid duration specified"}
+	ErrFileTooLarge             = &AppError{Code: "FILE_TOO_LARGE", Message: "file exceeds maximum size limit"}
+	ErrFileNotFound             = &AppError{Code: "FILE_NOT_FOUND", Message: "file not found"}
+	ErrIdentityKeyNotFound      = &AppError{Code: "IDENTITY_KEY_NOT_FOUND", Message: "identity key not found"}
+	ErrDeviceEnvelopeNotFound   = &AppError{Code: "DEVICE_ENVELOPE_NOT_FOUND", Message: "identity key device envelope not found"}
+	ErrFileAccessNotFound       = &AppError{Code: "FILE_ACCESS_NOT_FOUND", Message: "file access grant not found"}
+	ErrRecipientNotReady        = &AppError{Code: "RECIPIENT_NOT_READY", Message: "recipient has not set up sharing yet"}
+	ErrFileExpired              = &AppError{Code: "FILE_EXPIRED", Message: "file has expired"}
+	ErrFileDeleted              = &AppError{Code: "FILE_DELETED", Message: "file has been deleted"}
+	ErrDeviceNotFound           = &AppError{Code: "DEVICE_NOT_FOUND", Message: "device not found"}
+	ErrIdentityKeyRequired      = &AppError{Code: "IDENTITY_KEY_REQUIRED", Message: "a new identity keypair is required"}
+	ErrIdentityEnvelopeRequired = &AppError{Code: "IDENTITY_ENVELOPE_REQUIRED", Message: "signed-in uploads need the uploader's identity-wrapped file key"}
+	ErrIdentityKeyStale         = &AppError{Code: "IDENTITY_KEY_STALE", Message: "identity key version is not the account's active one"}
+	ErrDeviceNotAuthorized      = &AppError{Code: "DEVICE_NOT_AUTHORIZED", Message: "device does not belong to user"}
+	ErrParticipantConflict      = &AppError{Code: "PARTICIPANT_CONFLICT", Message: "this device already belongs to another tunnel participant"}
+	ErrGuestDeviceRequired      = &AppError{Code: "DEVICE_ID_REQUIRED", Message: "device_id is required to join as a guest"}
+	ErrParticipantNotApproved   = &AppError{Code: "PARTICIPANT_NOT_APPROVED", Message: "the host has not approved this participant yet"}
+	ErrParticipantRejected      = &AppError{Code: "PARTICIPANT_REJECTED", Message: "the host declined this participant"}
+	ErrEnvelopeExists           = &AppError{Code: "ENVELOPE_EXISTS", Message: "participant already has a key envelope"}
+	ErrDeviceIDConflict         = &AppError{Code: "DEVICE_ID_CONFLICT", Message: "device id is registered to another account"}
+	ErrApproverNotTrusted       = &AppError{Code: "APPROVER_NOT_TRUSTED", Message: "approver device is not trusted"}
+	ErrEnrollmentNotPending     = &AppError{Code: "ENROLLMENT_NOT_PENDING", Message: "enrollment is no longer pending"}
+	ErrVerificationCodeMismatch = &AppError{Code: "VERIFICATION_CODE_MISMATCH", Message: "verification code mismatch"}
+	ErrSessionNotFound          = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
+	ErrSessionExpired           = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}
+	ErrUploadNotPending         = &AppError{Code: "UPLOAD_NOT_PENDING", Message: "upload is no longer pending"}
+	ErrInvalidChunk             = &AppError{Code: "INVALID_CHUNK", Message: "invalid chunk index"}
+	ErrChunkAlreadyExists       = &AppError{Code: "CHUNK_EXISTS", Message: "chunk already uploaded"}
+	ErrUploadIncomplete         = &AppError{Code: "UPLOAD_INCOMPLETE", Message: "not all chunks have been uploaded"}
+	ErrRateLimited              = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
+	ErrInvalidCode              = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
+	ErrUserNotFound             = &AppError{Code: "USER_NOT_FOUND", Message: "user not found in local cache"}
 )
 
 func GenerateID(length int) string {

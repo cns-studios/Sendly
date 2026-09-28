@@ -21,6 +21,7 @@ import (
 )
 
 const CNSUserKey = "cns_user"
+const CNSAccessTokenKey = "cns_access_token"
 
 type CNSUser struct {
 	ID       int    `json:"id"`
@@ -353,6 +354,7 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 					newCancel()
 					if err == nil {
 						c.Set(CNSUserKey, user)
+						c.Set(CNSAccessTokenKey, newToken)
 						c.Next()
 						return
 					}
@@ -369,6 +371,7 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 			}
 		}
 		c.Set(CNSUserKey, user)
+		c.Set(CNSAccessTokenKey, authToken)
 		c.Next()
 	}
 }
@@ -380,4 +383,21 @@ func GetCNSUser(c *gin.Context) *CNSUser {
 	}
 	user, _ := val.(*CNSUser)
 	return user
+}
+
+// GetCNSAccessToken returns the bearer token CNSAuthMiddleware just
+// validated the current user against. This may differ from the raw
+// "auth_token" request cookie if the middleware refreshed an expiring
+// token during this request; callers that need to make their own
+// authenticated CNS calls (e.g. UserCacheSyncMiddleware) must use this
+// instead of re-reading the cookie, or they risk using an already-stale
+// token that was valid when the request arrived but got rotated out from
+// under them before this point in the middleware chain.
+func GetCNSAccessToken(c *gin.Context) string {
+	val, exists := c.Get(CNSAccessTokenKey)
+	if !exists {
+		return ""
+	}
+	token, _ := val.(string)
+	return token
 }

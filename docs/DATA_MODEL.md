@@ -17,7 +17,9 @@ Main file record includes:
 
 Related:
 
-- File key envelope (`file_key_envelopes`) stores wrapped DEK and wrap metadata.
+- `file_access_key_envelopes`: a signed-in user's copy of a file key, wrapped with their identity public key (`recipient_key_version`); `access_kind` is `owner` (their upload) or `share` (a transfer, handed out once accepted).
+- `file_key_envelopes`: a quick share guest upload's key, wrapped for the guest's throwaway participant key.
+- `file_recipient_key_envelopes`: legacy, no longer written.
 
 ## Device Trust
 
@@ -32,9 +34,15 @@ Related:
 - key algorithm/version
 - active/revoked state
 
-### User key envelopes
+### Identity keys
 
-`user_key_envelopes` stores wrapped user keys per `(user, device)` pair.
+`user_identity_keys` holds each account's identity public keys by `key_version`, one `active` at a time; recovery retires it and adds the next version.
+
+`user_identity_key_device_envelopes` stores each trusted device's copy of an identity private key, wrapped for that device's public key. A device is trusted when it has a copy of the active version.
+
+### Legacy user key envelopes
+
+`user_key_envelopes` stores the per-device copies of the pre-identity AES user key. Only read to migrate accounts from before identity keys.
 
 ## Device Enrollment
 
@@ -48,7 +56,7 @@ Related:
 
 ## Reports
 
-`reports` records abuse reports by file and reporter IP.
+`reports` records abuse reports by file and reporter IP, plus the reporter's CNS user ID when signed in (`reporter_cns_user_id`, unique per file) and the transfer a report was filed from (`transfer_id`, NULL for link-share reports).
 
 Report count on file drives auto-delete threshold logic.
 
@@ -60,6 +68,8 @@ Report count on file drives auto-delete threshold logic.
 - initiator/peer identity and device IDs
 - duration and lifecycle status
 - confirmation and ending metadata
+
+`tunnel_participants` holds everyone who joined, with their throwaway public key and whether the host let them in (`approved`). The host alone starts the session. `tunnel_rejections` records joiners the host declined (by CNS user or device) so they can't join again.
 
 Tunnel-linked files can be queried by tunnel ID.
 

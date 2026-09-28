@@ -18,10 +18,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-
 type desktopHub struct {
-	mu      sync.Mutex
-	conns   map[string][]*websocket.Conn
+	mu    sync.Mutex
+	conns map[string][]*websocket.Conn
 }
 
 func newDesktopHub() *desktopHub {
@@ -40,8 +39,8 @@ func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileM
 
 	conns := h.conns[apiKeyID]
 	msg := map[string]interface{}{
-		"type":              "new_file",
-		"file":              meta,
+		"type":             "new_file",
+		"file":             meta,
 		"source_device_id": sourceDeviceID,
 	}
 
@@ -55,7 +54,6 @@ func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileM
 	}
 	h.conns[apiKeyID] = alive
 }
-
 
 type DesktopHandler struct {
 	cfg           *config.Config
@@ -91,8 +89,6 @@ func NewDesktopHandler(
 		hub:           newDesktopHub(),
 	}
 }
-
-
 
 func (h *DesktopHandler) VerifyKey(c *gin.Context) {
 	keyValue := c.Query("key")
@@ -157,7 +153,6 @@ func (h *DesktopHandler) OAuthVerify(c *gin.Context) {
 	})
 }
 
-
 func (h *DesktopHandler) UploadInit(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
 	user := middleware.GetCNSUser(c)
@@ -189,7 +184,6 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 		return
 	}
 
-	
 	respBody := gin.H{
 		"session_id":   resp.SessionID,
 		"file_id":      resp.FileID,
@@ -202,7 +196,6 @@ func (h *DesktopHandler) UploadInit(c *gin.Context) {
 
 	c.JSON(http.StatusOK, respBody)
 }
-
 
 func (h *DesktopHandler) UploadChunk(c *gin.Context) {
 	if err := c.Request.ParseMultipartForm(10 << 20); err != nil {
@@ -240,7 +233,6 @@ func (h *DesktopHandler) UploadChunk(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "chunk_index": chunkIndex, "uploaded_chunks": uploaded, "total_chunks": total})
 }
 
-
 func (h *DesktopHandler) UploadComplete(c *gin.Context) {
 	var req models.UploadCompleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -263,7 +255,6 @@ func (h *DesktopHandler) UploadComplete(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-
 func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
 	user := middleware.GetCNSUser(c)
@@ -275,34 +266,34 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	}
 	tier := middleware.GetTier(h.cfg, user)
 
-	var opts *services.FinalizeUploadOptions
+	opts := &services.FinalizeUploadOptions{}
+	if user != nil {
+		uid := int64(user.ID)
+		uname := user.Username
+		opts = &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
+		if err := applyIdentityFinalizeEnvelope(&models.UploadFinalizeRequest{
+			IdentityWrappedDEKB64:   req.IdentityWrappedDEKB64,
+			IdentityDEKWrapAlg:      req.IdentityDEKWrapAlg,
+			IdentityDEKWrapNonceB64: req.IdentityDEKWrapNonceB64,
+			IdentityDEKWrapVersion:  req.IdentityDEKWrapVersion,
+			IdentityKeyVersion:      req.IdentityKeyVersion,
+		}, opts); err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
+			return
+		}
+	}
 	if req.TunnelID != "" {
-		opts = &services.FinalizeUploadOptions{}
 		if user != nil {
-			uid := int64(user.ID)
-			uname := user.Username
-			opts = &services.FinalizeUploadOptions{
-				OwnerCNSUserID:   &uid,
-				OwnerCNSUserName: &uname,
-			}
-
 			if req.DeviceID == "" {
 				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "device_id is required for authenticated desktop uploads", Code: "DEVICE_ID_REQUIRED"})
 				return
 			}
-
-			if req.WrappedDEKB64 == "" {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "WRAPPED_DEK_REQUIRED"})
-				return
-			}
-
-			if _, trustedErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); trustedErr != nil {
+			if !trustedDevice(c, h.db, int64(user.ID), req.DeviceID) {
 				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "DEVICE_NOT_TRUSTED"})
 				return
 			}
-		}
-
-		if req.WrappedDEKB64 != "" {
+		} else if req.WrappedDEKB64 != "" {
+			// A guest's key, wrapped for its throwaway participant key.
 			wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
 			if decodeErr != nil {
 				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
@@ -334,36 +325,25 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		if user != nil {
-			if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
-				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
-				return
-			}
-
-			if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
-				peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
-					req.SessionID,
-					peerUserID,
-					peerDeviceID,
-					req.PeerWrappedDEKB64,
-					req.PeerDEKWrapAlg,
-					req.PeerDEKWrapNonceB64,
-					req.PeerDEKWrapVersion,
-				)
-				if peerErr != nil {
-					c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Cross-account tunnel upload requires a peer key envelope", Code: "PEER_WRAPPED_DEK_REQUIRED", Details: peerErr.Error()})
-					return
-				}
-				opts.RecipientEnvelopes = append(opts.RecipientEnvelopes, peerEnvelope)
-			}
+		// Files may only be added by the host or participants it approved.
+		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
+		if authErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+			return
+		}
+		if caller == nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+		if !caller.approved() {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
+			return
 		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt
-	} else {
-		if !tier.IsDurationAllowed(req.Duration) {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration not available for your account tier", Code: "DURATION_NOT_ALLOWED"})
-			return
-		}
+	} else if !tier.IsDurationAllowed(req.Duration) {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Duration not available for your account tier", Code: "DURATION_NOT_ALLOWED"})
+		return
 	}
 
 	if req.TunnelID == "" && req.Duration == "" {
@@ -381,10 +361,9 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 		return
 	}
 
-	
 	if key != nil {
 		if err := h.db.AssociateFileWithKey(c.Request.Context(), baseResp.FileID, key.ID); err != nil {
-		
+
 			fmt.Printf("Warning: failed to associate file %s with key %s: %v\n", baseResp.FileID, key.ID, err)
 		}
 	}
@@ -423,7 +402,7 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 
 	if meta != nil {
 		if channelID != "" {
-				h.hub.notify(channelID, meta.FileName, meta, req.DeviceID)
+			h.hub.notify(channelID, meta.FileName, meta, req.DeviceID)
 		}
 		c.JSON(http.StatusOK, models.DesktopFinalizeResponse{
 			FileID:      baseResp.FileID,
@@ -443,7 +422,6 @@ func (h *DesktopHandler) UploadFinalize(c *gin.Context) {
 	})
 }
 
-
 func (h *DesktopHandler) UploadStatus(c *gin.Context) {
 	sessionID := c.Param("session_id")
 	status, err := h.uploadService.GetAssemblyStatus(c.Request.Context(), sessionID)
@@ -453,7 +431,6 @@ func (h *DesktopHandler) UploadStatus(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"session_id": sessionID, "status": status})
 }
-
 
 func (h *DesktopHandler) ListFiles(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
@@ -494,14 +471,13 @@ func (h *DesktopHandler) ListFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
-
 func (h *DesktopHandler) GetFile(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
 	user := middleware.GetCNSUser(c)
 	fileID := c.Param("id")
 
 	if key == nil && user != nil {
-		file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+		file, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 			return
@@ -532,14 +508,13 @@ func (h *DesktopHandler) GetFile(c *gin.Context) {
 	c.JSON(http.StatusOK, file.ToMetadata())
 }
 
-
 func (h *DesktopHandler) DownloadFile(c *gin.Context) {
 	key := middleware.GetDesktopAPIKey(c)
 	user := middleware.GetCNSUser(c)
 	fileID := c.Param("id")
 
 	if key == nil && user != nil {
-		file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+		file, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 			return
@@ -608,8 +583,6 @@ func (h *DesktopHandler) DownloadFile(c *gin.Context) {
 	io.Copy(c.Writer, reader)
 }
 
-
-
 func (h *DesktopHandler) WebSocket(c *gin.Context) {
 	tokenQuery := c.Query("token")
 	if tokenQuery != "" {
@@ -673,7 +646,6 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 
 	h.hub.add("key:"+key.ID, conn)
 
-	
 	go func() {
 		defer conn.Close()
 		for {

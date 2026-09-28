@@ -8,7 +8,7 @@
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
-    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
+    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
     const TUNNEL_MAX_FILE_SIZE = 3 * 1024 * 1024 * 1024;
     const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
@@ -19,7 +19,7 @@
     let activeTunnel = null;
     let tunnelPollTimer = null;
     let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
+    let authIdentityKey = null;
     let isUploading = false;
     let isDownloadingFile = false;
     let sessionPassword = null;
@@ -31,12 +31,16 @@
     let ephemeralKeyPair = null;
     let myDeviceId = '';
     let hostToken = '';
+    // Issued when joining as a guest; proves this participant on later calls.
+    // Kept in memory only: every page load joins afresh.
+    let participantToken = '';
     let joinCodeInput = '';
 
     const createView = document.getElementById('createView');
     const joinView = document.getElementById('joinView');
     const sessionView = document.getElementById('sessionView');
     const queueView = document.getElementById('queueView');
+    const declinedView = document.getElementById('declinedView');
     const bottomBar = document.getElementById('bottomBar');
     const joinBottomBar = document.getElementById('joinBottomBar');
     const startBtn = document.getElementById('startBtn');
@@ -56,10 +60,26 @@
     const queueCodeSquares = document.querySelectorAll('#queueCodeSquares .code-square');
     const peopleRow = document.getElementById('peopleRow');
     const queuePeopleRow = document.getElementById('queuePeopleRow');
+    const approvalRequestLists = [
+        document.getElementById('approvalRequests'),
+        document.getElementById('sessionApprovalRequests')
+    ].filter(Boolean);
+    const approvalStatus = document.getElementById('approvalStatus');
+    const qsStatusTitle = document.getElementById('qsStatusTitle');
+    const qsStatusText = document.getElementById('qsStatusText');
+    const qsStatusCode = document.getElementById('qsStatusCode');
+    const startConfirm = document.getElementById('start-confirm');
+    const startConfirmDesc = document.getElementById('start-confirm-desc');
+    const startConfirmOk = document.getElementById('start-confirm-ok');
+    const startConfirmCancel = document.getElementById('start-confirm-cancel');
+    const fingerprintCache = new Map();
+    let approvalRenderKey = null;
+    // Join requests the host has already been told about.
+    const announcedRequests = new Set();
+    const baseTitle = document.title;
     const pageLoading = document.getElementById('page-loading');
     const pageError = document.getElementById('page-error');
     const pageErrorRetry = document.getElementById('page-error-retry');
-    let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -116,6 +136,13 @@
         return created;
     }
 
+    function resetGuestDeviceId() {
+        const created = randomUUID();
+        localStorage.setItem('sendly_guest_device_id', created);
+        myDeviceId = created;
+        return created;
+    }
+
     function extractDeviceID(participant) {
         if (!participant) return '';
         const deviceID = participant.device_id;
@@ -128,6 +155,7 @@
         return '';
     }
 
+    // Tunnel JSON carries sql.Null* values as {Int64, Valid} objects.
     function extractUserID(participant) {
         if (!participant) return 0;
         const userID = participant.cns_user_id;
@@ -146,6 +174,7 @@
         if (csrf) headers['X-CSRF-Token'] = csrf;
         if (myDeviceId) headers['X-Device-ID'] = myDeviceId;
         if (hostToken) headers['X-Host-Token'] = hostToken;
+        if (participantToken) headers['X-Participant-Token'] = participantToken;
         return headers;
     }
 
@@ -189,44 +218,17 @@
     async function ensureDeviceReady() {
         if (!AUTHENTICATED) return true;
         try {
-            authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-            // Offer a key in case this is the account's first trusted device. For any other
-            // device the server keeps the envelope it already has and returns that instead.
-            const offeredKey = SecureCrypto.getUserKeyRaw(CNS_USER_ID) || SecureCrypto.generateUserKeyRaw();
-            const wrappedOffer = await SecureCrypto.wrapUserKeyForDevice(offeredKey, authDeviceIdentity.publicKeyJWK);
-
-            const response = await fetch('/api/me/devices/register', {
-                method: 'POST',
-                headers: buildHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({
-                    device_id: authDeviceIdentity.deviceId,
-                    device_label: `${CNS_USERNAME || t('user_default')} device`,
-                    public_key_jwk: authDeviceIdentity.publicKeyJWK,
-                    key_algorithm: authDeviceIdentity.keyAlgorithm,
-                    key_version: authDeviceIdentity.keyVersion,
-                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedOffer),
-                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
-                    uk_wrap_meta: { type: 'self-wrap', device_id: authDeviceIdentity.deviceId },
-                })
+            const result = await SecureCrypto.registerAuthenticatedDevice({
+                userId: CNS_USER_ID,
+                username: CNS_USERNAME,
+                csrfToken: getCookieValue('csrf_token')
             });
-
-            if (!response.ok) throw new Error('Device registration failed');
-
-            const payload = await response.json();
-            if (payload.needs_enrollment) {
-                authUserKeyRaw = null;
+            authDeviceIdentity = result.identity;
+            authIdentityKey = result.identityKey;
+            if (!authIdentityKey) {
                 showErrorBanner(t('toast_device_quickshare_approve'));
                 return false;
             }
-
-            const wrappedUKB64 = payload.user_key_envelope?.wrapped_uk_b64;
-            if (!wrappedUKB64) throw new Error('Missing user key envelope');
-            authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(
-                SecureCrypto.fromBase64(wrappedUKB64),
-                authDeviceIdentity.privateKeyJWK
-            );
-            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
@@ -240,6 +242,7 @@
         joinView.classList.toggle('active', view === 'join');
         sessionView.classList.toggle('active', view === 'session');
         queueView.classList.toggle('active', view === 'queue');
+        declinedView?.classList.toggle('active', view === 'declined');
         bottomBar.style.display = view === 'create' ? '' : 'none';
         joinBottomBar.style.display = view === 'join' ? '' : 'none';
 
@@ -275,7 +278,7 @@
 
     function getParticipantName(participant) {
         const userID = extractUserID(participant);
-        if (userID) return t('user_default');
+        if (userID) return participant.username || t('user_default');
 
         const deviceID = extractDeviceID(participant);
         if (deviceID) {
@@ -287,6 +290,207 @@
         }
 
         return t('guest_default');
+    }
+
+    const GUEST_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+    // A signed-in participant's avatar; guests get the plain person icon.
+    function participantAvatar(participant, size) {
+        if (extractUserID(participant) && participant.username && window.buildUserAvatar) {
+            return window.buildUserAvatar(participant.username, participant.avatar_url || '', size);
+        }
+        const icon = document.createElement('span');
+        icon.className = 'person-guest-icon';
+        icon.innerHTML = GUEST_ICON;
+        return icon;
+    }
+
+    // Short fingerprint of a participant's public key. The host compares it
+    // with the one shown on the joiner's screen before letting them in, so a
+    // swapped key (by the server or anyone else) is noticed.
+    function keyFingerprint(jwk) {
+        if (!jwk || !jwk.n || !jwk.e) return '';
+        const cacheKey = `${jwk.e}:${jwk.n}`;
+        if (fingerprintCache.has(cacheKey)) return fingerprintCache.get(cacheKey);
+        fingerprintCache.set(cacheKey, '');
+        crypto.subtle.digest('SHA-256', new TextEncoder().encode(cacheKey)).then((digest) => {
+            const hex = Array.from(new Uint8Array(digest).slice(0, 4))
+                .map((b) => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+            fingerprintCache.set(cacheKey, `${hex.slice(0, 4)}-${hex.slice(4)}`);
+            renderApprovals();
+        }).catch(() => {});
+        return '';
+    }
+
+    function participantPublicKey(participant) {
+        const jwk = participant?.public_key_jwk;
+        return jwk && typeof jwk === 'object' ? jwk : null;
+    }
+
+    function isHostParticipant(participant) {
+        if (!activeTunnel) return false;
+        const initiatorUserID = Number(activeTunnel.initiator_cns_user_id || 0);
+        if (initiatorUserID && extractUserID(participant) === initiatorUserID) return true;
+        const initiatorDevice = activeTunnel.initiator_device_id;
+        const initiatorDeviceID = typeof initiatorDevice === 'string'
+            ? initiatorDevice
+            : (initiatorDevice?.Valid ? initiatorDevice.String : '');
+        return !!initiatorDeviceID && extractDeviceID(participant) === initiatorDeviceID;
+    }
+
+    function findSelfParticipant() {
+        return participants.find((p) => {
+            if (myDeviceId && extractDeviceID(p) === myDeviceId) return true;
+            return AUTHENTICATED && CNS_USER_ID && extractUserID(p) === CNS_USER_ID && !extractDeviceID(p);
+        }) || null;
+    }
+
+    function isSelfApproved() {
+        const self = findSelfParticipant();
+        return !!(self && self.approved);
+    }
+
+    function pendingRequests() {
+        return participants.filter((p) => !p.approved && !isHostParticipant(p));
+    }
+
+    // Tells the host about new join requests, also in the tab title so they
+    // are noticed while the tab is in the background.
+    function announceRequests(pending) {
+        pending.forEach((participant) => {
+            if (announcedRequests.has(participant.id)) return;
+            announcedRequests.add(participant.id);
+            showNotification(tpl('quickshare_new_request', {name: getParticipantName(participant)}), 'info');
+        });
+        document.title = pending.length ? `(${pending.length}) ${baseTitle}` : baseTitle;
+    }
+
+    function renderApprovals() {
+        if (isHost) {
+            const pending = pendingRequests();
+            announceRequests(pending);
+            const renderKey = pending.map((p) => `${p.id}:${keyFingerprint(participantPublicKey(p))}`).join('|');
+            if (renderKey === approvalRenderKey) return;
+            approvalRenderKey = renderKey;
+
+            approvalRequestLists.forEach((list) => {
+                list.innerHTML = '';
+                list.classList.toggle('hidden', pending.length === 0);
+                if (pending.length === 0) return;
+
+                const headingRow = document.createElement('div');
+                headingRow.className = 'approval-heading-row';
+                const heading = document.createElement('h2');
+                heading.className = 'people-heading';
+                heading.textContent = t('quickshare_approval_heading');
+                const count = document.createElement('span');
+                count.className = 'approval-count';
+                count.textContent = String(pending.length);
+                headingRow.append(heading, count);
+                if (pending.length > 1) {
+                    const allBtn = document.createElement('button');
+                    allBtn.className = 'approval-all-btn';
+                    allBtn.textContent = t('quickshare_approve_all');
+                    allBtn.addEventListener('click', approveAll);
+                    headingRow.appendChild(allBtn);
+                }
+                list.appendChild(headingRow);
+                const hint = document.createElement('p');
+                hint.className = 'approval-hint';
+                hint.textContent = t('quickshare_approval_hint');
+                list.appendChild(hint);
+
+                pending.forEach((participant) => {
+                    const row = document.createElement('div');
+                    row.className = 'approval-request';
+                    const who = document.createElement('div');
+                    who.className = 'approval-request-who';
+                    const avatar = document.createElement('span');
+                    avatar.className = 'approval-avatar';
+                    avatar.appendChild(participantAvatar(participant, 36));
+                    const name = document.createElement('span');
+                    name.className = 'approval-request-name';
+                    name.textContent = getParticipantName(participant);
+                    const fingerprint = document.createElement('code');
+                    fingerprint.className = 'approval-fingerprint';
+                    fingerprint.textContent = keyFingerprint(participantPublicKey(participant)) || '\u2013';
+                    who.append(avatar, name, fingerprint);
+                    const actions = document.createElement('div');
+                    actions.className = 'approval-request-actions';
+                    const approveBtn = document.createElement('button');
+                    approveBtn.className = 'approve-btn';
+                    approveBtn.textContent = t('quickshare_approve');
+                    approveBtn.addEventListener('click', () => respondToParticipant(participant.id, 'approve'));
+                    const declineBtn = document.createElement('button');
+                    declineBtn.className = 'decline-btn';
+                    declineBtn.textContent = t('quickshare_decline');
+                    declineBtn.addEventListener('click', () => respondToParticipant(participant.id, 'reject'));
+                    actions.append(approveBtn, declineBtn);
+                    row.append(who, actions);
+                    list.appendChild(row);
+                });
+            });
+            return;
+        }
+
+        renderJoinStatus();
+    }
+
+    // The joiner's status card: waiting to be let in (with the code the host
+    // compares), then let in and waiting for the host to start.
+    function renderJoinStatus() {
+        if (!approvalStatus) return;
+        const self = findSelfParticipant();
+        const visible = !!(activeTunnel && self && !hasStarted);
+        approvalStatus.classList.toggle('hidden', !visible);
+        if (!visible) return;
+        const approved = !!self.approved;
+        qsStatusTitle.textContent = t(approved ? 'quickshare_status_in_title' : 'quickshare_status_wait_title');
+        qsStatusText.textContent = t(approved ? 'quickshare_status_in_text' : 'quickshare_status_wait_text');
+        qsStatusCode.classList.toggle('hidden', approved);
+        qsStatusCode.textContent = keyFingerprint(ephemeralKeyPair?.publicKeyJWK) || '\u2013';
+    }
+
+    function showDeclined() {
+        clearTunnelState(activeTunnel?.id);
+        setView('declined');
+    }
+
+    async function postParticipantAction(participantId, action) {
+        const response = await fetch(
+            `/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/participants/${encodeURIComponent(participantId)}/${action}`,
+            { method: 'POST', headers: buildHeaders({ 'Content-Type': 'application/json' }) }
+        );
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw SendlyToast.apiError(error, `HTTP ${response.status}`);
+        }
+    }
+
+    async function respondToParticipant(participantId, action) {
+        if (!activeTunnel?.id || !isHost) return;
+        try {
+            await postParticipantAction(participantId, action);
+        } catch (error) {
+            console.error('Participant update failed:', error);
+            SendlyToast.fail(error, t('quickshare_approve_failed'));
+        }
+        approvalRenderKey = null;
+        await refreshTunnelState();
+    }
+
+    async function approveAll() {
+        if (!activeTunnel?.id || !isHost) return;
+        try {
+            for (const participant of pendingRequests()) {
+                await postParticipantAction(participant.id, 'approve');
+            }
+        } catch (error) {
+            console.error('Participant update failed:', error);
+            SendlyToast.fail(error, t('quickshare_approve_failed'));
+        }
+        approvalRenderKey = null;
+        await refreshTunnelState();
     }
 
     function renderParticipants(items) {
@@ -308,18 +512,27 @@
             empty.style.padding = '1rem 0';
             container.appendChild(empty);
         } else {
-            allParticipants.forEach(p => {
+            const self = findSelfParticipant();
+            const rank = (p) => (isHostParticipant(p) ? 0 : p.approved ? 1 : 2);
+            [...allParticipants].sort((a, b) => rank(a) - rank(b)).forEach(p => {
+                // You are marked by a blue ring, people still waiting are greyed out.
+                const isSelf = p === self || (!!myCurrentDeviceID && extractDeviceID(p) === myCurrentDeviceID);
+                const isPending = !p.approved && !isHostParticipant(p);
+                const name = getParticipantName(p);
                 const person = document.createElement('div');
                 person.className = 'person';
-                const isSelf = extractDeviceID(p) === myCurrentDeviceID;
-                person.innerHTML = `
-                    <div class="person-circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                        </svg>
-                    </div>
-                    <span class="person-name">${getParticipantName(p)}${isSelf ? t('label_you') : ''}</span>
-                `;
+                person.classList.toggle('is-self', isSelf);
+                person.classList.toggle('pending', isPending);
+                const label = `${name}${isSelf ? t('label_you') : ''}${isPending ? t('quickshare_pending_suffix') : ''}`;
+                person.setAttribute('aria-label', label);
+                person.title = label;
+                const circle = document.createElement('div');
+                circle.className = 'person-circle';
+                circle.appendChild(participantAvatar(p, 70));
+                const nameEl = document.createElement('span');
+                nameEl.className = 'person-name';
+                nameEl.textContent = name;
+                person.append(circle, nameEl);
                 container.appendChild(person);
             });
         }
@@ -327,6 +540,8 @@
         if (connectedText) {
             connectedText.textContent = `${allParticipants.length}${t('label_connected')}`;
         }
+
+        renderApprovals();
     }
 
     function renderTunnelFiles(files) {
@@ -431,14 +646,7 @@
                         const alg = (envelope.dek_wrap_alg || '').toUpperCase();
                         let rawDEK = null;
 
-                        if (alg === 'AES-GCM-UK-V1') {
-                            if (authUserKeyRaw) {
-                                const nonce = envelope.dek_wrap_nonce_b64
-                                    ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64)
-                                    : new Uint8Array();
-                                rawDEK = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, authUserKeyRaw);
-                            }
-                        } else if (alg.startsWith('RSA-OAEP')) {
+                        if (alg.startsWith('RSA-OAEP')) {
                             if (ephemeralKeyPair?.privateKey) {
                                 const raw = await crypto.subtle.decrypt(
                                     { name: 'RSA-OAEP' },
@@ -499,7 +707,7 @@
                 const contentType = response.headers.get('content-type') || '';
                 if (contentType.includes('application/json')) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error || 'Download failed');
+                    throw SendlyToast.apiError(errorData, 'Download failed');
                 }
                 throw new Error(`Download failed (${response.status})`);
             }
@@ -538,7 +746,7 @@
             await new Promise((resolve) => setTimeout(resolve, 600));
         } catch (error) {
             console.error('Tunnel file download failed:', error);
-            showErrorBanner(tpl('quickshare_download_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_download_failed'));
         } finally {
             isDownloadingFile = false;
             if (progressFill && progressFill.parentNode) {
@@ -560,7 +768,8 @@
 
             const data = await res.json();
             const guestParticipants = Array.isArray(data.participants) ? data.participants : [];
-            const pending = guestParticipants.filter(p => !p.has_envelope);
+            // Only participants the host let in get the session key.
+            const pending = guestParticipants.filter(p => p.approved && !p.has_envelope);
 
             if (pending.length === 0) return;
 
@@ -613,7 +822,7 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to create tunnel');
+                throw SendlyToast.apiError(error, 'Failed to create tunnel');
             }
 
             const payload = await response.json();
@@ -632,7 +841,7 @@
             return true;
         } catch (error) {
             console.error('Create tunnel failed:', error);
-            showErrorBanner(tpl('quickshare_create_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_create_failed'));
             return false;
         }
     }
@@ -651,7 +860,7 @@
         await ensureEphemeralKeyPair();
 
         try {
-            const response = await fetch('/api/me/tunnels/join', {
+            const requestJoin = () => fetch('/api/me/tunnels/join', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
@@ -663,16 +872,34 @@
                 })
             });
 
+            participantToken = '';
+            let response = await requestJoin();
+            if (response.status === 409 && !AUTHENTICATED) {
+                const conflict = await response.clone().json().catch(() => ({}));
+                if (conflict.code === 'PARTICIPANT_CONFLICT') {
+                    // This guest device already joined earlier (e.g. before a
+                    // reload) and its participant token is gone; join as a new
+                    // guest device instead.
+                    resetGuestDeviceId();
+                    response = await requestJoin();
+                }
+            }
+
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to join tunnel');
+                const error = await response.json().catch(() => ({}));
+                if (error.code === 'PARTICIPANT_REJECTED') {
+                    showDeclined();
+                    return;
+                }
+                throw SendlyToast.apiError(error, 'Failed to join tunnel');
             }
 
             const payload = await response.json();
+            participantToken = payload.participant_token || '';
             activeTunnel = payload.tunnel;
             participants = payload.participants || [];
             isHost = false;
-            hasStarted = activeTunnel.status === 'active';
+            hasStarted = activeTunnel.status === 'active' && isSelfApproved();
 
             const storedPw = localStorage.getItem(SESSION_PASSWORD_PREFIX + activeTunnel.id);
             sessionPassword = storedPw || null;
@@ -683,13 +910,34 @@
             startTunnelPolling();
         } catch (error) {
             console.error('Join tunnel failed:', error);
-            showErrorBanner(tpl('quickshare_join_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_join_failed'));
             joinCodeInput = '';
             setCodeDisplay(joinCodeSquares, '');
             if (joinCodeHiddenInput) joinCodeHiddenInput.value = '';
             joinSubmitBtn.disabled = true;
             joinSubmitBtn.classList.add('disabled');
         }
+    }
+
+    // Asks before starting while people are still waiting to be let in.
+    function requestStart() {
+        if (!activeTunnel?.id || !isHost) return;
+        const waiting = pendingRequests().length;
+        if (!waiting || !startConfirm) {
+            handleStartTunnel();
+            return;
+        }
+        startConfirmDesc.textContent = waiting === 1
+            ? t('quickshare_start_waiting_desc_one')
+            : tpl('quickshare_start_waiting_desc', {count: waiting});
+        startConfirm.classList.remove('hidden');
+        startConfirm.setAttribute('aria-hidden', 'false');
+        startConfirmOk?.focus();
+    }
+
+    function closeStartConfirm() {
+        startConfirm?.classList.add('hidden');
+        startConfirm?.setAttribute('aria-hidden', 'true');
     }
 
     async function handleStartTunnel() {
@@ -704,7 +952,7 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to start');
+                throw SendlyToast.apiError(error, 'Failed to start');
             }
 
             const payload = await response.json();
@@ -722,7 +970,7 @@
             await refreshTunnelState();
         } catch (error) {
             console.error('Start tunnel failed:', error);
-            showErrorBanner(tpl('quickshare_start_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('quickshare_start_failed'));
         }
     }
 
@@ -761,6 +1009,13 @@
             });
 
             if (!response.ok) {
+                if (response.status === 403) {
+                    const error = await response.json().catch(() => ({}));
+                    if (error.code === 'PARTICIPANT_REJECTED') {
+                        showDeclined();
+                        return;
+                    }
+                }
                 if (response.status === 410 || response.status === 404 || response.status === 403) {
                     clearTunnelState(activeTunnel?.id);
                     showErrorBanner(t('quickshare_ended'));
@@ -776,7 +1031,7 @@
                 participants = payload.participants || [];
 
                 const tunnelStatus = activeTunnel.status || '';
-                if (!isHost && !hasStarted && tunnelStatus === 'active') {
+                if (!isHost && !hasStarted && tunnelStatus === 'active' && isSelfApproved()) {
                     hasStarted = true;
                     setView('session');
                     if (!sessionPassword) {
@@ -826,12 +1081,16 @@
         stopTunnelPolling();
         activeTunnel = null;
         hostToken = '';
+        participantToken = '';
+        approvalRenderKey = null;
         sessionPassword = null;
         participants = [];
         isHost = false;
         hasStarted = false;
         guestNameMap.clear();
         guestCounter = 0;
+        announcedRequests.clear();
+        document.title = baseTitle;
 
         if (fileList) fileList.innerHTML = '';
         if (fileListEmpty) fileListEmpty.classList.remove('hidden');
@@ -872,7 +1131,7 @@
                     await new Promise(r => setTimeout(r, 1500));
                 }
                 if (!sessionPassword) {
-                    throw new Error('Could not obtain encryption key from host yet. Please try again in a moment.');
+                    throw SendlyToast.userError(t('quickshare_no_decryption_key'));
                 }
             }
 
@@ -880,14 +1139,13 @@
             const dekBytes = new TextEncoder().encode(password);
             let envelopePayload = {};
 
-            if (AUTHENTICATED && authUserKeyRaw) {
-                const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
-                envelopePayload = {
-                    wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
-                    dek_wrap_alg: 'AES-GCM-UK-v1',
-                    dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
-                    dek_wrap_version: 1
-                };
+            if (AUTHENTICATED) {
+                // Everyone in the session decrypts with the session password;
+                // the uploader also keeps its own copy under its identity key.
+                if (!authIdentityKey) {
+                    throw new Error(t('toast_device_quickshare_approve'));
+                }
+                envelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             } else if (ephemeralKeyPair) {
                 const wrapped = await wrapWithPublicKey(dekBytes, ephemeralKeyPair.publicKeyJWK);
                 envelopePayload = {
@@ -915,7 +1173,7 @@
 
             if (!initRes.ok) {
                 const error = await initRes.json();
-                throw new Error(error.error || 'Init failed');
+                throw SendlyToast.apiError(error, 'Init failed');
             }
 
             const initData = await initRes.json();
@@ -947,7 +1205,7 @@
 
                             if (!res.ok) {
                                 const error = await res.json();
-                                throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`);
+                                throw SendlyToast.apiError(error, `Chunk ${chunkIndex + 1} failed`);
                             }
 
                             lastError = null;
@@ -995,7 +1253,7 @@
 
             if (!finalizeRes.ok) {
                 const error = await finalizeRes.json();
-                throw new Error(error.error || 'Finalize failed');
+                throw SendlyToast.apiError(error, 'Finalize failed');
             }
 
             const finalizeData = await finalizeRes.json();
@@ -1010,7 +1268,7 @@
             await refreshTunnelState();
         } catch (error) {
             console.error('Tunnel file upload failed:', error);
-            showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_upload_failed'));
             dropMainText.textContent = t('quickshare_place_files');
             dropSubText.textContent = '';
             isUploading = false;
@@ -1019,7 +1277,18 @@
     }
 
     function setupEventListeners() {
-        startBtn?.addEventListener('click', handleStartTunnel);
+        startBtn?.addEventListener('click', requestStart);
+        startConfirmCancel?.addEventListener('click', closeStartConfirm);
+        startConfirmOk?.addEventListener('click', () => {
+            closeStartConfirm();
+            handleStartTunnel();
+        });
+        startConfirm?.addEventListener('click', (e) => {
+            if (e.target === startConfirm) closeStartConfirm();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && startConfirm && !startConfirm.classList.contains('hidden')) closeStartConfirm();
+        });
         joinSubmitBtn?.addEventListener('click', handleJoinTunnel);
         leaveBtn?.addEventListener('click', handleLeaveTunnel);
 
@@ -1101,49 +1370,13 @@
     }
 
     function showNotification(message, type) {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     function showErrorBanner(message) {
-        showNotification(message, 'error');
+        SendlyToast.error(message);
     }
 
-    function hideErrorBanner() {}
 
     async function init() {
         setupTOSGate();

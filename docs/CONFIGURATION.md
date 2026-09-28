@@ -30,7 +30,14 @@ Used for upload sessions, chunk tracking, pending flags, assembly status, and ra
 - `DATA_DIR` (required)
 - `CHUNK_DIR` (optional)
 
+- `SENDLY_ADOPT_DATA_DIR` (optional, default `false`)
+
 `CHUNK_DIR` can separate temporary chunk storage from final file storage paths.
+
+Both directories are claimed by the instance's database through a
+`.sendly-instance` marker; the server refuses to start on storage owned by
+another database. Set `SENDLY_ADOPT_DATA_DIR=true` once to claim existing
+storage that predates the marker. See "Storage Ownership" in `OPERATIONS.md`.
 
 ## Auth and Identity
 
@@ -75,7 +82,8 @@ Migrations run at startup and are tracked in schema migration history.
 ## Deployment Mode
 
 - `GIN_MODE=release` enables production mode behavior.
-- `BEHIND_CLOUDFLARE` controls client IP extraction behavior.
+- `BEHIND_CLOUDFLARE` makes `CF-Connecting-IP` the client IP, but only for requests whose direct peer is a trusted proxy.
+- `TRUSTED_PROXIES` (comma-separated IPs/CIDRs) lists the proxies whose forwarding headers (`X-Forwarded-For`, `X-Real-IP`, `CF-Connecting-IP`) are believed. Empty means no proxy is trusted and the direct peer address is used; with `BEHIND_CLOUDFLARE=true` it defaults to Cloudflare's published edge ranges. When traffic arrives through `cloudflared` or a local reverse proxy, set this to that proxy's address, otherwise every client appears as the proxy.
 
 ## Rate Limiting
 

@@ -2,18 +2,14 @@ package handlers
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"sendly/internal/config"
 	"sendly/internal/middleware"
@@ -186,7 +182,7 @@ func (h *AndroidHandler) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+	file, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 		return
@@ -208,7 +204,7 @@ func (h *AndroidHandler) Download(c *gin.Context) {
 		return
 	}
 
-	file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+	file, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 		return
@@ -360,23 +356,9 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 	uid := int64(user.ID)
 	uname := user.Username
 	opts := &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
-	if req.WrappedDEKB64 != "" {
-		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
-		if decodeErr != nil {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
-			return
-		}
-		opts.WrappedDEK = wrappedDEK
-		opts.DEKWrapAlg = req.DEKWrapAlg
-		opts.DEKWrapVersion = req.DEKWrapVersion
-		if req.DEKWrapNonceB64 != "" {
-			nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
-			if nonceErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
-				return
-			}
-			opts.DEKWrapNonce = nonce
-		}
+	if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
+		return
 	}
 	if req.TunnelID != "" {
 		if req.DeviceID == "" {
@@ -384,7 +366,7 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 			return
 		}
 
-		if _, trustedErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID); trustedErr != nil {
+		if !trustedDevice(c, h.db, int64(user.ID), req.DeviceID) {
 			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Trusted device approval is required before authenticated uploads can be finalized", Code: "DEVICE_NOT_TRUSTED"})
 			return
 		}
@@ -402,27 +384,21 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
+		// Files may only be added by the host or participants it approved.
+		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
+		if authErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+			return
+		}
+		if caller == nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+		if !caller.approved() {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
 			return
 		}
 
-		if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
-			peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
-				req.SessionID,
-				peerUserID,
-				peerDeviceID,
-				req.PeerWrappedDEKB64,
-				req.PeerDEKWrapAlg,
-				req.PeerDEKWrapNonceB64,
-				req.PeerDEKWrapVersion,
-			)
-			if peerErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Cross-account tunnel upload requires a peer key envelope", Code: "PEER_WRAPPED_DEK_REQUIRED", Details: peerErr.Error()})
-				return
-			}
-			opts.RecipientEnvelopes = append(opts.RecipientEnvelopes, peerEnvelope)
-		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt
 	}
@@ -512,355 +488,37 @@ func (h *AndroidHandler) RecoverDevice(c *gin.Context) {
 }
 
 func (h *AndroidHandler) handleDeviceRegistration(c *gin.Context, forceRecovery bool) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
-	var req models.DeviceRegisterRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
-		return
-	}
-
-	normalizedPublicKeyJWK, err := normalizeDevicePublicKeyJWK(req.PublicKeyJWK)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid device public key", Code: "INVALID_PUBLIC_KEY_JWK", Details: err.Error()})
-		return
-	}
-	req.PublicKeyJWK = normalizedPublicKeyJWK
-
-	keyVersion := req.KeyVersion
-	if keyVersion <= 0 {
-		keyVersion = 1
-	}
-
-	device := &models.UserDevice{
-		ID:           req.DeviceID,
-		CNSUserID:    int64(user.ID),
-		DeviceLabel:  req.DeviceLabel,
-		PublicKeyJWK: req.PublicKeyJWK,
-		KeyAlgorithm: req.KeyAlgorithm,
-		KeyVersion:   keyVersion,
-	}
-
-	if forceRecovery {
-		if req.WrappedUserKeyB64 == "" {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Wrapped user key is required for device recovery", Code: "WRAPPED_UK_REQUIRED"})
-			return
-		}
-
-		wrappedUserKey, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped user key", Code: "INVALID_WRAPPED_UK", Details: err.Error()})
-			return
-		}
-
-		envelope := &models.UserKeyEnvelope{
-			CNSUserID:      int64(user.ID),
-			DeviceID:       req.DeviceID,
-			WrappedUserKey: wrappedUserKey,
-			UKWrapAlg:      req.UKWrapAlg,
-			UKWrapMeta:     req.UKWrapMeta,
-			KeyVersion:     keyVersion,
-		}
-		if err := h.db.ResetTrustedDeviceState(c.Request.Context(), device, envelope); err != nil {
-			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to reset trusted devices", Code: "DEVICE_RECOVERY_FAILED"})
-			return
-		}
-		c.JSON(http.StatusOK, models.DeviceRegisterResponse{
-			DeviceID:        req.DeviceID,
-			NeedsEnrollment: false,
-			UserKeyEnvelope: &models.UserKeyEnvelopeResponse{
-				WrappedUKB64: base64.StdEncoding.EncodeToString(envelope.WrappedUserKey),
-				UKWrapAlg:    envelope.UKWrapAlg,
-				UKWrapMeta:   envelope.UKWrapMeta,
-				KeyVersion:   envelope.KeyVersion,
-			},
-		})
-		return
-	}
-
-	if err := h.db.CreateOrUpdateUserDevice(c.Request.Context(), device); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to register device", Code: "DEVICE_REGISTER_FAILED"})
-		return
-	}
-
-	existingEnvelope, existingErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.DeviceID)
-	if existingErr == nil {
-		c.JSON(http.StatusOK, models.DeviceRegisterResponse{
-			DeviceID:        req.DeviceID,
-			NeedsEnrollment: false,
-			UserKeyEnvelope: &models.UserKeyEnvelopeResponse{
-				WrappedUKB64: base64.StdEncoding.EncodeToString(existingEnvelope.WrappedUserKey),
-				UKWrapAlg:    existingEnvelope.UKWrapAlg,
-				UKWrapMeta:   existingEnvelope.UKWrapMeta,
-				KeyVersion:   existingEnvelope.KeyVersion,
-			},
-		})
-		return
-	}
-
-	hasTrustedEnvelope, err := h.db.UserHasTrustedKeyEnvelope(c.Request.Context(), int64(user.ID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to inspect trusted devices", Code: "DEVICE_REGISTER_FAILED"})
-		return
-	}
-
-	if hasTrustedEnvelope {
-		c.JSON(http.StatusOK, models.DeviceRegisterResponse{DeviceID: req.DeviceID, NeedsEnrollment: true})
-		return
-	}
-
-	if req.WrappedUserKeyB64 == "" {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Wrapped user key is required for first trusted device", Code: "WRAPPED_UK_REQUIRED"})
-		return
-	}
-
-	wrappedUserKey, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped user key", Code: "INVALID_WRAPPED_UK", Details: err.Error()})
-		return
-	}
-
-	envelope := &models.UserKeyEnvelope{
-		CNSUserID:      int64(user.ID),
-		DeviceID:       req.DeviceID,
-		WrappedUserKey: wrappedUserKey,
-		UKWrapAlg:      req.UKWrapAlg,
-		UKWrapMeta:     req.UKWrapMeta,
-		KeyVersion:     keyVersion,
-	}
-
-	if err := h.db.SaveUserKeyEnvelope(c.Request.Context(), envelope); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to store user key envelope", Code: "SAVE_UK_ENVELOPE_FAILED"})
-		return
-	}
-
-	c.JSON(http.StatusOK, models.DeviceRegisterResponse{
-		DeviceID:        req.DeviceID,
-		NeedsEnrollment: false,
-		UserKeyEnvelope: &models.UserKeyEnvelopeResponse{
-			WrappedUKB64: base64.StdEncoding.EncodeToString(envelope.WrappedUserKey),
-			UKWrapAlg:    envelope.UKWrapAlg,
-			UKWrapMeta:   envelope.UKWrapMeta,
-			KeyVersion:   envelope.KeyVersion,
-		},
-	})
+	handleSharedDeviceRegistration(c, h.db, forceRecovery)
+	return
 }
 
 func (h *AndroidHandler) CreateEnrollment(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
+	item := sharedCreateEnrollment(c, h.db)
+	if item != nil {
+		if user := middleware.GetCNSUser(c); user != nil {
+			h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", item.ID, "")
+		}
 	}
-
-	var req models.CreateEnrollmentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
-		return
-	}
-
-	owned, err := h.userOwnsDevice(c.Request.Context(), int64(user.ID), req.RequestDeviceID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to verify requesting device", Code: "DEVICE_LOOKUP_FAILED"})
-		return
-	}
-	if !owned {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Request device does not belong to user", Code: "DEVICE_NOT_AUTHORIZED"})
-		return
-
-	}
-
-	existing, err := h.db.GetPendingEnrollmentForDevice(c.Request.Context(), int64(user.ID), req.RequestDeviceID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to inspect pending enrollment", Code: "ENROLLMENT_LOOKUP_FAILED"})
-		return
-	}
-	if existing != nil {
-		c.JSON(http.StatusOK, models.CreateEnrollmentResponse{
-			EnrollmentID:     existing.ID,
-			VerificationCode: existing.VerificationCode,
-			ExpiresAt:        existing.ExpiresAt,
-		})
-		return
-	}
-
-	enrollment := &models.DeviceEnrollment{
-		CNSUserID:        int64(user.ID),
-		RequestDeviceID:  req.RequestDeviceID,
-		VerificationCode: generateAndroidVerificationCode(6),
-		Status:           models.EnrollmentStatusPending,
-		ExpiresAt:        time.Now().Add(10 * time.Minute),
-	}
-	if err := h.db.CreateEnrollmentRequest(c.Request.Context(), enrollment); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to create enrollment", Code: "ENROLLMENT_CREATE_FAILED"})
-		return
-	}
-
-	h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", enrollment.ID, "")
-	c.JSON(http.StatusOK, models.CreateEnrollmentResponse{EnrollmentID: enrollment.ID, VerificationCode: enrollment.VerificationCode, ExpiresAt: enrollment.ExpiresAt})
 }
 
 func (h *AndroidHandler) ListPendingEnrollments(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
-	_ = h.db.TouchExpiredEnrollments(c.Request.Context(), int64(user.ID))
-	items, err := h.db.ListPendingEnrollments(c.Request.Context(), int64(user.ID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to list enrollments", Code: "ENROLLMENT_LIST_FAILED"})
-		return
-	}
-
-	devices, err := h.db.GetActiveDevicesByUser(c.Request.Context(), int64(user.ID))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to list devices", Code: "DEVICE_LIST_FAILED"})
-		return
-	}
-	deviceByID := make(map[string]models.UserDevice, len(devices))
-	for _, device := range devices {
-		deviceByID[device.ID] = normalizeDevicePublicKeyForResponse(device)
-	}
-
-	respItems := make([]models.PendingEnrollmentItem, 0, len(items))
-	for _, item := range items {
-		device, ok := deviceByID[item.RequestDeviceID]
-		if !ok {
-			device = models.UserDevice{ID: item.RequestDeviceID}
-		}
-		respItems = append(respItems, models.PendingEnrollmentItem{Enrollment: item, RequestDevice: device})
-	}
-
-	c.JSON(http.StatusOK, models.PendingEnrollmentsResponse{Items: respItems})
+	sharedListEnrollments(c, h.db)
 }
 
 func (h *AndroidHandler) ApproveEnrollment(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
+	if sharedApproveEnrollment(c, h.db) {
+		if user := middleware.GetCNSUser(c); user != nil {
+			h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_approved", c.Param("id"), "")
+		}
 	}
-
-	enrollmentID := c.Param("id")
-	if enrollmentID == "" {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing enrollment id", Code: "INVALID_REQUEST"})
-		return
-	}
-
-	var req models.ApproveEnrollmentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
-		return
-	}
-
-	owned, err := h.userOwnsDevice(c.Request.Context(), int64(user.ID), req.ApproverDeviceID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to verify approver device", Code: "DEVICE_LOOKUP_FAILED"})
-		return
-	}
-	if !owned {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Approver device does not belong to user", Code: "DEVICE_NOT_AUTHORIZED"})
-		return
-	}
-
-	if _, err := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.ApproverDeviceID); err != nil {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Approver device is not trusted", Code: "APPROVER_NOT_TRUSTED"})
-		return
-	}
-
-	enrollment, err := h.db.GetEnrollmentByID(c.Request.Context(), int64(user.ID), enrollmentID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Enrollment not found", Code: "ENROLLMENT_NOT_FOUND"})
-		return
-	}
-	if enrollment.Status != models.EnrollmentStatusPending || time.Now().After(enrollment.ExpiresAt) {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Enrollment is no longer pending", Code: "ENROLLMENT_NOT_PENDING"})
-		return
-	}
-	if !strings.EqualFold(strings.TrimSpace(req.VerificationCode), strings.TrimSpace(enrollment.VerificationCode)) {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Verification code mismatch", Code: "VERIFICATION_CODE_MISMATCH"})
-		return
-	}
-
-	wrappedUserKey, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped user key", Code: "INVALID_WRAPPED_UK", Details: err.Error()})
-		return
-	}
-
-	envelope := &models.UserKeyEnvelope{
-		CNSUserID:      int64(user.ID),
-		DeviceID:       enrollment.RequestDeviceID,
-		WrappedUserKey: wrappedUserKey,
-		UKWrapAlg:      req.UKWrapAlg,
-		UKWrapMeta:     req.UKWrapMeta,
-		KeyVersion:     1,
-	}
-	if err := h.db.SaveUserKeyEnvelope(c.Request.Context(), envelope); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to persist wrapped user key", Code: "SAVE_UK_ENVELOPE_FAILED"})
-		return
-	}
-
-	if err := h.db.ApproveEnrollment(c.Request.Context(), int64(user.ID), enrollmentID, req.ApproverDeviceID); err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to approve enrollment", Code: "ENROLLMENT_APPROVE_FAILED"})
-		return
-	}
-
-	go h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_approved", enrollmentID, req.ApproverDeviceID)
-	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 func (h *AndroidHandler) RejectEnrollment(c *gin.Context) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-
-	enrollmentID := c.Param("id")
-	if enrollmentID == "" {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Missing enrollment id", Code: "INVALID_REQUEST"})
-		return
-	}
-
-	var req models.RejectEnrollmentRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
-		return
-	}
-
-	owned, err := h.userOwnsDevice(c.Request.Context(), int64(user.ID), req.ApproverDeviceID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to verify approver device", Code: "DEVICE_LOOKUP_FAILED"})
-		return
-	}
-	if !owned {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Approver device does not belong to user", Code: "DEVICE_NOT_AUTHORIZED"})
-		return
-	}
-
-	if _, err := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), req.ApproverDeviceID); err != nil {
-		c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Approver device is not trusted", Code: "APPROVER_NOT_TRUSTED"})
-		return
-	}
-
-	if err := h.db.RejectEnrollment(c.Request.Context(), int64(user.ID), enrollmentID); err != nil {
-		if err == models.ErrUploadNotPending {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Enrollment is no longer pending", Code: "ENROLLMENT_NOT_PENDING"})
-			return
+	if sharedRejectEnrollment(c, h.db) {
+		if user := middleware.GetCNSUser(c); user != nil {
+			h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_rejected", c.Param("id"), "")
 		}
-		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to reject enrollment", Code: "ENROLLMENT_REJECT_FAILED"})
-		return
 	}
-
-	go h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_rejected", enrollmentID, "")
-	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 func (h *AndroidHandler) DeviceNotificationsWS(c *gin.Context) {
@@ -951,19 +609,6 @@ func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int
 	}
 }
 
-func (h *AndroidHandler) userOwnsDevice(ctx context.Context, userID int64, deviceID string) (bool, error) {
-	devices, err := h.db.GetActiveDevicesByUser(ctx, userID)
-	if err != nil {
-		return false, err
-	}
-	for _, d := range devices {
-		if d.ID == deviceID {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func holdOpen(conn *websocket.Conn) {
 	defer conn.Close()
 	for {
@@ -979,23 +624,6 @@ func isAndroidFileID(id string) bool {
 	}
 	matched, _ := regexp.MatchString("^[a-z0-9]+$", id)
 	return matched
-}
-
-func generateAndroidVerificationCode(length int) string {
-	if length <= 0 {
-		length = 6
-	}
-	const digits = "0123456789"
-	result := make([]byte, length)
-	for i := 0; i < length; i++ {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
-		if err != nil {
-			result[i] = digits[0]
-			continue
-		}
-		result[i] = digits[n.Int64()]
-	}
-	return string(result)
 }
 
 func normalizeDevicePublicKeyJWK(raw json.RawMessage) (json.RawMessage, error) {

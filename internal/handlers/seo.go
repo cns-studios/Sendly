@@ -39,8 +39,8 @@ func (h *PageHandler) Sitemap(c *gin.Context) {
 		{Loc: baseURL + "/limits", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
 		{Loc: baseURL + "/data-encryption", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
 		{Loc: baseURL + "/help", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
-		{Loc: baseURL + "/tos", LastMod: "2026-04-05", ChangeFreq: "yearly", Priority: "0.5"},
-		{Loc: baseURL + "/privacy", LastMod: "2026-04-04", ChangeFreq: "yearly", Priority: "0.5"},
+		{Loc: baseURL + "/tos", LastMod: "2026-09-25", ChangeFreq: "yearly", Priority: "0.5"},
+		{Loc: baseURL + "/privacy", LastMod: "2026-09-25", ChangeFreq: "yearly", Priority: "0.5"},
 	}
 
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9", URLs: urls}

@@ -69,6 +69,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
     <script src="/static/js/mobile-menu.js" defer></script>
+    <script src="/static/js/toast.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Preconnect to external resources -->
@@ -111,11 +112,6 @@
         </button>
     </div>
 
-    <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
-        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
-        <span id="notification-text" class="notification-text"></span>
-    </div>
-
     <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
             <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
@@ -152,96 +148,12 @@
             {{if .authenticated}}
             <a href="/uploaded" class="recent-files-link">{{.t.header_recent_files}}</a>
             {{end}}
-            {{if .authenticated}}
-            <!-- Account Menu Trigger -->
-            <button type="button"
-                    class="account-menu-trigger"
-                    id="account-menu-trigger"
-                    aria-haspopup="true"
-                    aria-expanded="false"
-                    aria-label="{{.t.header_account_menu_label}}"
-                    style="background:#333;border:none;position:relative;display:inline-flex;align-items:center;gap:8px;padding:8px 12px 8px 8px;border-radius:34px;cursor:pointer;color:#fff;">
-                <!-- Avatar -->
-                <span class="account-menu-avatar" data-username="{{.username}}">
-                    <img src="{{.userAvatar}}" alt="" class="account-menu-avatar-img" width="24" height="24" style="border-radius:50%;object-fit:cover;display:block;" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
-                </span>
-                <!-- Username with truncation -->
-                <span class="account-menu-username" style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;font-weight:400;line-height:1.4;" title="{{.username}}">{{.username}}</span>
-                <!-- Chevron -->
-                <i data-lucide="chevron-down" aria-hidden="true" style="width:16px;height:16px;flex-shrink:0;"></i>
-            </button>
-
-            <!-- Account Menu Dropdown -->
-            <div class="account-menu" role="menu" style="display:none;position:absolute;top:100%;right:0;margin-top:6px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:0 0 12px 12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;overflow:hidden;z-index:1000;">
-                <div style="border-bottom:1px solid #e0e0e0;">
-                    <a href="{{.accountURL}}" role="menuitem" class="account-menu-item" style="display:flex;align-items:center;gap:10px;padding:12px 16px;color:#1a1a1a;text-decoration:none;font-size:14px;transition:background 0.15s;">
-                        <i data-lucide="user" aria-hidden="true" style="width:18px;height:18px;color:#666;flex-shrink:0;"></i>
-                        <span>{{.t.header_your_account}}</span>
-                    </a>
-                    <a href="/uploaded" role="menuitem" class="account-menu-item" style="display:flex;align-items:center;gap:10px;padding:12px 16px;color:#1a1a1a;text-decoration:none;font-size:14px;transition:background 0.15s;">
-                        <i data-lucide="history" aria-hidden="true" style="width:18px;height:18px;color:#666;flex-shrink:0;"></i>
-                        <span>{{.t.header_recent_files}}</span>
-                    </a>
-                </div>
-                <div>
-                    <a href="/auth/logout" role="menuitem" class="account-menu-item" style="display:flex;align-items:center;gap:10px;padding:12px 16px;color:#1a1a1a;text-decoration:none;font-size:14px;transition:background 0.15s;">
-                        <i data-lucide="log-out" aria-hidden="true" style="width:18px;height:18px;color:#666;flex-shrink:0;"></i>
-                        <span>{{.t.header_logout}}</span>
-                    </a>
-                </div>
-            </div>
-            {{else}}
-            <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
-            {{end}}
-            <button type="button" class="mobile-menu-btn" id="mobile-menu-open" aria-controls="mobile-menu" aria-expanded="false" aria-label="{{.t.header_menu_label}}">
-                {{if .authenticated}}
-                <img src="{{.userAvatar}}" alt="" class="mobile-menu-btn-avatar" width="32" height="32" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
-                {{else}}
-                <i data-lucide="menu" aria-hidden="true"></i>
-                {{end}}
-            </button>
+            {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
         </header>
     </div>
 
-    <div class="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="{{.t.header_menu_label}}">
-        <div class="mobile-menu-top">
-            <a href="/" class="mobile-menu-logo">{{.t.header_logo}}</a>
-            <button type="button" class="mobile-menu-btn" data-mobile-menu-close aria-label="{{.t.recent_files_close}}"><i data-lucide="x" aria-hidden="true"></i></button>
-        </div>
-        {{if .authenticated}}
-        <a href="{{.accountURL}}" class="mobile-menu-user">
-            <img src="{{.userAvatar}}" alt="" class="mobile-menu-user-avatar" width="44" height="44" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
-            <span class="mobile-menu-user-text">
-                <span class="mobile-menu-user-name">{{.username}}</span>
-                <span class="mobile-menu-user-sub">{{.t.header_your_account}}</span>
-            </span>
-            <i data-lucide="chevron-right" aria-hidden="true"></i>
-        </a>
-        {{end}}
-        <nav class="mobile-menu-nav">
-            <a href="/limits">{{.t.header_pricing}}</a>
-            <a href="/data-encryption">{{.t.header_security}}</a>
-            <a href="/help">{{.t.header_faq}}</a>
-        </nav>
-        <div class="mobile-menu-list">
-            {{if .authenticated}}
-            <a href="/uploaded" class="mobile-menu-row"><i data-lucide="history" aria-hidden="true"></i><span>{{.t.header_recent_files}}</span></a>
-            {{end}}
-            <a href="?lang={{.otherLocale}}" class="mobile-menu-row"><i data-lucide="languages" aria-hidden="true"></i><span>{{.otherLocaleLabel}}</span></a>
-            {{if .authenticated}}
-            <a href="/auth/logout" class="mobile-menu-row"><i data-lucide="log-out" aria-hidden="true"></i><span>{{.t.header_logout}}</span></a>
-            {{end}}
-        </div>
-        <div class="mobile-menu-bottom">
-            {{if not .authenticated}}
-            <a href="{{.authLoginURL}}" class="mobile-menu-login">{{.t.header_login}}</a>
-            {{end}}
-            <div class="mobile-menu-legal">
-                <a href="/tos">{{.t.footer_tos}}</a>
-                <a href="/privacy">{{.t.footer_privacy}}</a>
-            </div>
-        </div>
-    </div>
+    {{template "mobile_menu" .}}
 
     <div class="main-content">
 
@@ -306,7 +218,7 @@
                             <stop offset="0.5" stop-color="#00827B"/>
                         </linearGradient>
                         <mask id="starMask">
-                            <path d="M805.544 48.6921C826.576 -16.2307 918.427 -16.2307 939.458 48.6921V48.6921C957.199 103.455 1029.6 114.921 1063.39 68.3213V68.3213C1103.46 13.0752 1190.81 41.4586 1190.75 109.703V109.703C1190.7 167.267 1256.01 200.546 1302.56 166.669V166.669C1357.73 126.508 1432.04 180.496 1410.89 245.382V245.382C1393.06 300.113 1444.89 351.946 1499.62 334.109V334.109C1564.51 312.963 1618.5 387.272 1578.33 442.448V442.448C1544.46 488.988 1577.74 554.301 1635.3 554.25V554.25C1703.54 554.19 1731.93 641.546 1676.68 681.61V681.61C1630.08 715.405 1641.55 787.804 1696.31 805.544V805.544C1761.23 826.576 1761.23 918.427 1696.31 939.458V939.458C1641.55 957.199 1630.08 1029.6 1676.68 1063.39V1063.39C1731.93 1103.46 1703.54 1190.81 1635.3 1190.75V1190.75C1577.74 1190.7 1544.46 1256.01 1578.33 1302.56V1302.56C1618.5 1357.73 1564.51 1432.04 1499.62 1410.89V1410.89C1444.89 1393.06 1393.06 1444.89 1410.89 1499.62V1499.62C1432.04 1564.51 1357.73 1618.5 1302.56 1578.33V1578.33C1256.01 1544.46 1190.7 1577.74 1190.75 1635.3V1635.3C1190.81 1703.54 1103.46 1731.93 1063.39 1676.68V1676.68C1029.6 1630.08 957.199 1641.55 939.458 1696.31V1696.31C918.427 1761.23 826.576 1761.23 805.544 1696.31V1696.31C787.804 1641.55 715.405 1630.08 681.61 1676.68V1676.68C641.546 1731.93 554.19 1703.54 554.25 1635.3V1635.3C554.301 1577.74 488.988 1544.46 442.448 1578.33V1578.33C387.272 1618.5 312.963 1564.51 334.109 1499.62V1499.62C351.946 1444.89 300.113 1393.06 245.382 1410.89V1410.89C180.496 1432.04 126.508 1357.73 166.669 1302.56V1302.56C200.546 1256.01 167.267 1190.7 109.703 1190.75V1190.75C41.4586 1190.81 13.0752 1103.46 68.3213 1063.39V1063.39C114.921 1029.6 103.455 957.199 48.6921 939.458V939.458C-16.2307 918.427 -16.2307 826.576 48.6921 805.544V805.544C103.455 787.804 114.921 715.405 68.3213 681.61V681.61C13.0752 641.546 41.4587 554.19 109.703 554.25V554.25C167.267 554.301 200.546 488.988 166.669 442.448V442.448C126.508 387.272 180.496 312.963 245.382 334.109V334.109C300.113 351.946 351.946 300.113 334.109 245.382V245.382C312.963 180.496 387.272 126.508 442.448 166.669V166.669C488.988 200.546 554.301 167.267 554.25 109.703V109.703C554.19 41.4586 641.546 13.0752 681.61 68.3213V68.3213C715.405 114.921 787.804 103.455 805.544 48.6921V48.6921Z" fill="white">
+                            <path d="M820.252 36.670C837.291 -13.031 907.709 -13.031 924.748 36.670C939.605 78.484 997.366 85.498 1021.797 48.454C1050.235 4.275 1118.608 21.127 1123.257 73.461C1127.675 117.616 1182.079 138.249 1214.666 108.128C1252.850 72.039 1315.203 104.764 1307.193 156.690C1300.916 200.619 1348.801 233.672 1387.650 212.225C1433.361 186.322 1486.070 233.019 1465.866 281.519C1449.258 322.670 1487.842 366.222 1530.694 354.695C1581.277 340.484 1621.279 398.438 1590.055 440.694C1564.082 476.674 1591.122 528.194 1635.487 527.258C1688.001 525.565 1712.971 591.408 1672.542 624.963C1638.713 653.682 1652.638 710.176 1695.938 719.885C1747.331 730.808 1755.819 800.714 1708.534 823.619C1668.815 843.408 1668.815 901.592 1708.534 921.381C1755.819 944.286 1747.331 1014.192 1695.938 1025.115C1652.638 1034.824 1638.713 1091.318 1672.542 1120.037C1712.971 1153.592 1688.001 1219.435 1635.487 1217.742C1591.122 1216.806 1564.082 1268.326 1590.055 1304.306C1621.279 1346.562 1581.277 1404.516 1530.694 1390.305C1487.842 1378.778 1449.258 1422.330 1465.866 1463.481C1486.070 1511.981 1433.361 1558.678 1387.650 1532.775C1348.801 1511.328 1300.916 1544.381 1307.193 1588.310C1315.203 1640.236 1252.850 1672.961 1214.666 1636.872C1182.079 1606.751 1127.675 1627.384 1123.257 1671.539C1118.608 1723.873 1050.235 1740.725 1021.797 1696.546C997.366 1659.502 939.605 1666.516 924.748 1708.330C907.709 1758.031 837.291 1758.031 820.252 1708.330C805.395 1666.516 747.634 1659.502 723.203 1696.546C694.765 1740.725 626.392 1723.873 621.743 1671.539C617.325 1627.384 562.921 1606.751 530.334 1636.872C492.150 1672.961 429.797 1640.236 437.807 1588.310C444.084 1544.381 396.199 1511.328 357.350 1532.775C311.639 1558.678 258.930 1511.981 279.134 1463.481C295.742 1422.330 257.158 1378.778 214.306 1390.305C163.723 1404.516 123.721 1346.562 154.945 1304.306C180.918 1268.326 153.878 1216.806 109.513 1217.742C56.999 1219.435 32.029 1153.592 72.458 1120.037C106.287 1091.318 92.362 1034.824 49.062 1025.115C-2.331 1014.192 -10.819 944.286 36.466 921.381C76.185 901.592 76.185 843.408 36.466 823.619C-10.819 800.714 -2.331 730.808 49.062 719.885C92.362 710.176 106.287 653.682 72.458 624.963C32.029 591.408 56.999 525.565 109.513 527.258C153.878 528.194 180.918 476.674 154.945 440.694C123.721 398.438 163.723 340.484 214.306 354.695C257.158 366.222 295.742 322.670 279.134 281.519C258.930 233.019 311.639 186.322 357.350 212.225C396.199 233.672 444.084 200.619 437.807 156.690C429.797 104.764 492.150 72.039 530.334 108.128C562.921 138.249 617.325 117.616 621.743 73.461C626.392 21.127 694.765 4.275 723.203 48.454C747.634 85.498 805.395 78.484 820.252 36.670Z" fill="white">
                                 <animateTransform attributeName="transform" type="rotate" from="0 872.5 872.5" to="360 872.5 872.5" dur="300s" repeatCount="indefinite"/>
                             </path>
                         </mask>
@@ -337,6 +249,8 @@
         </div>
     </div>
 
+    {{template "transfers_promo" .}}
+
     <script>
         window.CONFIG = {{.configJSON}};
     </script>
@@ -349,108 +263,6 @@
                 lucide.replace();
             }
         });
-
-        // Account Menu Logic
-        (function() {
-            var trigger = document.getElementById('account-menu-trigger');
-            var menu = trigger ? trigger.nextElementSibling : null;
-            if (!trigger || !menu) return;
-
-            var isOpen = false;
-            var focusableItems = menu.querySelectorAll('[role="menuitem"]');
-            var focusIndex = -1;
-
-            function openMenu() {
-                if (isOpen) return;
-                isOpen = true;
-                menu.style.display = 'block';
-                trigger.setAttribute('aria-expanded', 'true');
-                trigger.focus();
-                focusIndex = -1;
-            }
-
-            function closeMenu() {
-                if (!isOpen) return;
-                isOpen = false;
-                menu.style.display = 'none';
-                trigger.setAttribute('aria-expanded', 'false');
-                focusIndex = -1;
-            }
-
-            function toggleMenu() {
-                if (isOpen) closeMenu(); else openMenu();
-            }
-
-            function focusItem(index) {
-                if (index < 0) index = focusableItems.length - 1;
-                if (index >= focusableItems.length) index = 0;
-                focusIndex = index;
-                focusableItems[focusIndex].focus();
-            }
-
-            trigger.addEventListener('click', function(e) {
-                e.stopPropagation();
-                toggleMenu();
-            });
-
-            trigger.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closeMenu();
-                } else if (e.key === 'ArrowDown' && !isOpen) {
-                    e.preventDefault();
-                    openMenu();
-                    focusItem(0);
-                } else if (e.key === 'ArrowDown' && isOpen) {
-                    e.preventDefault();
-                    focusItem(focusIndex + 1);
-                } else if (e.key === 'ArrowUp' && isOpen) {
-                    e.preventDefault();
-                    focusItem(focusIndex - 1);
-                } else if (e.key === 'Tab' && isOpen) {
-                    // Let focus move naturally, but close if leaving menu
-                    setTimeout(function() {
-                        if (!menu.contains(document.activeElement) && document.activeElement !== trigger) {
-                            closeMenu();
-                        }
-                    }, 0);
-                }
-            });
-
-            focusableItems.forEach(function(item, i) {
-                item.addEventListener('keydown', function(e) {
-                    if (e.key === 'Escape') {
-                        closeMenu();
-                        trigger.focus();
-                    } else if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        focusItem(i + 1);
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        focusItem(i - 1);
-                    }
-                });
-            });
-
-            // Close on click outside
-            document.addEventListener('click', function(e) {
-                if (isOpen && !trigger.contains(e.target) && !menu.contains(e.target)) {
-                    closeMenu();
-                }
-            });
-
-            // Ensure Lucide icons in menu are initialized when menu opens (menu is server-rendered,
-            // so global DOMContentLoaded already handles it, but this is a safety net for
-            // any edge case where icons weren't initialized yet)
-            var iconsInitialized = false;
-            var originalOpenMenu = openMenu;
-            openMenu = function() {
-                originalOpenMenu();
-                if (!iconsInitialized && window.lucide && lucide.createIcons) {
-                    lucide.createIcons();
-                    iconsInitialized = true;
-                }
-            };
-        })();
 
         
         (function(){if(window.innerWidth>768){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}}})();
@@ -474,6 +286,7 @@
         })();
     </script>
     <script src="/static/js/crypto.js"></script>
+    <script src="/static/js/identity-migration.js"></script>
     <script src="/static/js/app.js"></script>
     <script>
         (function(){var ua=navigator.userAgent,o=false;if(/MSIE|Trident/.test(ua))o=true;else if(!/Edg/.test(ua)&&/Chrome\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<80)o=true;else if(/Firefox\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<74)o=true;else if(/Version\/(\d+\.?\d*).*Safari/.test(ua)&&parseFloat(RegExp.$1)<13.1)o=true;if(o)document.getElementById('browser-old-nudge').classList.remove('hidden')})();

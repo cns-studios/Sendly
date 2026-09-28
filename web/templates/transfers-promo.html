@@ -1,0 +1,63 @@
+{{/* Transfers announcement card, shown on the homepage via {{template "transfers_promo" .}}.
+     Styles: /static/css/transfers-promo.css, behaviour: /static/js/transfers-promo.js.
+     Only rendered when CNS login is configured. */}}
+{{define "transfers_promo"}}
+{{if .authLoginURL}}
+<link rel="stylesheet" href="/static/css/transfers-promo.css">
+<aside id="transfers-promo" class="tp-card" role="region" aria-label="{{.t.transfers_promo_label}}">
+    <div class="tp-visual tp-s" style="--i:0">
+        <svg class="tp-star" viewBox="0 0 1745 1745" aria-hidden="true"><path fill="#fff" d="M805.544 48.6921C826.576 -16.2307 918.427 -16.2307 939.458 48.6921V48.6921C957.199 103.455 1029.6 114.921 1063.39 68.3213V68.3213C1103.46 13.0752 1190.81 41.4586 1190.75 109.703V109.703C1190.7 167.267 1256.01 200.546 1302.56 166.669V166.669C1357.73 126.508 1432.04 180.496 1410.89 245.382V245.382C1393.06 300.113 1444.89 351.946 1499.62 334.109V334.109C1564.51 312.963 1618.5 387.272 1578.33 442.448V442.448C1544.46 488.988 1577.74 554.301 1635.3 554.25V554.25C1703.54 554.19 1731.93 641.546 1676.68 681.61V681.61C1630.08 715.405 1641.55 787.804 1696.31 805.544V805.544C1761.23 826.576 1761.23 918.427 1696.31 939.458V939.458C1641.55 957.199 1630.08 1029.6 1676.68 1063.39V1063.39C1731.93 1103.46 1703.54 1190.81 1635.3 1190.75V1190.75C1577.74 1190.7 1544.46 1256.01 1578.33 1302.56V1302.56C1618.5 1357.73 1564.51 1432.04 1499.62 1410.89V1410.89C1444.89 1393.06 1393.06 1444.89 1410.89 1499.62V1499.62C1432.04 1564.51 1357.73 1618.5 1302.56 1578.33V1578.33C1256.01 1544.46 1190.7 1577.74 1190.75 1635.3V1635.3C1190.81 1703.54 1103.46 1731.93 1063.39 1676.68V1676.68C1029.6 1630.08 957.199 1641.55 939.458 1696.31V1696.31C918.427 1761.23 826.576 1761.23 805.544 1696.31V1696.31C787.804 1641.55 715.405 1630.08 681.61 1676.68V1676.68C641.546 1731.93 554.19 1703.54 554.25 1635.3V1635.3C554.301 1577.74 488.988 1544.46 442.448 1578.33V1578.33C387.272 1618.5 312.963 1564.51 334.109 1499.62V1499.62C351.946 1444.89 300.113 1393.06 245.382 1410.89V1410.89C180.496 1432.04 126.508 1357.73 166.669 1302.56V1302.56C200.546 1256.01 167.267 1190.7 109.703 1190.75V1190.75C41.4586 1190.81 13.0752 1103.46 68.3213 1063.39V1063.39C114.921 1029.6 103.455 957.199 48.6921 939.458V939.458C-16.2307 918.427 -16.2307 826.576 48.6921 805.544V805.544C103.455 787.804 114.921 715.405 68.3213 681.61V681.61C13.0752 641.546 41.4587 554.19 109.703 554.25V554.25C167.267 554.301 200.546 488.988 166.669 442.448V442.448C126.508 387.272 180.496 312.963 245.382 334.109V334.109C300.113 351.946 351.946 300.113 334.109 245.382V245.382C312.963 180.496 387.272 126.508 442.448 166.669V166.669C488.988 200.546 554.301 167.267 554.25 109.703V109.703C554.19 41.4586 641.546 13.0752 681.61 68.3213V68.3213C715.405 114.921 787.804 103.455 805.544 48.6921V48.6921Z"/></svg>
+        <span class="tp-badge">{{.t.transfers_promo_badge}}</span>
+        <button type="button" class="tp-close" id="tp-close" aria-label="{{.t.transfers_promo_close}}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+        <div aria-hidden="true">
+            <div class="tp-mini tp-c1">
+                <div class="tp-row">
+                    <div class="tp-fileicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tp-dir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg></span></div>
+                    <div class="tp-meta"><div class="tp-name">Invoice-Q3.pdf</div><div class="tp-sub">3.4 MB<b>•</b>PDF</div></div>
+                    <div class="tp-stack"><span class="tp-pill">{{.t.transfers_promo_time_left}}</span></div>
+                </div>
+                <div class="tp-foot-row">
+                    <div class="tp-who"><span class="tp-av" style="background:linear-gradient(135deg,#FFE3B8,#FF9F0A)">L</span><span>{{.t.transfers_from}} <strong>@leon</strong></span></div>
+                    <div class="tp-btns"><span class="tp-btn tp-decline">{{.t.transfers_decline}}</span><span class="tp-btn tp-accept"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{.t.transfers_accept}}</span></div>
+                </div>
+                <svg class="tp-cursor" style="left:calc(100% - 152px)" viewBox="0 0 24 24" fill="#fff" stroke="#0b0b0f" stroke-width="1.6" stroke-linejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg>
+            </div>
+            <div class="tp-mini tp-c2">
+                <div class="tp-row">
+                    <div class="tp-fileicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tp-dir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg></span></div>
+                    <div class="tp-meta"><div class="tp-name">Holiday-Photos.zip</div><div class="tp-sub">248 MB<b>•</b>ZIP</div></div>
+                    <div class="tp-stack"><span class="tp-pill tp-a">{{.t.transfers_promo_time_left}}</span><span class="tp-pill tp-b">{{.t.transfers_status_accepted}}</span></div>
+                </div>
+                <div class="tp-foot-row">
+                    <div class="tp-who"><span class="tp-av" style="background:linear-gradient(135deg,#79FFA1,#00827B)">M</span><span>{{.t.transfers_from}} <strong>@mike</strong></span></div>
+                    <div class="tp-stack"><div class="tp-btns tp-a"><span class="tp-btn tp-decline">{{.t.transfers_decline}}</span><span class="tp-btn tp-accept"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{.t.transfers_accept}}</span></div><div class="tp-btns tp-b"><span class="tp-btn tp-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>{{.t.transfers_download}}</span></div></div>
+                </div>
+                <svg class="tp-cursor" viewBox="0 0 24 24" fill="#fff" stroke="#0b0b0f" stroke-width="1.6" stroke-linejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg>
+            </div>
+            <div class="tp-mini tp-c3">
+                <div class="tp-row">
+                    <div class="tp-fileicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tp-dir is-sent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></span></div>
+                    <div class="tp-meta"><div class="tp-name">Design-Files.fig</div><div class="tp-sub">92 MB<b>•</b>FIG</div></div>
+                    <div class="tp-stack"><span class="tp-pill is-blue tp-ps">{{.t.transfers_promo_sending}}</span><span class="tp-pill is-blue tp-pa">{{.t.transfers_promo_awaiting}}</span><span class="tp-pill tp-pb">{{.t.transfers_status_accepted}}</span></div>
+                </div>
+                <div class="tp-foot-row">
+                    <div class="tp-who"><span class="tp-av" style="background:linear-gradient(135deg,#BFDBFF,#007AFF)">T</span><span>{{.t.transfers_to}} <strong>@tom</strong></span></div>
+                </div>
+                <div class="tp-prog"><i></i></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-body">
+        <h2 class="tp-title tp-s" style="--i:1">{{.t.transfers_promo_title}} <span>Transfers.</span></h2>
+        <p class="tp-desc tp-s" style="--i:2">{{.t.transfers_promo_desc}}</p>
+        {{if .authenticated}}
+        <a href="/transfers" class="tp-cta tp-s" style="--i:3" id="tp-cta">{{.t.transfers_promo_cta}}<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+        {{else}}
+        <a href="{{.authLoginURL}}" class="tp-cta tp-s" style="--i:3" id="tp-cta">{{.t.transfers_promo_cta_guest}}<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+        <p class="tp-note tp-s" style="--i:4">{{.t.transfers_promo_note}}</p>
+        {{end}}
+    </div>
+</aside>
+<script src="/static/js/transfers-promo.js"></script>
+{{end}}
+{{end}}
