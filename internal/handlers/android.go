@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -183,7 +182,7 @@ func (h *AndroidHandler) GetFile(c *gin.Context) {
 		return
 	}
 
-	file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+	file, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 		return
@@ -205,7 +204,7 @@ func (h *AndroidHandler) Download(c *gin.Context) {
 		return
 	}
 
-	file, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
+	file, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 		return
@@ -357,24 +356,6 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 	uid := int64(user.ID)
 	uname := user.Username
 	opts := &services.FinalizeUploadOptions{OwnerCNSUserID: &uid, OwnerCNSUserName: &uname}
-	if req.WrappedDEKB64 != "" {
-		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
-		if decodeErr != nil {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid wrapped DEK", Code: "INVALID_WRAPPED_DEK", Details: decodeErr.Error()})
-			return
-		}
-		opts.WrappedDEK = wrappedDEK
-		opts.DEKWrapAlg = req.DEKWrapAlg
-		opts.DEKWrapVersion = req.DEKWrapVersion
-		if req.DEKWrapNonceB64 != "" {
-			nonce, nonceErr := base64.StdEncoding.DecodeString(req.DEKWrapNonceB64)
-			if nonceErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid DEK wrap nonce", Code: "INVALID_DEK_WRAP_NONCE", Details: nonceErr.Error()})
-				return
-			}
-			opts.DEKWrapNonce = nonce
-		}
-	}
 	if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
 		return
@@ -403,27 +384,21 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
+		// Files may only be added by the host or participants it approved.
+		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
+		if authErr != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
+			return
+		}
+		if caller == nil {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Not a participant of this tunnel", Code: "TUNNEL_FORBIDDEN"})
+			return
+		}
+		if !caller.approved() {
+			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
 			return
 		}
 
-		if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
-			peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
-				req.SessionID,
-				peerUserID,
-				peerDeviceID,
-				req.PeerWrappedDEKB64,
-				req.PeerDEKWrapAlg,
-				req.PeerDEKWrapNonceB64,
-				req.PeerDEKWrapVersion,
-			)
-			if peerErr != nil {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Cross-account tunnel upload requires a peer key envelope", Code: "PEER_WRAPPED_DEK_REQUIRED", Details: peerErr.Error()})
-				return
-			}
-			opts.RecipientEnvelopes = append(opts.RecipientEnvelopes, peerEnvelope)
-		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt
 	}

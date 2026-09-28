@@ -30,7 +30,7 @@
     let uploadStartedAt = 0;
     let finalizeEnvelopePayload = null;
     let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
+    let authIdentityKey = null;
     let lastShareUrl = '';
     let uploadedFileID = '';
     let idleCopyDone = false;
@@ -130,21 +130,18 @@
             const result = await SecureCrypto.registerAuthenticatedDevice({
                 userId: CNS_USER_ID,
                 username: CNS_USERNAME,
-                csrfToken: getCookieValue('csrf_token'),
-                includeBootstrapEnvelope: true
+                csrfToken: getCookieValue('csrf_token')
             });
             authDeviceIdentity = result.identity;
-            authUserKeyRaw = result.userKeyRaw;
-            const payload = result.payload;
-            if (payload.needs_enrollment) {
-                authUserKeyRaw = null;
+            authIdentityKey = result.identityKey;
+            if (!authIdentityKey) {
                 showErrorBanner(t('toast_device_approve'));
                 return false;
             }
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
-            authUserKeyRaw = null;
+            authIdentityKey = null;
             return false;
         }
     }
@@ -730,16 +727,11 @@
             const dekBytes = new TextEncoder().encode(generatedPassword);
 
             if (AUTHENTICATED) {
-                if (!authUserKeyRaw) await ensureDeviceReady();
-                if (authUserKeyRaw) {
-                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
-                    finalizeEnvelopePayload = {
-                        wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
-                        dek_wrap_alg: 'AES-GCM-UK-v1',
-                        dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
-                        dek_wrap_version: 1
-                    };
+                if (!authIdentityKey) await ensureDeviceReady();
+                if (!authIdentityKey) {
+                    throw new Error(t('toast_device_approve'));
                 }
+                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             }
 
             zoneSubtext.textContent = t('status_uploading');

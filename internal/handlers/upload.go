@@ -141,10 +141,9 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 		}
 	}
 
-	if req.WrappedDEKB64 != "" {
-		if opts == nil {
-			opts = &services.FinalizeUploadOptions{}
-		}
+	if user == nil && req.WrappedDEKB64 != "" {
+		// A guest's quick share upload, wrapped for its throwaway participant key.
+		opts = &services.FinalizeUploadOptions{}
 		wrappedDEK, decodeErr := base64.StdEncoding.DecodeString(req.WrappedDEKB64)
 		if decodeErr != nil {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{
@@ -172,22 +171,15 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			opts.DEKWrapNonce = nonce
 		}
 	}
-	if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
-		return
+	if user != nil {
+		if err := applyIdentityFinalizeEnvelope(&req, opts); err != nil {
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid identity DEK envelope", Code: "INVALID_IDENTITY_WRAPPED_DEK", Details: err.Error()})
+			return
+		}
 	}
 	if req.TunnelID != "" {
 		if opts == nil {
 			opts = &services.FinalizeUploadOptions{}
-		}
-		if user != nil {
-			if req.WrappedDEKB64 == "" {
-				c.JSON(http.StatusBadRequest, models.ErrorResponse{
-					Error: "Trusted device approval is required before authenticated uploads can be finalized",
-					Code:  "WRAPPED_DEK_REQUIRED",
-				})
-				return
-			}
 		}
 
 		tunnel, err := h.db.GetTunnelByID(c.Request.Context(), req.TunnelID)
@@ -216,36 +208,6 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 		if !caller.approved() {
 			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
 			return
-		}
-		if user != nil {
-			if ok, _ := h.db.TunnelBelongsToUser(c.Request.Context(), req.TunnelID, int64(user.ID)); !ok {
-				c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "Tunnel does not belong to this account", Code: "TUNNEL_FORBIDDEN"})
-				return
-			}
-
-			if peerUserID, peerDeviceID := resolveTunnelPeerRecipient(tunnel, int64(user.ID)); peerUserID != 0 {
-				if approved, err := tunnelPeerApproved(c, h.db, tunnel, peerUserID, peerDeviceID); err != nil {
-					c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
-					return
-				} else if !approved {
-					c.JSON(http.StatusConflict, models.ErrorResponse{Error: models.ErrParticipantNotApproved.Message, Code: models.ErrParticipantNotApproved.Code})
-					return
-				}
-				peerEnvelope, peerErr := buildRecipientEnvelopeFromRequest(
-					req.SessionID,
-					peerUserID,
-					peerDeviceID,
-					req.PeerWrappedDEKB64,
-					req.PeerDEKWrapAlg,
-					req.PeerDEKWrapNonceB64,
-					req.PeerDEKWrapVersion,
-				)
-				if peerErr != nil {
-					c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Cross-account tunnel upload requires a peer key envelope", Code: "PEER_WRAPPED_DEK_REQUIRED", Details: peerErr.Error()})
-					return
-				}
-				opts.RecipientEnvelopes = append(opts.RecipientEnvelopes, peerEnvelope)
-			}
 		}
 		opts.TunnelID = req.TunnelID
 		opts.TunnelExpiresAt = tunnel.ExpiresAt

@@ -40,7 +40,7 @@
     let ephemeralKeyPair = null;
 
     let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
+    let authIdentityKey = null;
     let recentSearchQuery = '';
     let recentCurrentPage = 1;
     let recentTotalPages = 0;
@@ -228,7 +228,13 @@
 
     async function ensureDeviceReady() {
         try {
-        const payload = await registerCurrentDevice(true);
+        const payload = await registerCurrentDevice();
+        if (payload?.needs_identity_migration) {
+            // The account predates identity keys; a device holding its legacy
+            // user key has to migrate it before this device can be trusted.
+            isDeviceUntrusted = true;
+            return false;
+        }
         if (payload?.needs_enrollment) {
             isDeviceUntrusted = true;
             setRecoveryActionVisible(true);
@@ -272,6 +278,10 @@
                 return false;
             }
 
+            if (!authIdentityKey) {
+                showErrorBanner(t('toast_approval_key_setup_failed'));
+                return false;
+            }
             isDeviceUntrusted = false;
             setRecoveryActionVisible(false);
             return true;
@@ -282,26 +292,18 @@
         }
     }
 
-    async function registerCurrentDevice(allowEnrollmentRequest = true, endpoint = '/api/me/devices/register') {
+    async function registerCurrentDevice(endpoint = '/api/me/devices/register') {
         const result = await SecureCrypto.registerAuthenticatedDevice({
             endpoint,
             userId: CNS_USER_ID,
             username: CNS_USERNAME,
-            csrfToken: getCookieValue('csrf_token'),
-            includeBootstrapEnvelope: allowEnrollmentRequest
+            csrfToken: getCookieValue('csrf_token')
         });
         authDeviceIdentity = result.identity;
-        authUserKeyRaw = result.userKeyRaw;
+        authIdentityKey = result.identityKey;
         const payload = result.payload;
-        isDeviceUntrusted = !!payload.needs_enrollment;
-        setRecoveryActionVisible(isDeviceUntrusted);
-
-        if (!payload.needs_enrollment) {
-            if (authUserKeyRaw) {
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
-        }
-
+        isDeviceUntrusted = !authIdentityKey;
+        setRecoveryActionVisible(!!payload.needs_enrollment);
         return payload;
     }
 
@@ -546,11 +548,8 @@
             if (!authDeviceIdentity) {
                 await ensureDeviceReady();
             }
-            if (!authUserKeyRaw) {
-                authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            }
-            if (!authUserKeyRaw) {
-                throw new Error('Trusted user key is not available on this device');
+            if (!authIdentityKey?.privateKeyJWK) {
+                throw new Error('This device has no identity key to hand over');
             }
 
             const requestDevice = activePendingEnrollment.request_device || {};
@@ -559,32 +558,19 @@
                 throw new Error('Request device public key is missing');
             }
 
-            const wrappedUserKey = await SecureCrypto.wrapUserKeyForDevice(authUserKeyRaw, requestPublicKey);
-
+            const wrappedIdKey = await SecureCrypto.wrapIdentityKeyForDevice(authIdentityKey.privateKeyJWK, requestPublicKey);
             const approveBody = {
                 approver_device_id: authDeviceIdentity.deviceId,
                 verification_code: activePendingEnrollment.enrollment.verification_code,
-                wrapped_user_key_b64: SecureCrypto.toBase64(wrappedUserKey),
-                uk_wrap_alg: 'RSA-OAEP-2048-v1',
-                uk_wrap_meta: {
+                wrapped_identity_private_key_b64: SecureCrypto.toBase64(wrappedIdKey),
+                identity_key_wrap_alg: 'RSA-OAEP-2048+AES-GCM-256-v1',
+                identity_key_wrap_meta: {
                     type: 'enrollment-approval',
                     approver_device_id: authDeviceIdentity.deviceId,
                     request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
-                }
+                },
+                identity_key_version: authIdentityKey.keyVersion
             };
-
-            const authIdentityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
-            if (authIdentityKey && authIdentityKey.privateKeyJWK) {
-                const wrappedIdKey = await SecureCrypto.wrapIdentityKeyForDevice(authIdentityKey.privateKeyJWK, requestPublicKey);
-                approveBody.wrapped_identity_private_key_b64 = SecureCrypto.toBase64(wrappedIdKey);
-                approveBody.identity_key_wrap_alg = 'RSA-OAEP-2048+AES-GCM-256-v1';
-                approveBody.identity_key_wrap_meta = {
-                    type: 'enrollment-approval',
-                    approver_device_id: authDeviceIdentity.deviceId,
-                    request_device_id: requestDevice.id || activePendingEnrollment.enrollment.request_device_id
-                };
-                approveBody.identity_key_version = authIdentityKey.keyVersion || 1;
-            }
 
             const response = await fetch(`/api/me/devices/enrollments/${encodeURIComponent(activePendingEnrollment.enrollment.id)}/approve`, {
                 method: 'POST',
@@ -677,7 +663,7 @@
         if (deviceApprovalRecover) deviceApprovalRecover.disabled = true;
 
         try {
-            const payload = await registerCurrentDevice(true, '/api/me/devices/recover');
+            const payload = await registerCurrentDevice('/api/me/devices/recover');
             if (!payload?.device_id) {
                 throw new Error('Recovery failed');
             }
@@ -708,8 +694,8 @@
         }
 
         try {
-            const payload = await registerCurrentDevice(false);
-            if (payload.needs_enrollment) {
+            await registerCurrentDevice();
+            if (!authIdentityKey) {
                 isDeviceUntrusted = true;
                 setRecoveryActionVisible(true);
                 hidePendingEnrollmentModal();
@@ -1377,49 +1363,6 @@
         if (textEl) textEl.textContent = text;
     }
 
-    async function shareFileWithUser(fileId) {
-        const recipient = window.prompt('Enter the recipient user ID');
-        if (!recipient || !/^[1-9]\d*$/.test(recipient.trim())) return;
-        const recipientID = Number(recipient.trim());
-        const keyResponse = await fetch(`/api/users/${recipientID}/identity-key`, {
-            headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-        });
-        const keyPayload = await keyResponse.json().catch(() => ({}));
-        if (!keyResponse.ok) {
-            if (keyPayload.code === 'RECIPIENT_NOT_READY') {
-                throw new Error('This person has not set up sharing yet.');
-            }
-            throw new Error(keyPayload.error || 'Unable to look up recipient identity key.');
-        }
-        const passphrase = await getOwnedFilePassphrase(fileId);
-        const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
-            new TextEncoder().encode(passphrase),
-            keyPayload.public_key_jwk
-        );
-        const shareResponse = await fetch(`/api/file/${encodeURIComponent(fileId)}/share-to-user`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                recipient_user_id: recipientID,
-                wrapped_dek: SecureCrypto.toBase64(wrapped),
-                dek_wrap_alg: 'RSA-OAEP-2048-v1',
-                recipient_key_version: keyPayload.key_version
-            })
-        });
-        if (!shareResponse.ok) {
-            const payload = await shareResponse.json().catch(() => ({}));
-            if (payload.code === 'TRANSFER_EXISTS') {
-                showInfoBanner(payload.error || 'This file was already sent to this user.');
-                return;
-            }
-            throw new Error(payload.error || 'Unable to share file.');
-        }
-        showInfoBanner('File shared successfully.');
-    }
-
     async function downloadOwnedFile(fileId, fileName, tunnelId = '', cardEl = null) {
         if (activeDownloads.has(fileId)) return;
         const isUploadedCard = !!cardEl?.classList.contains('uploaded-card');
@@ -1534,6 +1477,15 @@
         }
     }
 
+    function lockedFileError() {
+        const error = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
+        error.code = 'FILE_LOCKED';
+        return error;
+    }
+
+    // Returns a file's passphrase: the signed-in owner's (or an accepted
+    // transfer's) copy, opened with this device's identity key, or, for a
+    // quick share guest's upload, the copy wrapped for this page's throwaway key.
     async function getOwnedFilePassphrase(fileId, tunnelId = '') {
         const cached = SecureCrypto.getCachedFileKey(fileId);
         if (cached) {
@@ -1543,129 +1495,64 @@
         if (initialDeviceReady) {
             await initialDeviceReady;
         }
-        if (!authDeviceIdentity) {
+
+        if (tunnelId) {
+            const response = await fetch(`/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`, {
+                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+            });
+            if (!response.ok) {
+                const errorPayload = await response.json().catch(() => ({}));
+                throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
+            }
+            const payload = await response.json();
+            const dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
+                authenticated: false,
+                ephemeralPrivateKey: ephemeralKeyPair?.privateKey
+            });
+            const passphrase = new TextDecoder().decode(dekBytes);
+            SecureCrypto.cacheFileKey(fileId, passphrase);
+            return passphrase;
+        }
+
+        if (!AUTHENTICATED) {
+            throw new Error('A tunnel is required to access this file.');
+        }
+        if (!authIdentityKey) {
             const ready = await ensureDeviceReady();
-            if (!ready && isDeviceUntrusted) {
+            if (!ready) {
                 throw new Error('Approve this device from a trusted device to access your files.');
             }
         }
 
-        let accessUrl = '';
-        if (tunnelId) {
-            accessUrl = `/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`;
-        } else if (AUTHENTICATED) {
-            accessUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
-        } else {
-            throw new Error('A tunnel is required to access this file.');
-        }
-
-        const response = await fetch(accessUrl, {
+        const response = await fetch(`/api/me/files/${encodeURIComponent(fileId)}/access`, {
             headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
         });
+        if (response.status === 404) {
+            // Listed as ours, but there is no key for our identity: it was
+            // wrapped before the account's last recovery or migration.
+            throw lockedFileError();
+        }
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
-            if (tunnelId && AUTHENTICATED && errorPayload.code !== 'TUNNEL_NOT_AVAILABLE') {
-                const fallbackUrl = `/api/me/files/${fileId}/access?device_id=${encodeURIComponent(authDeviceIdentity.deviceId)}`;
-                const fallbackRes = await fetch(fallbackUrl, {
-                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-                });
-                if (fallbackRes.ok) {
-                    const payload = await fallbackRes.json();
-                    let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-                    if (!userKeyRaw && payload?.user_key_envelope?.wrapped_uk_b64) {
-                        userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(
-                            SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64),
-                            authDeviceIdentity.privateKeyJWK
-                        );
-                        SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-                    }
-                    const dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
-                        authenticated: true,
-                        deviceIdentity: authDeviceIdentity,
-                        userKeyRaw
-                    });
-                    const passphrase = new TextDecoder().decode(dekBytes);
-                    SecureCrypto.cacheFileKey(fileId, passphrase);
-                    return passphrase;
-                }
-            }
             throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
         }
 
         const payload = await response.json();
-        const identityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
-        if (payload?.file_access_key_envelope?.wrapped_dek_b64 && identityKey?.privateKeyJWK) {
-            const identityDEK = await SecureCrypto.unwrapFileDEK(payload.file_access_key_envelope, {
-                authenticated: true,
-                identityPrivateKeyJWK: identityKey.privateKeyJWK
-            });
-            const passphrase = new TextDecoder().decode(identityDEK);
-            SecureCrypto.cacheFileKey(fileId, passphrase);
-            return passphrase;
-        }
-        let userKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-        if (AUTHENTICATED && !userKeyRaw && payload?.user_key_envelope?.wrapped_uk_b64) {
-            try {
-                userKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(
-                    SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64),
-                    authDeviceIdentity.privateKeyJWK
-                );
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, userKeyRaw);
-            } catch (error) {
-                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                lockedError.code = 'FILE_LOCKED';
-                throw lockedError;
-            }
+        if (payload.identity_key_version !== authIdentityKey.keyVersion) {
+            throw lockedFileError();
         }
         let dekBytes;
         try {
-            dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
-                authenticated: AUTHENTICATED,
-                deviceIdentity: authDeviceIdentity,
-                userKeyRaw,
-                ephemeralPrivateKey: ephemeralKeyPair?.privateKey
+            dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_access_key_envelope, {
+                authenticated: true,
+                identityPrivateKeyJWK: authIdentityKey.privateKeyJWK
             });
         } catch (error) {
-            if (AUTHENTICATED && !isLockedFileError(error)) {
-                const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
-                lockedError.code = 'FILE_LOCKED';
-                throw lockedError;
-            }
-            throw error;
+            throw lockedFileError();
         }
         const passphrase = new TextDecoder().decode(dekBytes);
         SecureCrypto.cacheFileKey(fileId, passphrase);
         return passphrase;
-    }
-
-    async function buildTunnelPeerEnvelope(secretBytes) {
-        if (!AUTHENTICATED || !activeTunnel?.id || !secretBytes) {
-            return null;
-        }
-
-        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/peer-wrap-key`, {
-            headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-        });
-
-        if (!response.ok) {
-            const errorPayload = await response.json().catch(() => ({}));
-            if (errorPayload.code === 'PEER_KEY_NOT_REQUIRED') {
-                return null;
-            }
-            throw new Error(errorPayload.error || 'Failed to fetch tunnel peer key material');
-        }
-
-        const payload = await response.json();
-        if (!payload?.public_key_jwk) {
-            return null;
-        }
-
-        const wrappedForPeer = await SecureCrypto.wrapUserKeyForDevice(secretBytes, payload.public_key_jwk);
-        return {
-            peer_wrapped_dek_b64: SecureCrypto.toBase64(wrappedForPeer),
-            peer_dek_wrap_alg: 'RSA-OAEP-2048-v1',
-            peer_dek_wrap_version: 1
-        };
     }
 
     function isLockedFileError(error) {
@@ -1981,41 +1868,13 @@
             }
 
             if (AUTHENTICATED) {
-                if (!authUserKeyRaw) {
+                if (!authIdentityKey) {
                     await ensureDeviceReady();
-                    authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
                 }
-                if (!authUserKeyRaw) {
+                if (!authIdentityKey) {
                     throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
                 }
-                if (authUserKeyRaw) {
-                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
-                    finalizeEnvelopePayload = {
-                        wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
-                        dek_wrap_alg: 'AES-GCM-UK-v1',
-                        dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
-                        dek_wrap_version: 1
-                    };
-
-                    const identityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
-                    if (identityKey?.publicKeyJWK) {
-                        const identityWrapped = await SecureCrypto.wrapFileDEKForIdentity(dekBytes, identityKey.publicKeyJWK);
-                        finalizeEnvelopePayload.identity_wrapped_dek_b64 = SecureCrypto.toBase64(identityWrapped);
-                        finalizeEnvelopePayload.identity_dek_wrap_alg = 'RSA-OAEP-2048-v1';
-                        finalizeEnvelopePayload.identity_dek_wrap_version = 1;
-                        finalizeEnvelopePayload.identity_key_version = identityKey.keyVersion || 1;
-                    }
-
-                    if (activeTunnel?.id) {
-                        const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
-                        if (peerEnvelope) {
-                            finalizeEnvelopePayload = {
-                                ...finalizeEnvelopePayload,
-                                ...peerEnvelope
-                            };
-                        }
-                    }
-                }
+                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             }
             totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
             const initResponse = await initUpload(selectedFile.size, totalChunks);
@@ -2240,17 +2099,6 @@
             };
             if (activeTunnel?.id) {
                 finalizePayload.tunnel_id = activeTunnel.id;
-
-                if (AUTHENTICATED && generatedPassword && activeTunnel?.peer_cns_user_id && activeTunnel.peer_cns_user_id !== CNS_USER_ID) {
-                    if (!finalizePayload.peer_wrapped_dek_b64) {
-                        const dekBytes = new TextEncoder().encode(generatedPassword);
-                        const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
-                        if (!peerEnvelope) {
-                            throw new Error('Cross-account tunnel upload requires a peer key envelope. Peer may not be ready yet.');
-                        }
-                        Object.assign(finalizePayload, peerEnvelope);
-                    }
-                }
             } else {
                 finalizePayload.duration = selectedDuration();
             }

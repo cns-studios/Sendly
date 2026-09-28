@@ -31,7 +31,7 @@ go run cmd/admin/main.go create-key "owner name"
 - **`cmd/admin/main.go`** — admin CLI: `view`, `delete`, `download`, `list`, `stats`, `reports`, `cleanup`, `create-key`, `revoke-key`, `list-keys`, `key-info`, `key-files`.
 - **`cmd/migrate/main.go`** — standalone migration runner.
 - **`internal/config/`** — config from `.env` + env vars (godotenv). All defaults live in `config.go`.
-- **`internal/handlers/`** — Gin handlers by surface: `upload`, `download`, `pages`, `seo`, `auth`, `report`, `desktop`, `android`, `recent_uploads` (owned files, device registration), `sharing` (user lookup, identity keys, share-to-user), `transfers`, `tunnels`/`tunnel_auth`/`tunnel_keys` (quick shares), `device_enrollments_ws` (per-user websocket hub), `device_identity_shared`.
+- **`internal/handlers/`** — Gin handlers by surface: `upload`, `download`, `pages`, `seo`, `auth`, `report`, `desktop`, `android`, `recent_uploads` (owned files, device registration), `sharing` (user lookup, identity keys, share-to-user), `transfers`, `tunnels`/`tunnel_auth` (quick shares), `device_enrollments_ws` (per-user websocket hub), `device_identity_shared`.
 - **`internal/middleware/`** — IP extraction, CNS cookie auth, CSRF, rate limiters, desktop/android auth, guest/auth tiers, locale, user-cache sync.
 - **`internal/storage/`** — `postgres.go` (most queries), `transfers.go`, `tunnels.go`, `desktop.go`, `tracker.go`, `redis.go`, `filesystem.go`, `migrator.go`.
 - **`internal/services/`** — cleanup, upload lifecycle, device identity, CNS client, user cache, stats reporter/tracker, Discord notifications.
@@ -71,10 +71,12 @@ Three limiters, state in Redis, tuned with `RATE_LIMIT_*` env vars:
 
 ## Encryption model
 
-Files are encrypted in the browser/client; the server never sees plaintext or file keys (DEKs).
-- Each signed-in user has an **identity keypair** (`user_identity_keys`); its private key is wrapped per trusted device (`user_identity_key_device_envelopes`).
-- A file's DEK is wrapped per recipient in `file_access_key_envelopes` (`access_kind` = `owner` or `share`).
-- New devices must be approved from a trusted device (enrollments) or the account must be recovered. Recovery replaces the identity key, so files wrapped for the old key show as "locked".
+Files are encrypted in the browser/client; the server never sees plaintext or file keys (DEKs). End-to-end encryption is non-negotiable: every change must keep the server blind to keys.
+- Each signed-in user has one **identity keypair** (`user_identity_keys`, versioned, one `active`), the account's only root secret. Its private key is wrapped per trusted device (`user_identity_key_device_envelopes`); a device is trusted iff it holds a copy of the active version.
+- A signed-in user's access to a file is its DEK wrapped with their identity public key in `file_access_key_envelopes` (`access_kind` = `owner` or `share`). Signed-in uploads must include the owner envelope.
+- The identity key is created by a brand-new account's first device, handed to new devices by a trusted device approving them (enrollments), and replaced by the next version on recovery. Files wrapped for an older version show as "locked".
+- Quick share: everyone in a session decrypts with the host's session password, wrapped per approved participant's throwaway key; guests' uploads keep their key in `file_key_envelopes`.
+- The legacy AES user key (`user_key_envelopes`) is only read to migrate accounts from before identity keys (`storage/legacy_user_key.go`, `getLegacyUserKeyRaw` in `crypto.js`).
 
 ## Upload lifecycle
 

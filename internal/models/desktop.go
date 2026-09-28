@@ -39,13 +39,9 @@ type DesktopFinalizeRequest struct {
 	TunnelID                string `json:"tunnel_id"`
 	DeviceID                string `json:"device_id"`
 	WrappedDEKB64           string `json:"wrapped_dek_b64"`
-	PeerWrappedDEKB64       string `json:"peer_wrapped_dek_b64"`
 	DEKWrapAlg              string `json:"dek_wrap_alg"`
 	DEKWrapNonceB64         string `json:"dek_wrap_nonce_b64"`
 	DEKWrapVersion          int    `json:"dek_wrap_version"`
-	PeerDEKWrapAlg          string `json:"peer_dek_wrap_alg"`
-	PeerDEKWrapNonceB64     string `json:"peer_dek_wrap_nonce_b64"`
-	PeerDEKWrapVersion      int    `json:"peer_dek_wrap_version"`
 	IdentityWrappedDEKB64   string `json:"identity_wrapped_dek_b64"`
 	IdentityDEKWrapAlg      string `json:"identity_dek_wrap_alg"`
 	IdentityDEKWrapNonceB64 string `json:"identity_dek_wrap_nonce_b64"`

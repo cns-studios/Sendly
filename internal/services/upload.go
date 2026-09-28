@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -38,7 +39,6 @@ type FinalizeUploadOptions struct {
 	IdentityDEKWrapNonce   []byte
 	IdentityDEKWrapVersion int
 	IdentityKeyVersion     int
-	RecipientEnvelopes     []models.FileRecipientKeyEnvelope
 }
 
 func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem, tracker *Tracker) *Upload {
@@ -349,8 +349,10 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 	}
 
+	// Guests' quick share uploads keep a key wrapped for their throwaway
+	// participant key; signed-in uploaders keep only their identity-wrapped one.
 	var envelope *models.FileKeyEnvelope
-	if opts != nil && len(opts.WrappedDEK) > 0 {
+	if opts != nil && opts.OwnerCNSUserID == nil && len(opts.WrappedDEK) > 0 {
 		wrapVersion := opts.DEKWrapVersion
 		if wrapVersion <= 0 {
 			wrapVersion = 1
@@ -364,23 +366,21 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 	}
 
-	var recipientEnvelopes []models.FileRecipientKeyEnvelope
-	if opts != nil {
-		recipientEnvelopes = opts.RecipientEnvelopes
-		for i := range recipientEnvelopes {
-			recipientEnvelopes[i].FileID = session.FileID
-		}
-	}
-
 	var identityEnvelope *models.FileAccessKeyEnvelope
-	if opts != nil && opts.OwnerCNSUserID != nil && len(opts.IdentityWrappedDEK) > 0 {
+	if opts != nil && opts.OwnerCNSUserID != nil {
+		if len(opts.IdentityWrappedDEK) == 0 {
+			return nil, models.ErrIdentityEnvelopeRequired
+		}
 		activeKey, err := u.db.GetActiveUserIdentityKey(ctx, *opts.OwnerCNSUserID)
+		if errors.Is(err, models.ErrIdentityKeyNotFound) {
+			return nil, models.ErrIdentityEnvelopeRequired
+		}
 		if err != nil {
 			return nil, fmt.Errorf("owner identity key unavailable: %w", err)
 		}
 		keyVersion := activeKey.KeyVersion
-		if opts.IdentityKeyVersion > 0 && opts.IdentityKeyVersion != keyVersion {
-			return nil, fmt.Errorf("owner identity key version %d is not active", opts.IdentityKeyVersion)
+		if opts.IdentityKeyVersion != keyVersion {
+			return nil, models.ErrIdentityKeyStale
 		}
 		identityEnvelope = &models.FileAccessKeyEnvelope{
 			FileID: session.FileID, RecipientCNSUserID: *opts.OwnerCNSUserID,
@@ -394,7 +394,7 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 	}
 
-	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, recipientEnvelopes, identityEnvelope); err != nil {
+	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, identityEnvelope); err != nil {
 		return nil, fmt.Errorf("error creating file record: %w", err)
 	}
 

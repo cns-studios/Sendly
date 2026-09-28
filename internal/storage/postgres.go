@@ -19,7 +19,7 @@ type Postgres struct {
 	db *sqlx.DB
 }
 
-func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope, recipientEnvelopes []models.FileRecipientKeyEnvelope, identityEnvelope *models.FileAccessKeyEnvelope) error {
+func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File, envelope *models.FileKeyEnvelope, identityEnvelope *models.FileAccessKeyEnvelope) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
@@ -70,42 +70,6 @@ func (p *Postgres) CreateFileWithEnvelope(ctx context.Context, file *models.File
 		); err != nil {
 			_ = tx.Rollback()
 			return err
-		}
-	}
-
-	if len(recipientEnvelopes) > 0 {
-		insertRecipientEnvelope := `
-			INSERT INTO file_recipient_key_envelopes (
-				file_id,
-				recipient_cns_user_id,
-				recipient_device_id,
-				wrapped_dek,
-				dek_wrap_alg,
-				dek_wrap_nonce,
-				dek_wrap_version
-			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (file_id, recipient_cns_user_id, recipient_device_id)
-			DO UPDATE SET
-				wrapped_dek = EXCLUDED.wrapped_dek,
-				dek_wrap_alg = EXCLUDED.dek_wrap_alg,
-				dek_wrap_nonce = EXCLUDED.dek_wrap_nonce,
-				dek_wrap_version = EXCLUDED.dek_wrap_version,
-				created_at = NOW()
-		`
-		for _, env := range recipientEnvelopes {
-			if _, err = tx.ExecContext(ctx, insertRecipientEnvelope,
-				env.FileID,
-				env.RecipientCNSUserID,
-				env.RecipientDeviceID,
-				env.WrappedDEK,
-				env.DEKWrapAlg,
-				env.DEKWrapNonce,
-				env.DEKWrapVersion,
-			); err != nil {
-				_ = tx.Rollback()
-				return err
-			}
 		}
 	}
 
@@ -446,46 +410,44 @@ func requireDeviceUpsert(res sql.Result) error {
 	return nil
 }
 
-func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.UserDevice, envelope *models.UserKeyEnvelope) error {
+// RecoverIdentityKey makes device the account's only trusted device: it
+// retires the active identity key, stores idKey as the next version with the
+// device's copy of it, revokes every other device and drops their copies and
+// open approval requests. Legacy user key envelopes go too; a recovered
+// account has nothing left to migrate. Envelopes wrapped for older identity
+// key versions are kept, so a returning device that still holds an old
+// version can re-wrap them.
+func (p *Postgres) RecoverIdentityKey(ctx context.Context, device *models.UserDevice, idKey *models.UserIdentityKey, envelope *models.UserIdentityKeyDeviceEnvelope) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, `UPDATE user_devices SET revoked_at = NOW() WHERE cns_user_id = $1 AND revoked_at IS NULL`, device.CNSUserID); err != nil {
-		_ = tx.Rollback()
-		return err
+	userID := device.CNSUserID
+	statements := []struct {
+		query string
+		args  []any
+	}{
+		{`UPDATE user_devices SET revoked_at = NOW() WHERE cns_user_id = $1 AND revoked_at IS NULL`, []any{userID}},
+		{`DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1`, []any{userID}},
+		{`DELETE FROM user_key_envelopes WHERE cns_user_id = $1`, []any{userID}},
+		{`UPDATE user_identity_keys SET status = 'retired', retired_at = NOW() WHERE cns_user_id = $1 AND status = 'active'`, []any{userID}},
+		// Recovery revokes every device, so their open approval requests
+		// (including the recovering device's own) are moot.
+		{`UPDATE device_enrollments SET status = $1 WHERE cns_user_id = $2 AND status = $3`,
+			[]any{models.EnrollmentStatusExpired, userID, models.EnrollmentStatusPending}},
 	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM user_key_envelopes WHERE cns_user_id = $1`, device.CNSUserID); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1`, device.CNSUserID); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-
-	// Recovery revokes every device, so their open approval requests
-	// (including the recovering device's own) are moot.
-	if _, err := tx.ExecContext(ctx, `UPDATE device_enrollments SET status = $1 WHERE cns_user_id = $2 AND status = $3`,
-		models.EnrollmentStatusExpired, device.CNSUserID, models.EnrollmentStatusPending); err != nil {
-		_ = tx.Rollback()
-		return err
+	for _, st := range statements {
+		if _, err := tx.ExecContext(ctx, st.query, st.args...); err != nil {
+			return err
+		}
 	}
 
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO user_devices (
-			id,
-			cns_user_id,
-			device_label,
-			public_key_jwk,
-			key_algorithm,
-			key_version,
-			created_at,
-			last_seen_at,
-			revoked_at
+			id, cns_user_id, device_label, public_key_jwk, key_algorithm, key_version,
+			created_at, last_seen_at, revoked_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL)
 		ON CONFLICT (id) DO UPDATE
@@ -496,41 +458,24 @@ func (p *Postgres) ResetTrustedDeviceState(ctx context.Context, device *models.U
 			last_seen_at = NOW(),
 			revoked_at = NULL
 		WHERE user_devices.cns_user_id = EXCLUDED.cns_user_id
-	`, device.ID, device.CNSUserID, device.DeviceLabel, device.PublicKeyJWK, device.KeyAlgorithm, device.KeyVersion)
+	`, device.ID, userID, device.DeviceLabel, device.PublicKeyJWK, device.KeyAlgorithm, device.KeyVersion)
 	if err == nil {
 		err = requireDeviceUpsert(res)
 	}
 	if err != nil {
-		_ = tx.Rollback()
 		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO user_key_envelopes (
-			id,
-			cns_user_id,
-			device_id,
-			wrapped_user_key,
-			uk_wrap_alg,
-			uk_wrap_meta,
-			key_version,
-			created_at
-		)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, NOW())
-		ON CONFLICT (cns_user_id, device_id) DO UPDATE
-		SET wrapped_user_key = EXCLUDED.wrapped_user_key,
-			uk_wrap_alg = EXCLUDED.uk_wrap_alg,
-			uk_wrap_meta = EXCLUDED.uk_wrap_meta,
-			key_version = EXCLUDED.key_version,
-			created_at = NOW()
-	`, envelope.CNSUserID, envelope.DeviceID, envelope.WrappedUserKey, envelope.UKWrapAlg, envelope.UKWrapMeta, envelope.KeyVersion); err != nil {
-		_ = tx.Rollback()
+	if err := tx.GetContext(ctx, &idKey.KeyVersion,
+		`SELECT COALESCE(MAX(key_version), 0) + 1 FROM user_identity_keys WHERE cns_user_id = $1`, userID); err != nil {
 		return err
 	}
-
+	envelope.IdentityKeyVersion = idKey.KeyVersion
+	if err := insertIdentityKeyWithEnvelope(ctx, tx, idKey, envelope); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
-
 func (p *Postgres) GetActiveDevicesByUser(ctx context.Context, userID int64) ([]models.UserDevice, error) {
 	query := `
 		SELECT id, cns_user_id, device_label, public_key_jwk, key_algorithm, key_version, created_at, last_seen_at, revoked_at
@@ -566,26 +511,6 @@ func (p *Postgres) UpdateUserDeviceLabel(ctx context.Context, userID int64, devi
 	return nil
 }
 
-func (p *Postgres) SaveFileKeyEnvelope(ctx context.Context, envelope *models.FileKeyEnvelope) error {
-	query := `
-		INSERT INTO file_key_envelopes (file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (file_id) DO UPDATE
-		SET wrapped_dek = EXCLUDED.wrapped_dek,
-			dek_wrap_alg = EXCLUDED.dek_wrap_alg,
-			dek_wrap_nonce = EXCLUDED.dek_wrap_nonce,
-			dek_wrap_version = EXCLUDED.dek_wrap_version
-	`
-	_, err := p.db.ExecContext(ctx, query,
-		envelope.FileID,
-		envelope.WrappedDEK,
-		envelope.DEKWrapAlg,
-		envelope.DEKWrapNonce,
-		envelope.DEKWrapVersion,
-	)
-	return err
-}
-
 func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, searchQuery string, page, perPage int) ([]models.OwnedFileListItem, int, error) {
 	offset := (page - 1) * perPage
 	searchPattern := "%"
@@ -599,9 +524,19 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
 		  AND tunnel_id IS NULL
-		  AND EXISTS (
-			  SELECT 1 FROM file_key_envelopes fke
-			  WHERE fke.file_id = files.id
+		  -- The owner's identity-wrapped key, or a legacy user-key one from
+		  -- before identity keys (listed as locked until migrated).
+		  AND (
+			  EXISTS (
+				  SELECT 1 FROM file_access_key_envelopes fae
+				  WHERE fae.file_id = files.id
+				    AND fae.recipient_cns_user_id = files.owner_cns_user_id
+				    AND fae.access_kind = 'owner'
+			  )
+			  OR EXISTS (
+				  SELECT 1 FROM file_key_envelopes fke
+				  WHERE fke.file_id = files.id
+			  )
 		  )
 		  AND ($2 = '%' OR original_name ILIKE $2)
 	`
@@ -622,9 +557,19 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 		WHERE owner_cns_user_id = $1
 		  AND is_deleted = FALSE
 		  AND tunnel_id IS NULL
-		  AND EXISTS (
-			  SELECT 1 FROM file_key_envelopes fke
-			  WHERE fke.file_id = files.id
+		  -- The owner's identity-wrapped key, or a legacy user-key one from
+		  -- before identity keys (listed as locked until migrated).
+		  AND (
+			  EXISTS (
+				  SELECT 1 FROM file_access_key_envelopes fae
+				  WHERE fae.file_id = files.id
+				    AND fae.recipient_cns_user_id = files.owner_cns_user_id
+				    AND fae.access_kind = 'owner'
+			  )
+			  OR EXISTS (
+				  SELECT 1 FROM file_key_envelopes fke
+				  WHERE fke.file_id = files.id
+			  )
 		  )
 		  AND ($2 = '%' OR original_name ILIKE $2)
 		ORDER BY created_at DESC
@@ -640,84 +585,27 @@ func (p *Postgres) GetOwnedRecentFiles(ctx context.Context, userID int64, search
 	return items, total, nil
 }
 
-func (p *Postgres) GetOwnedFileWithEnvelope(ctx context.Context, userID int64, fileID string) (*models.File, *models.FileKeyEnvelope, error) {
+// GetOwnedFile returns a live file uploaded by userID.
+func (p *Postgres) GetOwnedFile(ctx context.Context, userID int64, fileID string) (*models.File, error) {
 	file := &models.File{}
-	fileQuery := `
+	err := p.db.GetContext(ctx, file, `
 		SELECT *
 		FROM files
 		WHERE id = $1
 		  AND owner_cns_user_id = $2
 		  AND is_deleted = FALSE
-	`
-	if err := p.db.GetContext(ctx, file, fileQuery, fileID, userID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, models.ErrFileNotFound
-		}
-		return nil, nil, err
+	`, fileID, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrFileNotFound
 	}
-
-	env := &models.FileKeyEnvelope{}
-	envQuery := `
-		SELECT file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version, created_at
-		FROM file_key_envelopes
-		WHERE file_id = $1
-	`
-	if err := p.db.GetContext(ctx, env, envQuery, fileID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, models.ErrFileNotFound
-		}
-		return nil, nil, err
+	if err != nil {
+		return nil, err
 	}
-
 	if time.Now().After(file.ExpiresAt) {
-		return nil, nil, models.ErrFileExpired
+		return nil, models.ErrFileExpired
 	}
-
-	return file, env, nil
+	return file, nil
 }
-
-func (p *Postgres) GetTunnelRecipientFileWithEnvelope(ctx context.Context, userID int64, deviceID, fileID string) (*models.File, *models.FileKeyEnvelope, error) {
-	file := &models.File{}
-	fileQuery := `
-		SELECT f.*
-		FROM files f
-		INNER JOIN tunnels t ON t.id = f.tunnel_id
-		WHERE f.id = $1
-		  AND f.is_deleted = FALSE
-		  AND (
-			t.initiator_cns_user_id = $2
-			OR t.peer_cns_user_id = $2
-		  )
-	`
-	if err := p.db.GetContext(ctx, file, fileQuery, fileID, userID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, models.ErrFileNotFound
-		}
-		return nil, nil, err
-	}
-
-	env := &models.FileKeyEnvelope{}
-	envQuery := `
-		SELECT file_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version, created_at
-		FROM file_recipient_key_envelopes
-		WHERE file_id = $1
-		  AND recipient_cns_user_id = $2
-		  AND recipient_device_id = $3
-	`
-	if err := p.db.GetContext(ctx, env, envQuery, fileID, userID, deviceID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, models.ErrFileNotFound
-		}
-		return nil, nil, err
-	}
-
-	if time.Now().After(file.ExpiresAt) {
-		return nil, nil, models.ErrFileExpired
-	}
-
-	return file, env, nil
-}
-
 func (p *Postgres) GetTunnelFileWithEnvelope(ctx context.Context, tunnelID, fileID string) (*models.File, *models.FileKeyEnvelope, error) {
 	file := &models.File{}
 	fileQuery := `
@@ -755,45 +643,6 @@ func (p *Postgres) GetTunnelFileWithEnvelope(ctx context.Context, tunnelID, file
 	return file, env, nil
 }
 
-func (p *Postgres) SaveUserKeyEnvelope(ctx context.Context, envelope *models.UserKeyEnvelope) error {
-	query := `
-		INSERT INTO user_key_envelopes (id, cns_user_id, device_id, wrapped_user_key, uk_wrap_alg, uk_wrap_meta, key_version)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6)
-		ON CONFLICT (cns_user_id, device_id) DO UPDATE
-		SET wrapped_user_key = EXCLUDED.wrapped_user_key,
-			uk_wrap_alg = EXCLUDED.uk_wrap_alg,
-			uk_wrap_meta = EXCLUDED.uk_wrap_meta,
-			key_version = EXCLUDED.key_version,
-			created_at = NOW()
-	`
-	_, err := p.db.ExecContext(ctx, query,
-		envelope.CNSUserID,
-		envelope.DeviceID,
-		envelope.WrappedUserKey,
-		envelope.UKWrapAlg,
-		envelope.UKWrapMeta,
-		envelope.KeyVersion,
-	)
-	return err
-}
-
-func (p *Postgres) GetUserKeyEnvelopeForDevice(ctx context.Context, userID int64, deviceID string) (*models.UserKeyEnvelope, error) {
-	query := `
-		SELECT id, cns_user_id, device_id, wrapped_user_key, uk_wrap_alg, uk_wrap_meta, key_version, created_at
-		FROM user_key_envelopes
-		WHERE cns_user_id = $1 AND device_id = $2
-	`
-	var env models.UserKeyEnvelope
-	err := p.db.GetContext(ctx, &env, query, userID, deviceID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, models.ErrFileNotFound
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &env, nil
-}
-
 func (p *Postgres) CreateUserIdentityKey(ctx context.Context, key *models.UserIdentityKey) error {
 	// Identity key versions are immutable; duplicate (user, version) inserts must fail
 	// loudly rather than replacing key material that may already be in use.
@@ -804,6 +653,63 @@ func (p *Postgres) CreateUserIdentityKey(ctx context.Context, key *models.UserId
 	`, key.CNSUserID, key.KeyVersion, key.PublicKeyJWK, key.KeyAlgorithm, key.Status,
 		key.CreatedAt, key.ActivatedAt, key.RetiredAt)
 	return err
+}
+
+// CreateIdentityKeyWithDeviceEnvelope creates a brand-new account's identity
+// key together with the creating device's copy of it, so a key never exists
+// without a device holding it. It fails if the account already has an active
+// key (one active key per account, enforced by a unique index).
+func (p *Postgres) CreateIdentityKeyWithDeviceEnvelope(ctx context.Context, idKey *models.UserIdentityKey, envelope *models.UserIdentityKeyDeviceEnvelope) error {
+	tx, err := p.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := insertIdentityKeyWithEnvelope(ctx, tx, idKey, envelope); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func insertIdentityKeyWithEnvelope(ctx context.Context, tx *sqlx.Tx, idKey *models.UserIdentityKey, envelope *models.UserIdentityKeyDeviceEnvelope) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO user_identity_keys
+			(cns_user_id, key_version, public_key_jwk, key_algorithm, status, created_at, activated_at, retired_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, idKey.CNSUserID, idKey.KeyVersion, idKey.PublicKeyJWK, idKey.KeyAlgorithm, idKey.Status,
+		idKey.CreatedAt, idKey.ActivatedAt, idKey.RetiredAt); err != nil {
+		return err
+	}
+	return tx.GetContext(ctx, &envelope.ID, `
+		INSERT INTO user_identity_key_device_envelopes
+			(cns_user_id, device_id, identity_key_version, wrapped_private_key, wrap_alg, wrap_meta, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id
+	`, envelope.CNSUserID, envelope.DeviceID, envelope.IdentityKeyVersion, envelope.WrappedPrivateKey,
+		envelope.WrapAlg, jsonOrEmpty(envelope.WrapMeta), envelope.CreatedAt)
+}
+
+func jsonOrEmpty(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return raw
+}
+
+// DeviceHoldsIdentityKey reports whether a non-revoked device of the user has
+// a copy of the given identity key version.
+func (p *Postgres) DeviceHoldsIdentityKey(ctx context.Context, userID int64, deviceID string, version int) (bool, error) {
+	var holds bool
+	err := p.db.GetContext(ctx, &holds, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM user_identity_key_device_envelopes e
+			JOIN user_devices d ON d.id = e.device_id AND d.cns_user_id = e.cns_user_id
+			WHERE e.cns_user_id = $1 AND e.device_id::text = $2
+			  AND e.identity_key_version = $3 AND d.revoked_at IS NULL
+		)
+	`, userID, deviceID, version)
+	return holds, err
 }
 
 func (p *Postgres) GetUserIdentityKey(ctx context.Context, userID int64, version int) (*models.UserIdentityKey, error) {
@@ -852,7 +758,7 @@ func (p *Postgres) CreateUserIdentityKeyDeviceEnvelope(ctx context.Context, enve
 			wrap_meta = EXCLUDED.wrap_meta,
 			created_at = EXCLUDED.created_at
 	`, envelope.ID, envelope.CNSUserID, envelope.DeviceID, envelope.IdentityKeyVersion,
-		envelope.WrappedPrivateKey, envelope.WrapAlg, envelope.WrapMeta, envelope.CreatedAt)
+		envelope.WrappedPrivateKey, envelope.WrapAlg, jsonOrEmpty(envelope.WrapMeta), envelope.CreatedAt)
 	return err
 }
 
@@ -871,51 +777,6 @@ func (p *Postgres) GetUserIdentityKeyDeviceEnvelope(ctx context.Context, userID 
 		return nil, err
 	}
 	return &envelope, nil
-}
-
-func (p *Postgres) DeleteUserIdentityKeyDeviceEnvelopesByUser(ctx context.Context, userID int64) error {
-	_, err := p.db.ExecContext(ctx, `DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1`, userID)
-	return err
-}
-
-func (p *Postgres) DeleteUserIdentityKeyDeviceEnvelope(ctx context.Context, userID int64, deviceID string, version int) error {
-	_, err := p.db.ExecContext(ctx, `
-		DELETE FROM user_identity_key_device_envelopes
-		WHERE cns_user_id = $1 AND device_id = $2 AND identity_key_version = $3
-	`, userID, deviceID, version)
-	return err
-}
-
-// ListDevicesMissingIdentityKeyEnvelope returns the user's trusted (holding a
-// user key envelope), non-revoked devices that have no copy of the given
-// identity key version.
-func (p *Postgres) ListDevicesMissingIdentityKeyEnvelope(ctx context.Context, userID int64, version int) ([]models.UserDevice, error) {
-	var devices []models.UserDevice
-	err := p.db.SelectContext(ctx, &devices, `
-		SELECT ud.id, ud.cns_user_id, ud.device_label, ud.public_key_jwk, ud.key_algorithm,
-			ud.key_version, ud.created_at, ud.last_seen_at, ud.revoked_at
-		FROM user_devices ud
-		INNER JOIN user_key_envelopes uke ON uke.device_id = ud.id AND uke.cns_user_id = ud.cns_user_id
-		WHERE ud.cns_user_id = $1
-		  AND ud.revoked_at IS NULL
-		  AND NOT EXISTS (
-			  SELECT 1 FROM user_identity_key_device_envelopes e
-			  WHERE e.cns_user_id = ud.cns_user_id
-			    AND e.device_id = ud.id
-			    AND e.identity_key_version = $2
-		  )
-		ORDER BY ud.created_at ASC
-	`, userID, version)
-	return devices, err
-}
-
-func (p *Postgres) UpdateUserIdentityKeyPublicKey(ctx context.Context, userID int64, version int, publicKeyJWK json.RawMessage) error {
-	_, err := p.db.ExecContext(ctx, `
-		UPDATE user_identity_keys
-		SET public_key_jwk = $1, created_at = NOW(), activated_at = NOW()
-		WHERE cns_user_id = $2 AND key_version = $3
-	`, publicKeyJWK, userID, version)
-	return err
 }
 
 func (p *Postgres) CreateFileAccessKeyEnvelope(ctx context.Context, envelope *models.FileAccessKeyEnvelope) error {
@@ -1027,24 +888,6 @@ func (p *Postgres) GetSharedWithMeFiles(ctx context.Context, userID int64, page,
 	return items, total, nil
 }
 
-func (p *Postgres) UserHasTrustedKeyEnvelope(ctx context.Context, userID int64) (bool, error) {
-	query := `
-		SELECT EXISTS (
-			SELECT 1
-			FROM user_key_envelopes uke
-			INNER JOIN user_devices ud ON ud.id = uke.device_id
-			WHERE uke.cns_user_id = $1
-			  AND ud.revoked_at IS NULL
-		)
-	`
-	var hasTrusted bool
-	err := p.db.GetContext(ctx, &hasTrusted, query, userID)
-	if err != nil {
-		return false, err
-	}
-	return hasTrusted, nil
-}
-
 func (p *Postgres) CreateEnrollmentRequest(ctx context.Context, enrollment *models.DeviceEnrollment) error {
 	query := `
 		INSERT INTO device_enrollments (
@@ -1079,9 +922,13 @@ func (p *Postgres) ListPendingEnrollments(ctx context.Context, userID int64) ([]
 		  -- A device that is already trusted (e.g. it recovered the account
 		  -- after asking for approval) has nothing left to approve.
 		  AND NOT EXISTS (
-			SELECT 1 FROM user_key_envelopes uke
-			WHERE uke.cns_user_id = device_enrollments.cns_user_id
-			  AND uke.device_id = device_enrollments.request_device_id
+			SELECT 1
+			FROM user_identity_key_device_envelopes e
+			JOIN user_identity_keys k
+			  ON k.cns_user_id = e.cns_user_id AND k.key_version = e.identity_key_version
+			WHERE e.cns_user_id = device_enrollments.cns_user_id
+			  AND e.device_id = device_enrollments.request_device_id
+			  AND k.status = 'active'
 		  )
 		ORDER BY created_at DESC
 	`

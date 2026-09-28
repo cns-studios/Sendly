@@ -19,7 +19,7 @@
     let activeTunnel = null;
     let tunnelPollTimer = null;
     let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
+    let authIdentityKey = null;
     let isUploading = false;
     let isDownloadingFile = false;
     let sessionPassword = null;
@@ -146,24 +146,6 @@
     }
 
     // Tunnel JSON carries sql.Null* values as {Int64, Valid} objects.
-    function nullableInt(value) {
-        if (!value) return 0;
-        if (typeof value === 'number') return value;
-        if (typeof value === 'object') return value.Valid === false ? 0 : Number(value.Int64 || 0);
-        return 0;
-    }
-
-    // The signed-in account on the other side of a cross-account tunnel, whose
-    // device a file key must also be wrapped for (mirrors the server's
-    // resolveTunnelPeerRecipient). 0 when the other side is a guest.
-    function crossAccountPeerUserID() {
-        if (!activeTunnel || !CNS_USER_ID) return 0;
-        const initiatorID = nullableInt(activeTunnel.initiator_cns_user_id);
-        const peerID = nullableInt(activeTunnel.peer_cns_user_id);
-        const otherID = initiatorID === CNS_USER_ID ? peerID : (peerID === CNS_USER_ID ? initiatorID : 0);
-        return otherID && otherID !== CNS_USER_ID ? otherID : 0;
-    }
-
     function extractUserID(participant) {
         if (!participant) return 0;
         const userID = participant.cns_user_id;
@@ -218,25 +200,6 @@
         return new Uint8Array(wrapped);
     }
 
-    async function buildTunnelPeerEnvelope(secretBytes) {
-        if (!AUTHENTICATED || !activeTunnel?.id || !secretBytes) return null;
-        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/peer-wrap-key`, {
-            headers: buildHeaders()
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            if (payload.code === 'PEER_KEY_NOT_REQUIRED') return null;
-            throw new Error(payload.error || 'Failed to fetch tunnel peer key material');
-        }
-        if (!payload.public_key_jwk) return null;
-        const wrapped = await wrapWithPublicKey(secretBytes, payload.public_key_jwk);
-        return {
-            peer_wrapped_dek_b64: SecureCrypto.toBase64(wrapped),
-            peer_dek_wrap_alg: 'RSA-OAEP-2048-v1',
-            peer_dek_wrap_version: 1
-        };
-    }
-
     async function unwrapWithPrivateKey(wrappedBytes, privateKey) {
         const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedBytes);
         return new Uint8Array(raw);
@@ -248,14 +211,11 @@
             const result = await SecureCrypto.registerAuthenticatedDevice({
                 userId: CNS_USER_ID,
                 username: CNS_USERNAME,
-                csrfToken: getCookieValue('csrf_token'),
-                includeBootstrapEnvelope: true
+                csrfToken: getCookieValue('csrf_token')
             });
             authDeviceIdentity = result.identity;
-            authUserKeyRaw = result.userKeyRaw;
-            const payload = result.payload;
-            if (payload.needs_enrollment) {
-                authUserKeyRaw = null;
+            authIdentityKey = result.identityKey;
+            if (!authIdentityKey) {
                 showErrorBanner(t('toast_device_quickshare_approve'));
                 return false;
             }
@@ -588,14 +548,7 @@
                         const alg = (envelope.dek_wrap_alg || '').toUpperCase();
                         let rawDEK = null;
 
-                        if (alg === 'AES-GCM-UK-V1') {
-                            if (authUserKeyRaw) {
-                                const nonce = envelope.dek_wrap_nonce_b64
-                                    ? SecureCrypto.fromBase64(envelope.dek_wrap_nonce_b64)
-                                    : new Uint8Array();
-                                rawDEK = await SecureCrypto.unwrapSecretWithUserKey(wrappedDEK, nonce, authUserKeyRaw);
-                            }
-                        } else if (alg.startsWith('RSA-OAEP')) {
+                        if (alg.startsWith('RSA-OAEP')) {
                             if (ephemeralKeyPair?.privateKey) {
                                 const raw = await crypto.subtle.decrypt(
                                     { name: 'RSA-OAEP' },
@@ -1054,29 +1007,13 @@
             const dekBytes = new TextEncoder().encode(password);
             let envelopePayload = {};
 
-            if (AUTHENTICATED && authUserKeyRaw) {
-                const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
-                envelopePayload = {
-                    wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
-                    dek_wrap_alg: 'AES-GCM-UK-v1',
-                    dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
-                    dek_wrap_version: 1
-                };
-                const identityKey = SecureCrypto.getIdentityKey(CNS_USER_ID);
-                if (identityKey?.publicKeyJWK) {
-                    const identityWrapped = await SecureCrypto.wrapFileDEKForIdentity(dekBytes, identityKey.publicKeyJWK);
-                    envelopePayload.identity_wrapped_dek_b64 = SecureCrypto.toBase64(identityWrapped);
-                    envelopePayload.identity_dek_wrap_alg = 'RSA-OAEP-2048-v1';
-                    envelopePayload.identity_dek_wrap_version = 1;
-                    envelopePayload.identity_key_version = identityKey.keyVersion || 1;
+            if (AUTHENTICATED) {
+                // Everyone in the session decrypts with the session password;
+                // the uploader also keeps its own copy under its identity key.
+                if (!authIdentityKey) {
+                    throw new Error(t('toast_device_quickshare_approve'));
                 }
-                if (crossAccountPeerUserID()) {
-                    const peerEnvelope = await buildTunnelPeerEnvelope(dekBytes);
-                    if (!peerEnvelope) {
-                        throw new Error('Cross-account tunnel upload requires a peer key envelope. Peer may not be ready yet.');
-                    }
-                    Object.assign(envelopePayload, peerEnvelope);
-                }
+                envelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             } else if (ephemeralKeyPair) {
                 const wrapped = await wrapWithPublicKey(dekBytes, ephemeralKeyPair.publicKeyJWK);
                 envelopePayload = {

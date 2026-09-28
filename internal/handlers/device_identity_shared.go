@@ -34,6 +34,9 @@ func handleSharedDeviceRegistration(c *gin.Context, db services.DeviceStore, rec
 			if appErr == models.ErrDeviceIDConflict {
 				status = http.StatusConflict
 			}
+			if appErr == models.ErrIdentityKeyRequired {
+				status = http.StatusBadRequest
+			}
 			c.JSON(status, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
 			return
 		}
@@ -44,14 +47,11 @@ func handleSharedDeviceRegistration(c *gin.Context, db services.DeviceStore, rec
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to register device", Code: "DEVICE_REGISTER_FAILED"})
 		return
 	}
-	response := models.DeviceRegisterResponse{DeviceID: result.DeviceID, NeedsEnrollment: result.NeedsEnrollment}
-	if result.UserKeyEnvelope != nil {
-		response.UserKeyEnvelope = &models.UserKeyEnvelopeResponse{
-			WrappedUKB64: base64.StdEncoding.EncodeToString(result.UserKeyEnvelope.WrappedUserKey),
-			UKWrapAlg:    result.UserKeyEnvelope.UKWrapAlg,
-			UKWrapMeta:   result.UserKeyEnvelope.UKWrapMeta,
-			KeyVersion:   result.UserKeyEnvelope.KeyVersion,
-		}
+	response := models.DeviceRegisterResponse{
+		DeviceID:               result.DeviceID,
+		NeedsEnrollment:        result.NeedsEnrollment,
+		NeedsIdentitySetup:     result.NeedsIdentitySetup,
+		NeedsIdentityMigration: result.NeedsIdentityMigration,
 	}
 	if result.IdentityKeyEnvelope != nil {
 		response.IdentityKeyEnvelope = &models.UserIdentityKeyDeviceEnvelopeResponse{
@@ -68,33 +68,7 @@ func handleSharedDeviceRegistration(c *gin.Context, db services.DeviceStore, rec
 			PublicKeyJWK: result.ActiveIdentityKey.PublicKeyJWK,
 		}
 	}
-	for _, device := range result.DevicesMissingIdentityKey {
-		response.DevicesMissingIdentityKey = append(response.DevicesMissingIdentityKey, models.DeviceMissingIdentityKey{
-			DeviceID: device.ID, PublicKeyJWK: device.PublicKeyJWK,
-		})
-	}
 	c.JSON(http.StatusOK, response)
-}
-
-// sharedDistributeIdentityKey stores identity key copies a trusted device
-// wrapped for the account's devices that are missing one.
-func sharedDistributeIdentityKey(c *gin.Context, db services.DeviceStore) {
-	user := middleware.GetCNSUser(c)
-	if user == nil {
-		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
-		return
-	}
-	var req models.DistributeIdentityKeyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
-		return
-	}
-	stored, err := (&services.DeviceIdentity{DB: db}).DistributeIdentityKey(c.Request.Context(), int64(user.ID), req)
-	if err != nil {
-		writeDeviceServiceError(c, err, "IDENTITY_KEY_DISTRIBUTE_FAILED")
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"stored": stored})
 }
 
 func trustedDevice(ctx *gin.Context, db services.DeviceStore, userID int64, deviceID string) bool {
@@ -189,8 +163,11 @@ func sharedRejectEnrollment(c *gin.Context, db services.DeviceStore) bool {
 func writeDeviceServiceError(c *gin.Context, err error, fallbackCode string) {
 	if appErr, ok := err.(*models.AppError); ok {
 		status := http.StatusBadRequest
-		if appErr == models.ErrDeviceNotAuthorized || appErr == models.ErrApproverNotTrusted || appErr == models.ErrIdentityKeyNotHeld {
+		if appErr == models.ErrDeviceNotAuthorized || appErr == models.ErrApproverNotTrusted {
 			status = http.StatusForbidden
+		}
+		if appErr == models.ErrIdentityKeyStale {
+			status = http.StatusConflict
 		}
 		c.JSON(status, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
 		return

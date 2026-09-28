@@ -263,8 +263,8 @@ Report file.
 ### `GET /desktop/me/recent-uploads`
 Paginated recent owned uploads.
 
-### `GET /desktop/me/files/:id/access?device_id=<device_id>`
-Get envelope material needed for secure download/decrypt workflows.
+### `GET /desktop/me/files/:id/access`
+Return the caller's identity-wrapped copy of a file key; same response as `GET /api/me/files/:id/access` (WEB.md).
 
 ## Tunnels
 
@@ -322,7 +322,7 @@ Create enrollment request.
 List pending enrollment requests.
 
 ### `POST /desktop/me/devices/enrollments/:id/approve`
-Approve enrollment and attach wrapped user key.
+Approve enrollment by handing over the identity key; same request as `POST /api/me/devices/enrollments/:id/approve` (WEB.md).
 
 ### `POST /desktop/me/devices/enrollments/:id/reject`
 Reject enrollment.

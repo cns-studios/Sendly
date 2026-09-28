@@ -54,8 +54,6 @@ func (tc *tunnelCaller) approved() bool {
 	return tc.isHost || (tc.participant != nil && tc.participant.ApprovedAt.Valid)
 }
 
-// tunnelPeerApproved reports whether the tunnel peer a file key would be
-// wrapped for has been approved by the host.
 func tunnelPeerApproved(c *gin.Context, db *storage.Postgres, tunnel *models.Tunnel, peerUserID int64, peerDeviceID string) (bool, error) {
 	if peerUserID == tunnel.InitiatorCNSUserID {
 		return true, nil

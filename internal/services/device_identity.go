@@ -23,10 +23,6 @@ type DeviceIdentity struct {
 
 type DeviceStore interface {
 	CreateOrUpdateUserDevice(context.Context, *models.UserDevice) error
-	ResetTrustedDeviceState(context.Context, *models.UserDevice, *models.UserKeyEnvelope) error
-	GetUserKeyEnvelopeForDevice(context.Context, int64, string) (*models.UserKeyEnvelope, error)
-	UserHasTrustedKeyEnvelope(context.Context, int64) (bool, error)
-	SaveUserKeyEnvelope(context.Context, *models.UserKeyEnvelope) error
 	GetActiveDevicesByUser(context.Context, int64) ([]models.UserDevice, error)
 	CreateEnrollmentRequest(context.Context, *models.DeviceEnrollment) error
 	GetPendingEnrollmentForDevice(context.Context, int64, string) (*models.DeviceEnrollment, error)
@@ -36,31 +32,31 @@ type DeviceStore interface {
 	ApproveEnrollment(context.Context, int64, string, string) error
 	RejectEnrollment(context.Context, int64, string) error
 
-	// Identity keypair methods
-	CreateUserIdentityKey(context.Context, *models.UserIdentityKey) error
-	GetUserIdentityKey(context.Context, int64, int) (*models.UserIdentityKey, error)
 	GetActiveUserIdentityKey(context.Context, int64) (*models.UserIdentityKey, error)
+	CreateIdentityKeyWithDeviceEnvelope(context.Context, *models.UserIdentityKey, *models.UserIdentityKeyDeviceEnvelope) error
+	RecoverIdentityKey(context.Context, *models.UserDevice, *models.UserIdentityKey, *models.UserIdentityKeyDeviceEnvelope) error
 	CreateUserIdentityKeyDeviceEnvelope(context.Context, *models.UserIdentityKeyDeviceEnvelope) error
 	GetUserIdentityKeyDeviceEnvelope(context.Context, int64, string, int) (*models.UserIdentityKeyDeviceEnvelope, error)
-	DeleteUserIdentityKeyDeviceEnvelopesByUser(context.Context, int64) error
-	DeleteUserIdentityKeyDeviceEnvelope(context.Context, int64, string, int) error
-	ListDevicesMissingIdentityKeyEnvelope(context.Context, int64, int) ([]models.UserDevice, error)
-	UpdateUserIdentityKeyPublicKey(context.Context, int64, int, json.RawMessage) error
+	DeviceHoldsIdentityKey(context.Context, int64, string, int) (bool, error)
+	UserHasLegacyUserKey(context.Context, int64) (bool, error)
 }
 
+// DeviceRegistrationResult is where a device stands after registering: a
+// trusted device gets its copy of the identity key, any other device learns
+// what has to happen first (see models.DeviceRegisterResponse).
 type DeviceRegistrationResult struct {
-	DeviceID            string
-	NeedsEnrollment     bool
-	UserKeyEnvelope     *models.UserKeyEnvelope
-	IdentityKeyEnvelope *models.UserIdentityKeyDeviceEnvelope
-	// ActiveIdentityKey is the user's current identity public key.
-	ActiveIdentityKey *models.UserIdentityKey
-	// DevicesMissingIdentityKey lists the user's other trusted devices without
-	// a copy of the active identity key. It is only filled in when this device
-	// holds one, so it can wrap the key for them (DistributeIdentityKey).
-	DevicesMissingIdentityKey []models.UserDevice
+	DeviceID               string
+	IdentityKeyEnvelope    *models.UserIdentityKeyDeviceEnvelope
+	ActiveIdentityKey      *models.UserIdentityKey
+	NeedsEnrollment        bool
+	NeedsIdentitySetup     bool
+	NeedsIdentityMigration bool
 }
 
+// Register records a device and reports whether it holds the account's
+// identity key. The identity key is the account's only root secret: it is
+// created by a brand-new account's first device, handed to further devices
+// through enrollment approval, and replaced by a new version on recovery.
 func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.DeviceRegisterRequest, recover bool) (*DeviceRegistrationResult, error) {
 	key, err := normalizePublicKey(req.PublicKeyJWK)
 	if err != nil {
@@ -76,295 +72,128 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 	}
 
 	if recover {
-		if req.WrappedUserKeyB64 == "" {
-			return nil, models.ErrWrappedUserKeyRequired
-		}
-		wrapped, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid wrapped user key: %w", err)
-		}
-		envelope := &models.UserKeyEnvelope{
-			CNSUserID: userID, DeviceID: req.DeviceID, WrappedUserKey: wrapped,
-			UKWrapAlg: req.UKWrapAlg, UKWrapMeta: req.UKWrapMeta, KeyVersion: version,
-		}
-		if err := s.DB.ResetTrustedDeviceState(ctx, device, envelope); err != nil {
-			return nil, err
-		}
-
-		var identityEnvelope *models.UserIdentityKeyDeviceEnvelope
-		if req.WrappedIdentityPrivateKeyB64 != "" {
-			wrappedPriv, err := base64.StdEncoding.DecodeString(req.WrappedIdentityPrivateKeyB64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid wrapped identity private key: %w", err)
-			}
-			idVersion := req.IdentityKeyVersion
-			if idVersion <= 0 {
-				idVersion = 1
-			}
-
-			if len(req.IdentityPublicKeyJWK) > 0 {
-				idAlg := req.IdentityKeyAlgorithm
-				if idAlg == "" {
-					idAlg = "RSA-OAEP-2048"
-				}
-				now := time.Now()
-				existingKey, err := s.DB.GetUserIdentityKey(ctx, userID, idVersion)
-				if errors.Is(err, models.ErrIdentityKeyNotFound) {
-					idKey := &models.UserIdentityKey{
-						CNSUserID:    userID,
-						KeyVersion:   idVersion,
-						PublicKeyJWK: req.IdentityPublicKeyJWK,
-						KeyAlgorithm: idAlg,
-						Status:       "active",
-						CreatedAt:    now,
-						ActivatedAt:  sql.NullTime{Time: now, Valid: true},
-					}
-					if err := s.DB.CreateUserIdentityKey(ctx, idKey); err != nil {
-						return nil, fmt.Errorf("failed to create user identity key on recover: %w", err)
-					}
-				} else if err != nil {
-					return nil, err
-				} else if existingKey != nil {
-					if err := s.DB.UpdateUserIdentityKeyPublicKey(ctx, userID, idVersion, req.IdentityPublicKeyJWK); err != nil {
-						return nil, fmt.Errorf("failed to update user identity key on recover: %w", err)
-					}
-				}
-			}
-
-			identityEnvelope = &models.UserIdentityKeyDeviceEnvelope{
-				CNSUserID:          userID,
-				DeviceID:           req.DeviceID,
-				IdentityKeyVersion: idVersion,
-				WrappedPrivateKey:  wrappedPriv,
-				WrapAlg:            req.IdentityKeyWrapAlg,
-				WrapMeta:           req.IdentityKeyWrapMeta,
-				CreatedAt:          time.Now(),
-			}
-			if err := s.DB.CreateUserIdentityKeyDeviceEnvelope(ctx, identityEnvelope); err != nil {
-				return nil, fmt.Errorf("failed to create identity device envelope on recover: %w", err)
-			}
-		}
-
-		return s.withIdentityKeyState(ctx, userID, &DeviceRegistrationResult{
-			DeviceID:            req.DeviceID,
-			UserKeyEnvelope:     envelope,
-			IdentityKeyEnvelope: identityEnvelope,
-		})
+		return s.recover(ctx, userID, device, req)
 	}
 
 	if err := s.DB.CreateOrUpdateUserDevice(ctx, device); err != nil {
 		return nil, err
 	}
-	if existing, err := s.DB.GetUserKeyEnvelopeForDevice(ctx, userID, req.DeviceID); err == nil {
-		result := &DeviceRegistrationResult{DeviceID: req.DeviceID, UserKeyEnvelope: existing}
-		idVersion := requestedIdentityKeyVersion(req)
-		if active, err := s.DB.GetActiveUserIdentityKey(ctx, userID); err == nil {
-			idVersion = active.KeyVersion
-		} else if !errors.Is(err, models.ErrIdentityKeyNotFound) {
-			return nil, err
-		}
-		if req.DiscardIdentityKeyEnvelope {
-			if err := s.DB.DeleteUserIdentityKeyDeviceEnvelope(ctx, userID, req.DeviceID, idVersion); err != nil {
-				return nil, err
-			}
-		}
-		idEnv, err := s.DB.GetUserIdentityKeyDeviceEnvelope(ctx, userID, req.DeviceID, idVersion)
-		switch {
-		case err == nil:
-			result.IdentityKeyEnvelope = idEnv
-		case errors.Is(err, models.ErrDeviceEnvelopeNotFound):
-			if result.IdentityKeyEnvelope, err = s.adoptIdentityKey(ctx, userID, req); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, err
-		}
-		return s.withIdentityKeyState(ctx, userID, result)
-	}
-	trusted, err := s.DB.UserHasTrustedKeyEnvelope(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	if trusted {
-		return &DeviceRegistrationResult{DeviceID: req.DeviceID, NeedsEnrollment: true}, nil
-	}
-	envelope, err := decodeUserKeyEnvelope(userID, req, version)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.DB.SaveUserKeyEnvelope(ctx, envelope); err != nil {
-		return nil, err
-	}
-
-	identityEnvelope, err := s.adoptIdentityKey(ctx, userID, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return s.withIdentityKeyState(ctx, userID, &DeviceRegistrationResult{
-		DeviceID:            req.DeviceID,
-		UserKeyEnvelope:     envelope,
-		IdentityKeyEnvelope: identityEnvelope,
-	})
-}
-
-func requestedIdentityKeyVersion(req models.DeviceRegisterRequest) int {
-	if req.IdentityKeyVersion > 0 {
-		return req.IdentityKeyVersion
-	}
-	return 1
-}
-
-// adoptIdentityKey stores the device's self-wrapped copy of the identity
-// private key it sent. The first device to send one creates the user's
-// identity key. After that a copy is only stored if its public key matches the
-// active one: every device without a local identity key generates its own, so
-// storing a mismatched copy would leave that device holding a private key that
-// nothing is wrapped for. Such a device gets the real key wrapped by a sibling
-// device instead (DistributeIdentityKey) or through enrollment approval.
-func (s *DeviceIdentity) adoptIdentityKey(ctx context.Context, userID int64, req models.DeviceRegisterRequest) (*models.UserIdentityKeyDeviceEnvelope, error) {
-	if req.WrappedIdentityPrivateKeyB64 == "" || len(req.IdentityPublicKeyJWK) == 0 {
-		return nil, nil
-	}
-	wrappedPriv, err := base64.StdEncoding.DecodeString(req.WrappedIdentityPrivateKeyB64)
-	if err != nil {
-		return nil, fmt.Errorf("invalid wrapped identity private key: %w", err)
-	}
+	result := &DeviceRegistrationResult{DeviceID: req.DeviceID}
 
 	active, err := s.DB.GetActiveUserIdentityKey(ctx, userID)
-	if errors.Is(err, models.ErrIdentityKeyNotFound) {
-		idAlg := req.IdentityKeyAlgorithm
-		if idAlg == "" {
-			idAlg = "RSA-OAEP-2048"
+	switch {
+	case err == nil:
+		result.ActiveIdentityKey = active
+		envelope, err := s.DB.GetUserIdentityKeyDeviceEnvelope(ctx, userID, req.DeviceID, active.KeyVersion)
+		if errors.Is(err, models.ErrDeviceEnvelopeNotFound) {
+			result.NeedsEnrollment = true
+			return result, nil
 		}
-		now := time.Now()
-		active = &models.UserIdentityKey{
-			CNSUserID: userID, KeyVersion: requestedIdentityKeyVersion(req), PublicKeyJWK: req.IdentityPublicKeyJWK,
-			KeyAlgorithm: idAlg, Status: "active", CreatedAt: now,
-			ActivatedAt: sql.NullTime{Time: now, Valid: true},
+		if err != nil {
+			return nil, err
 		}
-		if createErr := s.DB.CreateUserIdentityKey(ctx, active); createErr != nil {
-			// Another device may have created it concurrently; compare against that key.
-			if active, err = s.DB.GetActiveUserIdentityKey(ctx, userID); err != nil {
-				return nil, fmt.Errorf("failed to create user identity key: %w", createErr)
-			}
-		}
-	} else if err != nil {
+		result.IdentityKeyEnvelope = envelope
+		return result, nil
+	case !errors.Is(err, models.ErrIdentityKeyNotFound):
 		return nil, err
 	}
 
-	if !samePublicKey(active.PublicKeyJWK, req.IdentityPublicKeyJWK) {
-		return nil, nil
+	// No identity key yet. An account from before identity keys has to be
+	// migrated by a device holding its legacy user key: letting any new
+	// device create the key would hand the account to whoever registers first.
+	legacy, err := s.DB.UserHasLegacyUserKey(ctx, userID)
+	if err != nil {
+		return nil, err
 	}
-	envelope := &models.UserIdentityKeyDeviceEnvelope{
-		CNSUserID: userID, DeviceID: req.DeviceID, IdentityKeyVersion: active.KeyVersion,
-		WrappedPrivateKey: wrappedPriv, WrapAlg: req.IdentityKeyWrapAlg,
-		WrapMeta: req.IdentityKeyWrapMeta, CreatedAt: time.Now(),
+	if legacy {
+		result.NeedsIdentityMigration = true
+		return result, nil
 	}
-	if err := s.DB.CreateUserIdentityKeyDeviceEnvelope(ctx, envelope); err != nil {
-		return nil, fmt.Errorf("failed to create identity device envelope: %w", err)
-	}
-	return envelope, nil
-}
 
-// withIdentityKeyState adds the user's active identity public key and, when
-// this device holds a copy of it, the trusted devices still missing one.
-func (s *DeviceIdentity) withIdentityKeyState(ctx context.Context, userID int64, result *DeviceRegistrationResult) (*DeviceRegistrationResult, error) {
-	active, err := s.DB.GetActiveUserIdentityKey(ctx, userID)
-	if errors.Is(err, models.ErrIdentityKeyNotFound) {
+	// A brand-new account: this device creates the identity key.
+	idKey, envelope, err := newIdentityKey(userID, req)
+	if errors.Is(err, models.ErrIdentityKeyRequired) {
+		result.NeedsIdentitySetup = true
 		return result, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	result.ActiveIdentityKey = active
-	if result.IdentityKeyEnvelope == nil || result.IdentityKeyEnvelope.IdentityKeyVersion != active.KeyVersion {
-		return result, nil
-	}
-	missing, err := s.DB.ListDevicesMissingIdentityKeyEnvelope(ctx, userID, active.KeyVersion)
-	if err != nil {
+	idKey.KeyVersion, envelope.IdentityKeyVersion = 1, 1
+	if err := s.DB.CreateIdentityKeyWithDeviceEnvelope(ctx, idKey, envelope); err != nil {
+		// Another device of this account created it first; this one needs
+		// that key, so it has to be approved like any other new device.
+		if active, getErr := s.DB.GetActiveUserIdentityKey(ctx, userID); getErr == nil {
+			result.ActiveIdentityKey = active
+			result.NeedsEnrollment = true
+			return result, nil
+		}
 		return nil, err
 	}
-	for _, device := range missing {
-		if device.ID != result.DeviceID {
-			result.DevicesMissingIdentityKey = append(result.DevicesMissingIdentityKey, device)
-		}
-	}
+	result.ActiveIdentityKey = idKey
+	result.IdentityKeyEnvelope = envelope
 	return result, nil
 }
 
-// DistributeIdentityKey stores copies of the active identity private key that
-// a trusted device holding it wrapped for the user's other trusted devices. It
-// only fills devices that have no copy yet; an existing copy is never replaced.
-// It returns how many copies were stored.
-func (s *DeviceIdentity) DistributeIdentityKey(ctx context.Context, userID int64, req models.DistributeIdentityKeyRequest) (int, error) {
-	owned, err := s.ownsDevice(ctx, userID, req.DeviceID)
+// recover makes device the account's only trusted device, with a new identity
+// key version. Every other device is revoked, and files and transfers wrapped
+// for older versions stay locked until a device still holding such a version
+// re-wraps them.
+func (s *DeviceIdentity) recover(ctx context.Context, userID int64, device *models.UserDevice, req models.DeviceRegisterRequest) (*DeviceRegistrationResult, error) {
+	idKey, envelope, err := newIdentityKey(userID, req)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	if !owned {
-		return 0, models.ErrDeviceNotAuthorized
+	if err := s.DB.RecoverIdentityKey(ctx, device, idKey, envelope); err != nil {
+		return nil, err
 	}
-	if trusted, _ := s.IsTrusted(ctx, userID, req.DeviceID); !trusted {
-		return 0, models.ErrApproverNotTrusted
-	}
-	active, err := s.DB.GetActiveUserIdentityKey(ctx, userID)
-	if err != nil {
-		return 0, err
-	}
-	if _, err := s.DB.GetUserIdentityKeyDeviceEnvelope(ctx, userID, req.DeviceID, active.KeyVersion); err != nil {
-		if errors.Is(err, models.ErrDeviceEnvelopeNotFound) {
-			return 0, models.ErrIdentityKeyNotHeld
-		}
-		return 0, err
-	}
-
-	missing, err := s.DB.ListDevicesMissingIdentityKeyEnvelope(ctx, userID, active.KeyVersion)
-	if err != nil {
-		return 0, err
-	}
-	open := make(map[string]bool, len(missing))
-	for _, device := range missing {
-		open[device.ID] = true
-	}
-
-	stored := 0
-	for _, item := range req.Envelopes {
-		if !open[item.DeviceID] || item.IdentityKeyVersion != active.KeyVersion {
-			continue
-		}
-		wrapped, err := base64.StdEncoding.DecodeString(item.WrappedPrivateKeyB64)
-		if err != nil || len(wrapped) == 0 {
-			return stored, fmt.Errorf("invalid wrapped identity private key for device %s", item.DeviceID)
-		}
-		if err := s.DB.CreateUserIdentityKeyDeviceEnvelope(ctx, &models.UserIdentityKeyDeviceEnvelope{
-			CNSUserID: userID, DeviceID: item.DeviceID, IdentityKeyVersion: active.KeyVersion,
-			WrappedPrivateKey: wrapped, WrapAlg: item.WrapAlg, WrapMeta: item.WrapMeta,
-			CreatedAt: time.Now(),
-		}); err != nil {
-			return stored, err
-		}
-		delete(open, item.DeviceID)
-		stored++
-	}
-	return stored, nil
+	return &DeviceRegistrationResult{
+		DeviceID:            device.ID,
+		ActiveIdentityKey:   idKey,
+		IdentityKeyEnvelope: envelope,
+	}, nil
 }
 
-// samePublicKey reports whether two RSA public JWKs describe the same key.
-func samePublicKey(a, b json.RawMessage) bool {
-	var ka, kb struct{ Kty, N, E string }
-	if json.Unmarshal(a, &ka) != nil || json.Unmarshal(b, &kb) != nil {
-		return false
+// newIdentityKey builds a new identity key and the registering device's
+// self-wrapped copy of it from the request; the version is set by the caller.
+func newIdentityKey(userID int64, req models.DeviceRegisterRequest) (*models.UserIdentityKey, *models.UserIdentityKeyDeviceEnvelope, error) {
+	if req.WrappedIdentityPrivateKeyB64 == "" || len(req.IdentityPublicKeyJWK) == 0 {
+		return nil, nil, models.ErrIdentityKeyRequired
 	}
-	return ka.N != "" && ka.Kty == kb.Kty && ka.N == kb.N && ka.E == kb.E
+	publicKey, err := normalizePublicKey(req.IdentityPublicKeyJWK)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid identity public key: %w", err)
+	}
+	wrapped, err := base64.StdEncoding.DecodeString(req.WrappedIdentityPrivateKeyB64)
+	if err != nil || len(wrapped) == 0 {
+		return nil, nil, fmt.Errorf("invalid wrapped identity private key")
+	}
+	algorithm := req.IdentityKeyAlgorithm
+	if algorithm == "" {
+		algorithm = "RSA-OAEP-2048"
+	}
+	now := time.Now()
+	idKey := &models.UserIdentityKey{
+		CNSUserID: userID, PublicKeyJWK: publicKey, KeyAlgorithm: algorithm,
+		Status: "active", CreatedAt: now, ActivatedAt: sql.NullTime{Time: now, Valid: true},
+	}
+	envelope := &models.UserIdentityKeyDeviceEnvelope{
+		CNSUserID: userID, DeviceID: req.DeviceID, WrappedPrivateKey: wrapped,
+		WrapAlg: req.IdentityKeyWrapAlg, WrapMeta: req.IdentityKeyWrapMeta, CreatedAt: now,
+	}
+	return idKey, envelope, nil
 }
 
+// IsTrusted reports whether a device holds the account's active identity key.
 func (s *DeviceIdentity) IsTrusted(ctx context.Context, userID int64, deviceID string) (bool, error) {
-	_, err := s.DB.GetUserKeyEnvelopeForDevice(ctx, userID, deviceID)
-	if err != nil {
+	active, err := s.DB.GetActiveUserIdentityKey(ctx, userID)
+	if errors.Is(err, models.ErrIdentityKeyNotFound) {
 		return false, nil
 	}
-	return true, nil
+	if err != nil {
+		return false, err
+	}
+	return s.DB.DeviceHoldsIdentityKey(ctx, userID, deviceID, active.KeyVersion)
 }
 
 func (s *DeviceIdentity) CreateEnrollment(ctx context.Context, userID int64, requestDeviceID string) (*models.DeviceEnrollment, error) {
@@ -439,41 +268,23 @@ func (s *DeviceIdentity) Approve(ctx context.Context, userID int64, enrollmentID
 	if !strings.EqualFold(strings.TrimSpace(req.VerificationCode), strings.TrimSpace(enrollment.VerificationCode)) {
 		return models.ErrVerificationCodeMismatch
 	}
-	wrapped, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
+	active, err := s.DB.GetActiveUserIdentityKey(ctx, userID)
 	if err != nil {
 		return err
 	}
-	if err := s.DB.SaveUserKeyEnvelope(ctx, &models.UserKeyEnvelope{
-		CNSUserID: userID, DeviceID: enrollment.RequestDeviceID, WrappedUserKey: wrapped,
-		UKWrapAlg: req.UKWrapAlg, UKWrapMeta: req.UKWrapMeta, KeyVersion: 1,
+	if req.IdentityKeyVersion != active.KeyVersion {
+		return models.ErrIdentityKeyStale
+	}
+	wrapped, err := base64.StdEncoding.DecodeString(req.WrappedIdentityPrivateKeyB64)
+	if err != nil || len(wrapped) == 0 {
+		return fmt.Errorf("invalid wrapped identity private key")
+	}
+	if err := s.DB.CreateUserIdentityKeyDeviceEnvelope(ctx, &models.UserIdentityKeyDeviceEnvelope{
+		CNSUserID: userID, DeviceID: enrollment.RequestDeviceID, IdentityKeyVersion: active.KeyVersion,
+		WrappedPrivateKey: wrapped, WrapAlg: req.IdentityKeyWrapAlg, WrapMeta: req.IdentityKeyWrapMeta,
+		CreatedAt: time.Now(),
 	}); err != nil {
 		return err
-	}
-
-	if req.WrappedIdentityPrivateKeyB64 != "" {
-		wrappedPriv, err := base64.StdEncoding.DecodeString(req.WrappedIdentityPrivateKeyB64)
-		if err != nil {
-			return fmt.Errorf("invalid wrapped identity private key: %w", err)
-		}
-		idVersion := req.IdentityKeyVersion
-		if idVersion <= 0 {
-			idVersion = 1
-		}
-		if _, err := s.DB.GetUserIdentityKey(ctx, userID, idVersion); err != nil {
-			return fmt.Errorf("identity key version %d is unavailable: %w", idVersion, err)
-		}
-		idEnvelope := &models.UserIdentityKeyDeviceEnvelope{
-			CNSUserID:          userID,
-			DeviceID:           enrollment.RequestDeviceID,
-			IdentityKeyVersion: idVersion,
-			WrappedPrivateKey:  wrappedPriv,
-			WrapAlg:            req.IdentityKeyWrapAlg,
-			WrapMeta:           req.IdentityKeyWrapMeta,
-			CreatedAt:          time.Now(),
-		}
-		if err := s.DB.CreateUserIdentityKeyDeviceEnvelope(ctx, idEnvelope); err != nil {
-			return err
-		}
 	}
 
 	return s.DB.ApproveEnrollment(ctx, userID, enrollmentID, req.ApproverDeviceID)
@@ -504,20 +315,6 @@ func (s *DeviceIdentity) ownsDevice(ctx context.Context, userID int64, deviceID 
 		}
 	}
 	return false, nil
-}
-
-func decodeUserKeyEnvelope(userID int64, req models.DeviceRegisterRequest, version int) (*models.UserKeyEnvelope, error) {
-	if req.WrappedUserKeyB64 == "" {
-		return nil, models.ErrWrappedUserKeyRequired
-	}
-	wrapped, err := base64.StdEncoding.DecodeString(req.WrappedUserKeyB64)
-	if err != nil {
-		return nil, err
-	}
-	return &models.UserKeyEnvelope{
-		CNSUserID: userID, DeviceID: req.DeviceID, WrappedUserKey: wrapped,
-		UKWrapAlg: req.UKWrapAlg, UKWrapMeta: req.UKWrapMeta, KeyVersion: version,
-	}, nil
 }
 
 func verificationCode(length int) string {

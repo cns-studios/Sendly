@@ -446,17 +446,16 @@
         const result = await SecureCrypto.registerAuthenticatedDevice({
             userId: USER_ID,
             username: USERNAME,
-            csrfToken: getCookieValue('csrf_token'),
-            includeBootstrapEnvelope: true
+            csrfToken: getCookieValue('csrf_token')
         });
-        if (result.payload?.needs_enrollment) {
+        if (!result.identityKey && (result.payload?.needs_enrollment || result.payload?.needs_identity_migration)) {
             deviceNotice.classList.remove('hidden');
             window.lucide?.createIcons?.();
             const error = new Error(t('transfers_device_untrusted_title'));
             error.code = 'DEVICE_NOT_TRUSTED';
             throw error;
         }
-        const identityKey = result.identityKey || SecureCrypto.getIdentityKey(USER_ID);
+        const identityKey = result.identityKey;
         if (!identityKey?.privateKeyJWK) throw new Error(t('transfers_no_identity_key'));
         device = { deviceId: result.identity.deviceId, identityKey };
         return device;
@@ -472,9 +471,11 @@
     async function fileKeyFor(item) {
         const cached = SecureCrypto.getCachedFileKey(item.file_id);
         if (cached) return cached;
-        const { deviceId, identityKey } = await ensureDevice();
-        const access = await api(`/api/me/files/${encodeURIComponent(item.file_id)}/access?device_id=${encodeURIComponent(deviceId)}`);
+        const { identityKey } = await ensureDevice();
+        const access = await api(`/api/me/files/${encodeURIComponent(item.file_id)}/access`);
         if (!access.file_access_key_envelope?.wrapped_dek_b64) throw new Error(t('transfers_key_unavailable'));
+        // Sent to an identity key version from before the account's last recovery.
+        if (access.identity_key_version !== identityKey.keyVersion) throw lockedError();
         let dek;
         try {
             dek = await SecureCrypto.unwrapFileDEK(access.file_access_key_envelope, {
