@@ -50,6 +50,7 @@
     const shareUrlModal = document.getElementById('share-url-modal');
     const shareUrlText = document.getElementById('shareUrlText');
     const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
+    const shareUrlNativeBtn = document.getElementById('shareUrlNativeBtn');
     const shareUrlDiscardBtn = document.getElementById('shareUrlDiscardBtn');
     let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
@@ -97,11 +98,10 @@
     async function ensureDeviceReady() {
         try {
             authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-            authUserKeyRaw = SecureCrypto.getUserKeyRaw(CNS_USER_ID);
-            if (!authUserKeyRaw) {
-                authUserKeyRaw = SecureCrypto.generateUserKeyRaw();
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
+            // Offer a key in case this is the account's first trusted device. For any other
+            // device the server keeps the envelope it already has and returns that instead.
+            const offeredKey = SecureCrypto.getUserKeyRaw(CNS_USER_ID) || SecureCrypto.generateUserKeyRaw();
+            const wrappedOffer = await SecureCrypto.wrapUserKeyForDevice(offeredKey, authDeviceIdentity.publicKeyJWK);
             const response = await fetch('/api/me/devices/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
@@ -111,22 +111,28 @@
                     public_key_jwk: authDeviceIdentity.publicKeyJWK,
                     key_algorithm: authDeviceIdentity.keyAlgorithm,
                     key_version: authDeviceIdentity.keyVersion,
+                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedOffer),
+                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
+                    uk_wrap_meta: { type: 'self-wrap', device_id: authDeviceIdentity.deviceId },
                 })
             });
             if (!response.ok) throw new Error('Device registration failed');
             const payload = await response.json();
             if (payload.needs_enrollment) {
+                authUserKeyRaw = null;
                 showErrorBanner(t('toast_device_approve'));
                 return false;
             }
-            if (payload.user_key_envelope?.wrapped_uk_b64 && !authUserKeyRaw) {
-                const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
-                SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
-            }
+            // Only ever wrap uploads with the key the server holds, otherwise the share
+            // link can't be recovered later from the uploaded files page.
+            const wrappedUKB64 = payload.user_key_envelope?.wrapped_uk_b64;
+            if (!wrappedUKB64) throw new Error('Missing user key envelope');
+            authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(SecureCrypto.fromBase64(wrappedUKB64), authDeviceIdentity.privateKeyJWK);
+            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
+            authUserKeyRaw = null;
             return false;
         }
     }
@@ -152,6 +158,16 @@
         });
 
         shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
+
+        shareUrlNativeBtn?.addEventListener('click', async () => {
+            const url = shareUrlText?.textContent;
+            if (!url || !navigator.share) return;
+            try {
+                await navigator.share({ url, title: t('link_share_title') });
+            } catch (error) {
+                // user cancelled the native share sheet or it failed silently; nothing to do
+            }
+        });
     }
 
     function handleZoneClick(e) {
@@ -208,9 +224,11 @@
         const badge = dropZone.querySelector('.drop-zone-badge');
         const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
         const eta = dropZone.querySelector('#drop-zone-eta');
+        const pct = dropZone.querySelector('.drop-zone-pct');
         dropZone.classList.remove('uploading', 'success', 'error', 'warning');
         if (state !== 'idle') dropZone.classList.add(state);
         if (progressFill && (state === 'idle' || state === 'uploading')) progressFill.style.width = '0';
+        if (pct) pct.textContent = state === 'uploading' ? '0%' : '';
         if (eta && state !== 'uploading') eta.textContent = '';
 
         if (state === 'uploading') {
@@ -279,7 +297,9 @@
         const pct = Math.floor((uploadedChunks / totalChunks) * 100);
         const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
         const eta = dropZone.querySelector('#drop-zone-eta');
+        const pctLabel = dropZone.querySelector('.drop-zone-pct');
         if (progressFill) progressFill.style.width = `${pct}%`;
+        if (pctLabel) pctLabel.textContent = `${pct}%`;
         if (eta && uploadStartedAt && uploadedChunks > 0 && pct < 100) {
             const elapsed = (Date.now() - uploadStartedAt) / 1000;
             const progress = uploadedChunks / totalChunks;
@@ -529,6 +549,10 @@
         shareUrlText.textContent = url;
         shareUrlCopyBtn.textContent = t('link_share_copy');
         shareUrlCopyBtn.classList.remove('copied');
+        if (shareUrlNativeBtn) {
+            const canNativeShare = !!navigator.share && window.matchMedia('(max-width: 768px)').matches;
+            shareUrlNativeBtn.classList.toggle('hidden', !canNativeShare);
+        }
         shareUrlModal.classList.remove('hidden');
         shareUrlModal.offsetHeight;
         shareUrlModal.classList.add('visible');

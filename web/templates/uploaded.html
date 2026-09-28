@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.title}}</title>
     <meta name="description" content="{{.description}}">
-    <meta name="robots" content="{{if .noindex}}noindex, nofollow{{else}}index, follow{{end}}">
+    <meta name="robots" content="noindex, nofollow">
     <link rel="canonical" href="{{.canonicalURL}}">
 
     <!-- Open Graph / Facebook -->
@@ -29,73 +29,22 @@
     <meta name="twitter:image" content="{{.ogImage}}">
     <meta name="twitter:image:alt" content="Sendly - Simply File Sharing">
 
-    <!-- hreflang for international SEO -->
-    <link rel="alternate" hreflang="en" href="{{.baseURL}}/?lang=en">
-    <link rel="alternate" hreflang="de" href="{{.baseURL}}/?lang=de">
-    <link rel="alternate" hreflang="x-default" href="{{.baseURL}}/">
-
-    <!-- Structured Data / JSON-LD -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebApplication",
-      "name": "Sendly",
-      "url": "{{.baseURL}}",
-      "description": "{{.description}}",
-      "applicationCategory": "FileSharing",
-      "operatingSystem": "Web Browser",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD",
-        "availability": "https://schema.org/InStock"
-      },
-      "featureList": [
-        "End-to-end encrypted file sharing",
-        "No account required for basic usage",
-        "Automatic file expiration",
-        "Maximum file size 750 MB (guest) / 1.5 GB (authenticated)",
-        "Real-time group file sharing (Quick Share)"
-      ],
-      "inLanguage": ["en", "de"],
-      "publisher": {
-        "@type": "Organization",
-        "name": "CNS Studios",
-        "url": "https://cns-studios.com"
-      }
-    }
-    </script>
-
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
     <script src="/static/js/mobile-menu.js" defer></script>
+
+
     <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Preconnect to external resources -->
-    <link rel="preconnect" href="https://unpkg.com" crossorigin>
-
-    <!-- Mobile & PWA Meta -->
-    <meta name="theme-color" content="#00AE71">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Sendly">
-    <link rel="apple-touch-icon" href="/static/images/bun.png">
-
-    <!-- DNS Prefetch for external domains -->
-    <link rel="dns-prefetch" href="https://unpkg.com">
-
-    <!-- Web App Manifest -->
-    <link rel="manifest" href="/static/manifest.json">
-
 <link rel="icon" type="image/png" href="/static/favicon.png">
 </head>
-<body class="page-index">
+<body class="page-shared page-uploaded">
 
     <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
-            <h2 id="tos-modal-title">{{.t.tos_accept_title}}</h2>
+            <p class="tos-modal-kicker">{{.t.tos_modal_kicker}}</p>
+            <h2 id="tos-modal-title">{{.t.tos_modal_title}}</h2>
             <p id="tos-modal-description" class="tos-modal-description">
-                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use}}
+                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use_sendly}}
             </p>
             <div class="tos-modal-actions">
                 <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
@@ -104,37 +53,9 @@
         </div>
     </div>
 
-    <div id="auth-nudge" class="hidden" style="background:#111;border-bottom:1px solid #2a2a2a;padding:0.6rem 2rem;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#888;position:relative;">
-        <span><a href="{{.authLoginURL}}" style="color:var(--accent);text-decoration:none;">{{.t.auth_nudge_login}}</a> {{.t.auth_nudge_index}}</span>
-        <button id="auth-nudge-close" aria-label="{{.t.auth_nudge_close_label}}" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
-            <i data-lucide="x" style="width:14px;height:14px;"></i>
-        </button>
-    </div>
-
     <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
         <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
         <span id="notification-text" class="notification-text"></span>
-    </div>
-
-    <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
-        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
-            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
-            <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
-                {{.t.device_approval_desc}}
-            </p>
-            <div id="device-approval-meta" style="margin-bottom:28px;font-size:14px;color:#555;line-height:1.6;"></div>
-            <div id="device-approval-waiting" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:20px;margin-bottom:28px;">
-                <div class="downloading-spinner" style="width:36px;height:36px;"></div>
-                <button id="device-approval-recover" type="button" style="background:none;border:none;color:#595959;font-size:15px;text-decoration:underline;cursor:pointer;padding:0;">
-                    {{.t.device_approval_recover}}
-                </button>
-            </div>
-            <span id="device-approval-count" style="display:none;"></span>
-            <div class="tos-modal-actions">
-                <button id="device-approval-decline" class="btn btn-secondary btn-large">{{.t.device_approval_decline}}</button>
-                <button id="device-approval-approve" class="btn btn-accent btn-large">{{.t.device_approval_approve}}</button>
-            </div>
-        </div>
     </div>
 
     <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
@@ -149,9 +70,6 @@
                     <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
-            {{if .authenticated}}
-            <a href="/uploaded" class="recent-files-link">{{.t.header_recent_files}}</a>
-            {{end}}
             {{if .authenticated}}
             <!-- Account Menu Trigger -->
             <button type="button"
@@ -243,88 +161,76 @@
         </div>
     </div>
 
-    <div class="main-content">
-
-        <div class="hero-section">
-            <h1 class="hero-title">{{.t.hero_title}} <span class="hero-highlight">Sendly.</span></h1>
-            <p class="hero-subtitle">{{.t.hero_subtitle}}</p>
-        </div>
-
-        <div class="home-mobile-actions">
-            <ul class="home-trust">
-                <li><i data-lucide="shield-check" aria-hidden="true"></i>{{.t.home_mobile_trust_e2e}}</li>
-                <li><i data-lucide="user-x" aria-hidden="true"></i>{{.t.home_mobile_trust_account}}</li>
-                <li><i data-lucide="timer" aria-hidden="true"></i>{{.t.home_mobile_trust_expiry}}</li>
-            </ul>
-            <a href="/link" class="home-action">
-                <span class="home-action-icon"><i data-lucide="link" aria-hidden="true"></i></span>
-                <span class="home-action-text">
-                    <span class="home-action-title">{{.t.card_send_title}}</span>
-                    <span class="home-action-desc">{{.t.home_mobile_send_desc}}</span>
-                </span>
-                <i data-lucide="arrow-right" class="home-action-arrow" aria-hidden="true"></i>
-            </a>
-            <details class="home-action-group">
-                <summary class="home-action">
-                    <span class="home-action-icon home-action-icon-soft"><i data-lucide="users" aria-hidden="true"></i></span>
-                    <span class="home-action-text">
-                        <span class="home-action-title">{{.t.home_mobile_quickshare_title}}</span>
-                        <span class="home-action-desc">{{.t.home_mobile_quickshare_desc}}</span>
-                    </span>
-                    <i data-lucide="chevron-down" class="home-action-arrow" aria-hidden="true"></i>
-                </summary>
-                <div class="home-action-choices">
-                    <a href="/quickshare?action=create" class="home-choice home-choice-primary"><i data-lucide="plus" aria-hidden="true"></i>{{.t.card_quickshare_create}}</a>
-                    <a href="/quickshare?action=join" class="home-choice"><i data-lucide="hash" aria-hidden="true"></i>{{.t.card_quickshare_join}}</a>
-                </div>
-            </details>
-        </div>
-
-        <div class="action-cards">
-            <a href="/link" class="action-card">
-                <h2 class="card-title">{{.t.card_send_title}}</h2>
-                <p class="card-desc">{{.t.card_send_desc}}</p>
-                <span class="card-btn card-btn-primary">{{.t.card_send_btn}}</span>
-            </a>
-            <div id="quickshare-card" class="action-card action-card-quickshare" role="button" tabindex="0" aria-expanded="false" aria-label="{{.t.card_quickshare_title}}">
-                <h2 class="card-title">{{.t.card_quickshare_title}}</h2>
-                <p class="card-desc">{{.t.card_quickshare_desc}}</p>
-                <span class="card-btn card-btn-outline card-btn-quickshare">{{.t.card_quickshare_btn}}</span>
-                <div class="quick-share-actions">
-                    <a href="/quickshare?action=create" class="card-btn card-btn-primary">{{.t.card_quickshare_create}}</a>
-                    <a href="/quickshare?action=join" class="card-btn card-btn-outline">{{.t.card_quickshare_join}}</a>
-                </div>
+    <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
+            <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
+                {{.t.device_approval_desc}}
+            </p>
+            <div id="device-approval-meta" style="margin-bottom:28px;font-size:14px;color:#555;line-height:1.6;"></div>
+            <div id="device-approval-waiting" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:20px;margin-bottom:28px;">
+                <div class="downloading-spinner" style="width:36px;height:36px;"></div>
+                <button id="device-approval-recover" type="button" style="background:none;border:none;color:#595959;font-size:15px;text-decoration:underline;cursor:pointer;padding:0;">
+                    {{.t.device_approval_recover}}
+                </button>
+            </div>
+            <span id="device-approval-count" style="display:none;"></span>
+            <div class="tos-modal-actions">
+                <button id="device-approval-decline" class="btn btn-secondary btn-large">{{.t.device_approval_decline}}</button>
+                <button id="device-approval-approve" class="btn btn-accent btn-large">{{.t.device_approval_approve}}</button>
             </div>
         </div>
-
-        <div class="star-bg">
-            <div class="star-reveal">
-                <svg viewBox="62 -40 1621 1621" preserveAspectRatio="xMidYMin slice">
-                    <defs>
-                        <linearGradient id="starGradient" x1="872.501" y1="-157.999" x2="872.501" y2="1903" gradientUnits="userSpaceOnUse">
-                            <stop stop-color="#00AE71"/>
-                            <stop offset="0.5" stop-color="#00827B"/>
-                        </linearGradient>
-                        <mask id="starMask">
-                            <path d="M805.544 48.6921C826.576 -16.2307 918.427 -16.2307 939.458 48.6921V48.6921C957.199 103.455 1029.6 114.921 1063.39 68.3213V68.3213C1103.46 13.0752 1190.81 41.4586 1190.75 109.703V109.703C1190.7 167.267 1256.01 200.546 1302.56 166.669V166.669C1357.73 126.508 1432.04 180.496 1410.89 245.382V245.382C1393.06 300.113 1444.89 351.946 1499.62 334.109V334.109C1564.51 312.963 1618.5 387.272 1578.33 442.448V442.448C1544.46 488.988 1577.74 554.301 1635.3 554.25V554.25C1703.54 554.19 1731.93 641.546 1676.68 681.61V681.61C1630.08 715.405 1641.55 787.804 1696.31 805.544V805.544C1761.23 826.576 1761.23 918.427 1696.31 939.458V939.458C1641.55 957.199 1630.08 1029.6 1676.68 1063.39V1063.39C1731.93 1103.46 1703.54 1190.81 1635.3 1190.75V1190.75C1577.74 1190.7 1544.46 1256.01 1578.33 1302.56V1302.56C1618.5 1357.73 1564.51 1432.04 1499.62 1410.89V1410.89C1444.89 1393.06 1393.06 1444.89 1410.89 1499.62V1499.62C1432.04 1564.51 1357.73 1618.5 1302.56 1578.33V1578.33C1256.01 1544.46 1190.7 1577.74 1190.75 1635.3V1635.3C1190.81 1703.54 1103.46 1731.93 1063.39 1676.68V1676.68C1029.6 1630.08 957.199 1641.55 939.458 1696.31V1696.31C918.427 1761.23 826.576 1761.23 805.544 1696.31V1696.31C787.804 1641.55 715.405 1630.08 681.61 1676.68V1676.68C641.546 1731.93 554.19 1703.54 554.25 1635.3V1635.3C554.301 1577.74 488.988 1544.46 442.448 1578.33V1578.33C387.272 1618.5 312.963 1564.51 334.109 1499.62V1499.62C351.946 1444.89 300.113 1393.06 245.382 1410.89V1410.89C180.496 1432.04 126.508 1357.73 166.669 1302.56V1302.56C200.546 1256.01 167.267 1190.7 109.703 1190.75V1190.75C41.4586 1190.81 13.0752 1103.46 68.3213 1063.39V1063.39C114.921 1029.6 103.455 957.199 48.6921 939.458V939.458C-16.2307 918.427 -16.2307 826.576 48.6921 805.544V805.544C103.455 787.804 114.921 715.405 68.3213 681.61V681.61C13.0752 641.546 41.4587 554.19 109.703 554.25V554.25C167.267 554.301 200.546 488.988 166.669 442.448V442.448C126.508 387.272 180.496 312.963 245.382 334.109V334.109C300.113 351.946 351.946 300.113 334.109 245.382V245.382C312.963 180.496 387.272 126.508 442.448 166.669V166.669C488.988 200.546 554.301 167.267 554.25 109.703V109.703C554.19 41.4586 641.546 13.0752 681.61 68.3213V68.3213C715.405 114.921 787.804 103.455 805.544 48.6921V48.6921Z" fill="white">
-                                <animateTransform attributeName="transform" type="rotate" from="0 872.5 872.5" to="360 872.5 872.5" dur="300s" repeatCount="indefinite"/>
-                            </path>
-                        </mask>
-                    </defs>
-                    <rect x="0" y="-158" width="1745" height="2061" fill="url(#starGradient)" mask="url(#starMask)"/>
-                </svg>
-            </div>
-        </div>
-
     </div>
 
-    <footer class="footer">
-        <a href="/tos">{{.t.footer_tos}}</a>
-        <a href="/privacy">{{.t.footer_privacy}}</a>
-        <a href="/limits">{{.t.footer_limits}}</a>
-        <a href="/data-encryption">{{.t.footer_encryption}}</a>
-        <a href="/help">{{.t.footer_help}}</a>
-    </footer>
+    <div class="main-content">
+        <div class="shared-content-wrapper uploaded-wrapper">
+            <section id="recent-uploads-section" class="uploaded-section" aria-labelledby="uploaded-title">
+                <div class="uploaded-head">
+                    <h1 id="uploaded-title" class="uploaded-title">{{.t.recent_files_title}}</h1>
+                    <p class="uploaded-subtitle">
+                        <span id="recent-count" class="uploaded-count hidden"></span>
+                        <span>{{.t.uploaded_subtitle}}</span>
+                    </p>
+                </div>
+
+                <label class="uploaded-search" for="recent-search-input">
+                    <i data-lucide="search" aria-hidden="true"></i>
+                    <input type="search" id="recent-search-input" placeholder="{{.t.uploaded_search_placeholder}}" autocomplete="off" enterkeyhint="search" aria-label="{{.t.uploaded_search_placeholder}}">
+                </label>
+
+                <div id="recent-device-notice" class="uploaded-notice hidden" role="status">
+                    <i data-lucide="shield-alert" aria-hidden="true"></i>
+                    <div class="uploaded-notice-text">
+                        <p>{{.t.uploaded_device_untrusted}}</p>
+                        <button type="button" id="recent-recover-device" class="uploaded-notice-link">{{.t.device_approval_recover}}</button>
+                    </div>
+                </div>
+
+                <div id="recent-loading" class="uploaded-list" aria-busy="true" aria-label="{{.t.state_loading}}">
+                    <div class="uploaded-card uploaded-skeleton"></div>
+                    <div class="uploaded-card uploaded-skeleton"></div>
+                    <div class="uploaded-card uploaded-skeleton"></div>
+                </div>
+
+                <div id="recent-error" class="uploaded-state hidden">
+                    <div class="uploaded-state-icon"><i data-lucide="cloud-off" aria-hidden="true"></i></div>
+                    <p class="uploaded-state-title">{{.t.state_failed_load}}</p>
+                    <button type="button" id="recent-retry" class="uploaded-state-btn">{{.t.quickshare_retry}}</button>
+                </div>
+
+                <div id="recent-empty" class="uploaded-state hidden">
+                    <div class="uploaded-state-icon"><i data-lucide="inbox" aria-hidden="true"></i></div>
+                    <p class="uploaded-state-title" id="recent-empty-title">{{.t.uploaded_empty_title}}</p>
+                    <p class="uploaded-state-desc" id="recent-empty-desc">{{.t.uploaded_empty_desc}}</p>
+                    <a href="/link" class="uploaded-state-btn" id="recent-empty-cta">{{.t.card_send_btn}}</a>
+                </div>
+
+                <div id="recent-list" class="uploaded-list hidden"></div>
+
+                <button type="button" id="recent-more" class="uploaded-more hidden">{{.t.uploaded_load_more}}</button>
+            </section>
+        </div>
+    </div>
 
     <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
         <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
@@ -336,6 +242,14 @@
             </div>
         </div>
     </div>
+
+    <footer class="footer page-shared-footer">
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
+    </footer>
 
     <script>
         window.CONFIG = {{.configJSON}};
@@ -452,26 +366,38 @@
             };
         })();
 
-        
-        (function(){if(window.innerWidth>768){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}}})();
-        (function(){
-            var card=document.getElementById('quickshare-card');
-            if(!card)return;
-            function toggle(open){
-                card.classList.toggle('expanded',open);
-                card.setAttribute('aria-expanded',open?'true':'false');
+        // Build initials avatar fallback
+        function buildInitialsAvatar(username) {
+            if (!username) return document.createElement('span');
+            var initials = username.trim().split(/\s+/).map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+            // Deterministic color from username - WCAG AA compliant (≥4.5:1 against white)
+            var hash = 0;
+            for (var i = 0; i < username.length; i++) {
+                hash = username.charCodeAt(i) + ((hash << 5) - hash);
             }
-            function onClick(e){
-                if(e.target.closest('.quick-share-actions'))return;
-                if(card.classList.contains('expanded')){toggle(false);return;}
-                e.preventDefault();
-                toggle(true);
-            }
-            card.addEventListener('click',onClick);
-            card.addEventListener('keydown',function(e){
-                if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle(!card.classList.contains('expanded'));}
+            var palette = [
+                '#004AAD', '#006B3F', '#8B0000', '#6B3A00', '#4B0082',
+                '#800040', '#005A7A', '#2E6B2E', '#6B4000', '#4A006B'
+            ];
+            var color = palette[Math.abs(hash) % palette.length];
+            var span = document.createElement('span');
+            span.textContent = initials;
+            span.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:600;color:#fff;background:' + color + ';';
+            return span;
+        }
+
+        // Hydrate initials placeholders on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.account-menu-avatar-placeholder').forEach(function(el) {
+                var username = el.closest('[data-username]')?.dataset.username || '';
+                if (username) {
+                    var avatar = buildInitialsAvatar(username);
+                    el.replaceWith(avatar);
+                }
             });
-        })();
+        });
+
+        (function(){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}})();
     </script>
     <script src="/static/js/crypto.js"></script>
     <script src="/static/js/app.js"></script>
