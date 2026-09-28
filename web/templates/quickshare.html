@@ -161,32 +161,36 @@
         </div>
 
         <div class="create-view" id="createView">
-            <h1>{{.t.quickshare_invite_title}}</h1>
-            <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
+            <div class="qs-main">
+                <h1>{{.t.quickshare_invite_title}}</h1>
+                <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
 
-            <div class="code-squares" id="codeSquares">
-                <div class="code-square" id="code0">–</div>
-                <div class="code-square" id="code1">–</div>
-                <div class="code-square" id="code2">–</div>
-                <div class="code-square" id="code3">–</div>
-            </div>
+                <div class="code-squares" id="codeSquares">
+                    <div class="code-square" id="code0">–</div>
+                    <div class="code-square" id="code1">–</div>
+                    <div class="code-square" id="code2">–</div>
+                    <div class="code-square" id="code3">–</div>
+                </div>
 
-            <h2 class="people-heading">{{.t.quickshare_people}}</h2>
+                <h2 class="people-heading">{{.t.quickshare_people}}</h2>
 
-            <div class="people-row" id="peopleRow">
-                <div class="person">
-                    <div class="person-circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
-                            <circle cx="12" cy="7" r="4"/>
-                        </svg>
+                <div class="people-row" id="peopleRow">
+                    <div class="person is-self" aria-label="{{.t.quickshare_you}}">
+                        <div class="person-circle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <span class="person-name"></span>
                     </div>
-                    <span class="person-name">{{.t.quickshare_you}}</span>
                 </div>
             </div>
 
-            <div class="approval-requests hidden" id="approvalRequests"></div>
+            <aside class="qs-side">
+                <div class="approval-requests hidden" id="approvalRequests"></div>
+            </aside>
         </div>
 
         <div class="bottom-bar" id="bottomBar" style="display:none;">
@@ -238,39 +242,42 @@
         </div>
 
         <div class="queue-view" id="queueView">
-            <h1>{{.t.quickshare_invite_title}}</h1>
-            <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
+            <div class="qs-main">
+                <h1>{{.t.quickshare_invite_title}}</h1>
+                <p class="subtitle">{{.t.quickshare_invite_desc}}</p>
 
-            <div class="code-squares" id="queueCodeSquares">
-                <div class="code-square" id="queueCode0">–</div>
-                <div class="code-square" id="queueCode1">–</div>
-                <div class="code-square" id="queueCode2">–</div>
-                <div class="code-square" id="queueCode3">–</div>
-            </div>
+                <div class="code-squares" id="queueCodeSquares">
+                    <div class="code-square" id="queueCode0">–</div>
+                    <div class="code-square" id="queueCode1">–</div>
+                    <div class="code-square" id="queueCode2">–</div>
+                    <div class="code-square" id="queueCode3">–</div>
+                </div>
 
-            <h2 class="people-heading">{{.t.quickshare_people}}</h2>
+                <h2 class="people-heading">{{.t.quickshare_people}}</h2>
 
-            <div class="people-row" id="queuePeopleRow">
-                <div class="person">
-                    <div class="person-circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
-                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
-                            <circle cx="12" cy="7" r="4"/>
-                        </svg>
+                <div class="people-row" id="queuePeopleRow">
+                    <div class="person is-self" aria-label="{{.t.quickshare_you}}">
+                        <div class="person-circle">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none"
+                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+                                <circle cx="12" cy="7" r="4"/>
+                            </svg>
+                        </div>
+                        <span class="person-name"></span>
                     </div>
-                    <span class="person-name">{{.t.quickshare_you}}</span>
                 </div>
             </div>
 
-            <div class="qs-status hidden" id="approvalStatus" role="status" aria-live="polite">
-                <span class="qs-status-indicator" aria-hidden="true"></span>
-                <div class="qs-status-body">
-                    <p class="qs-status-title" id="qsStatusTitle"></p>
-                    <p class="qs-status-text" id="qsStatusText"></p>
-                    <code class="qs-status-code hidden" id="qsStatusCode"></code>
+            <aside class="qs-side">
+                <div class="qs-status hidden" id="approvalStatus" role="status" aria-live="polite">
+                    <div class="qs-status-body">
+                        <p class="qs-status-title" id="qsStatusTitle"></p>
+                        <p class="qs-status-text" id="qsStatusText"></p>
+                        <code class="qs-status-code hidden" id="qsStatusCode"></code>
+                    </div>
                 </div>
-            </div>
+            </aside>
         </div>
 
         <div class="declined-view" id="declinedView">

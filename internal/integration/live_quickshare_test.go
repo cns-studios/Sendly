@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -95,9 +96,21 @@ func TestLiveDeclinedJoinerDoesNotBlockTheSession(t *testing.T) {
 			t.Fatalf("join status=%d %v", code, out)
 		}
 	}
+	// Signed-in participants are shown by their cached username and avatar.
+	if err := db.UpsertUser(context.Background(), &models.User{
+		CNSUserID: int64(accepted), Username: fmt.Sprintf("accepted-%d", accepted),
+		AvatarURL: sql.NullString{String: "https://example.com/a.png", Valid: true}, Status: "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
 	participants, err := db.GetTunnelParticipants(context.Background(), tunnelID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, p := range participants {
+		if p.CNSUserID.Int64 == int64(accepted) && (p.Username != fmt.Sprintf("accepted-%d", accepted) || p.AvatarURL != "https://example.com/a.png") {
+			t.Fatalf("participant should carry the cached username and avatar: %+v", p)
+		}
 	}
 	for _, p := range participants {
 		action := ""
