@@ -93,7 +93,7 @@ alone (named volumes, namespaced by compose project name), never
 Accounts from before identity keys move onto them the first time a device holding their legacy user key logs in. Once no account still needs that (no rows in `user_key_envelopes` for users without an active identity key, and no `file_key_envelopes` with `dek_wrap_alg = 'AES-GCM-UK-v1'` on live files), remove:
 
 - `internal/handlers/identity_migration.go`, `internal/storage/legacy_user_key.go`, `internal/models/legacy_migration.go` and the `/api/me/identity-migration` routes;
-- `web/static/js/identity-migration.js`, its script tags, the `SendlyIdentityMigration` hooks and the legacy user key helpers in `crypto.js`, and the `.identity-migration-notice` CSS;
+- `web/static/js/identity-migration.js`, its script tags, the `SendlyIdentityMigration` hooks and the legacy user key helpers in `crypto.js`;
 - the `needs_identity_migration` response and `UserHasLegacyUserKey` check in device registration;
 - then add a migration dropping `legacy_identity_escrow`, `user_key_envelopes` and `file_recipient_key_envelopes`.
 

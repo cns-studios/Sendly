@@ -73,6 +73,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
     <script src="/static/js/mobile-menu.js" defer></script>
+    <script src="/static/js/toast.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Preconnect to external resources -->
@@ -126,11 +127,6 @@
         <button id="auth-nudge-close" aria-label="{{.t.auth_nudge_close_label}}" style="background:none;border:none;cursor:pointer;color:#888;padding:2px;display:flex;align-items:center;position:absolute;right:1rem;top:50%;transform:translateY(-50%);">
             <i data-lucide="x" style="width:14px;height:14px;"></i>
         </button>
-    </div>
-
-    <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
-        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
-        <span id="notification-text" class="notification-text"></span>
     </div>
 
     <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>

@@ -108,16 +108,11 @@ const SendlyIdentityMigration = (function () {
     }
 
     function showNotice(text, done = false) {
-        let notice = document.getElementById('identity-migration-notice');
-        if (!notice) {
-            notice = document.createElement('div');
-            notice.id = 'identity-migration-notice';
-            notice.className = 'identity-migration-notice';
-            notice.setAttribute('role', 'status');
-            document.body.appendChild(notice);
-        }
-        notice.textContent = text;
-        if (done) setTimeout(() => notice.remove(), 4000);
+        SendlyToast.show(text, {
+            id: 'identity-migration',
+            type: done ? 'success' : 'info',
+            duration: done ? undefined : 0
+        });
     }
 
     // Re-wraps the account's files from the legacy user key to the identity

@@ -67,7 +67,6 @@
     const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
     const shareUrlNativeBtn = document.getElementById('shareUrlNativeBtn');
     const shareUrlDiscardBtn = document.getElementById('shareUrlDiscardBtn');
-    let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -368,7 +367,7 @@
                 });
                 const payload = await response.json().catch(() => ({}));
                 if (seq !== lookupSeq) return; // a newer keystroke superseded this lookup
-                if (!response.ok) throw new Error(payload.error || t('share_lookup_failed'));
+                if (!response.ok) throw SendlyToast.apiError(payload, t('share_lookup_failed'));
                 recipientMatches = payload.items || [];
 
                 const exactMatch = recipientMatches.find(u => u.username.toLowerCase() === query.toLowerCase());
@@ -408,7 +407,7 @@
                 keyPayload = await keyResponse.json().catch(() => ({}));
                 if (!keyResponse.ok) {
                     if (keyPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
-                    throw new Error(keyPayload.error || t('share_failed'));
+                    throw SendlyToast.apiError(keyPayload, t('share_failed'));
                 }
                 const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
                     new TextEncoder().encode(generatedPassword), keyPayload.public_key_jwk
@@ -436,11 +435,11 @@
                 if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH' && attempt === 0) continue;
                 if (errorPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
                 if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH') throw new Error(t('share_key_changed'));
-                throw new Error(errorPayload.error || t('share_failed'));
+                throw SendlyToast.apiError(errorPayload, t('share_failed'));
             }
         } catch (error) {
             announceRecipientStatus(error.message);
-            showErrorBanner(error.message);
+            SendlyToast.fail(error, t('share_failed'));
         } finally {
             shareInFlight = false;
             shareRecipientSend.classList.remove('is-loading');
@@ -669,14 +668,14 @@
         else if (uploadError) {
             isFinalizing = false; updateFinalizeButtonState();
             stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
-            showErrorBanner(tpl('link_upload_failed', {msg: uploadError}));
+            SendlyToast.fail(uploadError, t('link_upload_failed'));
         } else {
             const poll = setInterval(() => {
                 if (uploadComplete) { clearInterval(poll); finalizeUpload(); }
                 else if (uploadError) {
                     clearInterval(poll); isFinalizing = false; updateFinalizeButtonState();
                     stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
-                    showErrorBanner(tpl('link_upload_failed', {msg: uploadError}));
+                    SendlyToast.fail(uploadError, t('link_upload_failed'));
                 }
             }, 500);
         }
@@ -771,7 +770,7 @@
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
             setDropZoneState('error', error.message);
-            showErrorBanner(tpl('link_upload_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('link_upload_failed'));
         }
     }
 
@@ -785,7 +784,7 @@
                 formData.append('chunk_index', chunkIndex.toString());
                 formData.append('chunk', new Blob([chunkData]));
                 const response = await fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
-                if (!response.ok) { const error = await response.json(); throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`); }
+                if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, `Chunk ${chunkIndex + 1} failed`); }
                 return;
             } catch (error) { lastError = error; }
         }
@@ -798,7 +797,7 @@
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
             body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE })
         });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to initialize'); }
+        if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to initialize'); }
         return response.json();
     }
 
@@ -808,7 +807,7 @@
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
             body: JSON.stringify({ session_id: uploadSessionId, confirmed: true })
         });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to complete'); }
+        if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to complete'); }
         return response.json();
     }
 
@@ -833,14 +832,14 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
                 body: JSON.stringify(finalizePayload)
             });
-            if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to finalize'); }
+            if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to finalize'); }
             const payload = await response.json();
             showSuccess(payload);
         } catch (error) {
             console.error('Finalize failed:', error);
             isFinalizing = false; updateFinalizeButtonState();
             setDropZoneState('error', error.message);
-            showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_finalize_failed'));
         }
     }
 
@@ -971,42 +970,7 @@
     }
 
     function showNotification(message, type) {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     function showShareBanner() {
@@ -1014,7 +978,7 @@
     }
 
     function showToast(message) {
-        showNotification(message, 'info');
+        SendlyToast.success(message);
     }
 
     function resetUpload() {
@@ -1066,10 +1030,9 @@
     }
 
     function showErrorBanner(message) {
-        showNotification(message, 'error');
+        SendlyToast.error(message);
     }
 
-    function hideErrorBanner() {}
 
     async function init() {
         setupTOSGate();

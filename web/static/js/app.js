@@ -35,7 +35,6 @@
     let pendingAutoCopyText = null;
     let pendingAutoCopyBanner = false;
     let pendingAutoCopyBound = false;
-    let notificationTimer = null;
     let finalizeEnvelopePayload = null;
     let ephemeralKeyPair = null;
 
@@ -326,7 +325,7 @@
             if (errorPayload.code === 'ENROLLMENT_CREATE_FAILED') {
                 return null;
             }
-            throw new Error(errorPayload.error || 'Failed to request device approval');
+            throw SendlyToast.apiError(errorPayload, 'Failed to request device approval');
         } catch (error) {
             console.error('Failed to request enrollment:', error);
             return null;
@@ -583,7 +582,7 @@
 
             if (!response.ok) {
                 const errorPayload = await response.json().catch(() => ({}));
-                throw new Error(errorPayload.error || 'Failed to approve device');
+                throw SendlyToast.apiError(errorPayload, 'Failed to approve device');
             }
 
             isDeviceUntrusted = false;
@@ -592,7 +591,7 @@
             await loadRecentUploads();
         } catch (error) {
             console.error('Approve enrollment failed:', error);
-            showErrorBanner(tpl('toast_approval_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_approval_failed'));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -627,13 +626,13 @@
 
             if (!response.ok) {
                 const errorPayload = await response.json().catch(() => ({}));
-                throw new Error(errorPayload.error || 'Failed to decline device');
+                throw SendlyToast.apiError(errorPayload, 'Failed to decline device');
             }
 
             await loadPendingEnrollments();
         } catch (error) {
             console.error('Reject enrollment failed:', error);
-            showErrorBanner(tpl('toast_decline_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_decline_failed'));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -678,7 +677,7 @@
             await loadRecentUploads();
         } catch (error) {
             console.error('Lost-device recovery failed:', error);
-            showErrorBanner(tpl('toast_recovery_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_recovery_failed'));
         } finally {
             pendingEnrollmentBusy = false;
             if (deviceApprovalApprove) deviceApprovalApprove.disabled = false;
@@ -1067,7 +1066,7 @@
             await downloadOwnedFile(fileId, fileName, tunnelId, item);
         } catch (error) {
             console.error('Tunnel download failed:', error);
-            showErrorBanner(error.message || t('toast_tunnel_download_failed'));
+            SendlyToast.fail(error, t('toast_tunnel_download_failed'));
         } finally {
             button.disabled = false;
         }
@@ -1113,7 +1112,7 @@
             try {
                 authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
             } catch (error) {
-                showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
+                SendlyToast.fail(error, t('toast_device_identity_failed'));
                 return;
             }
         }
@@ -1133,7 +1132,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to start tunnel');
+            throw SendlyToast.apiError(error, 'Failed to start tunnel');
         }
 
         const payload = await response.json();
@@ -1158,7 +1157,7 @@
             try {
                 authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
             } catch (error) {
-                showErrorBanner(tpl('toast_device_identity_failed', {msg: error.message}));
+                SendlyToast.fail(error, t('toast_device_identity_failed'));
                 return;
             }
         }
@@ -1183,7 +1182,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to join tunnel');
+            throw SendlyToast.apiError(error, 'Failed to join tunnel');
         }
 
         const payload = await response.json();
@@ -1207,7 +1206,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to confirm tunnel');
+            throw SendlyToast.apiError(error, 'Failed to confirm tunnel');
         }
 
         const payload = await response.json().catch(() => ({}));
@@ -1241,7 +1240,7 @@
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Failed to end tunnel');
+            throw SendlyToast.apiError(error, 'Failed to end tunnel');
         }
 
         clearTunnelState();
@@ -1313,11 +1312,11 @@
             console.error(error);
             if (isLockedFileError(error)) {
                 markRecentFileLocked(fileId, error.message);
-                showErrorBanner(error.message);
+                SendlyToast.error(t('toast_file_locked'));
                 return;
             }
 
-            showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_action_failed'));
         }
     }
 
@@ -1502,7 +1501,7 @@
             });
             if (!response.ok) {
                 const errorPayload = await response.json().catch(() => ({}));
-                throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
+                throw SendlyToast.apiError(errorPayload, 'Unable to access decryption key for this file.');
             }
             const payload = await response.json();
             const dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
@@ -1534,7 +1533,7 @@
         }
         if (!response.ok) {
             const errorPayload = await response.json().catch(() => ({}));
-            throw new Error(errorPayload.error || 'Unable to access decryption key for this file.');
+            throw SendlyToast.apiError(errorPayload, 'Unable to access decryption key for this file.');
         }
 
         const payload = await response.json();
@@ -1682,14 +1681,14 @@
             try {
                 await handleStartTunnel();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_start'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_start'));
             }
         });
         tunnelJoinBtn?.addEventListener('click', async () => {
             try {
                 await handleJoinTunnel();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_join'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_join'));
             }
         });
         tunnelConfirmBtn?.addEventListener('click', async () => {
@@ -1697,14 +1696,14 @@
                 await handleConfirmTunnel();
                 await refreshTunnelState();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_confirm'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_confirm'));
             }
         });
         tunnelEndBtn?.addEventListener('click', async () => {
             try {
                 await handleEndTunnel();
             } catch (error) {
-                showErrorBanner(error.message || t('toast_tunnel_failed_end'));
+                SendlyToast.fail(error, t('toast_tunnel_failed_end'));
             }
         });
     }
@@ -1798,7 +1797,7 @@
             updateFinalizeButtonState();
             stageProcessing.classList.add('hidden');
             stagePending.classList.remove('hidden');
-            showErrorBanner(tpl('toast_upload_failed', {msg: uploadError}));
+            SendlyToast.fail(uploadError, t('toast_upload_failed'));
         } else {
             const poll = setInterval(() => {
                 if (uploadComplete) {
@@ -1812,7 +1811,7 @@
                     stagePending.classList.remove('hidden');
                     statusText.textContent = t('status_ready');
                     statusText.style.color = 'var(--accent)';
-                    showErrorBanner(tpl('toast_upload_failed', {msg: uploadError}));
+                    SendlyToast.fail(uploadError, t('toast_upload_failed'));
                 }
             }, 500);
         }
@@ -1916,7 +1915,7 @@
             stageEntry.classList.remove('hidden');
             statusText.textContent = t('status_ready');
             statusText.style.color = 'var(--accent)';
-            showErrorBanner(tpl('toast_upload_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_upload_failed'));
         }
     }
 
@@ -1975,7 +1974,7 @@
             showPendingUI();
         } catch (error) {
             console.error('Something failed:', error);
-            showErrorBanner(tpl('toast_something_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_something_failed'));
         }
     }
 
@@ -2003,7 +2002,7 @@
 
                 if (!response.ok) {
                     const error = await response.json();
-                    throw new Error(error.error || `Failed to upload chunk ${chunkIndex + 1}`);
+                    throw SendlyToast.apiError(error, `Failed to upload chunk ${chunkIndex + 1}`);
                 }
 
                 return;
@@ -2033,7 +2032,7 @@
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to initialize upload');
+            throw SendlyToast.apiError(error, 'Failed to initialize upload');
         }
 
         return response.json();
@@ -2056,7 +2055,7 @@
 
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'Failed to complete upload');
+            throw SendlyToast.apiError(error, 'Failed to complete upload');
         }
 
         updateProgress(100, t('app_yippe'), t('status_complete'));
@@ -2114,7 +2113,7 @@
 
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Failed to finalize upload');
+                throw SendlyToast.apiError(error, 'Failed to finalize upload');
             }
 
             const payload = await response.json();
@@ -2130,7 +2129,7 @@
             stagePending.classList.remove('hidden');
             statusText.textContent = t('status_ready');
             statusText.style.color = 'var(--accent)';
-            showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_finalize_failed'));
         }
     }
 
@@ -2180,42 +2179,7 @@
     }
 
     function showNotification(message, type = 'error') {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     function showErrorBanner(message) {
@@ -2232,7 +2196,6 @@
         showInfoBanner(message);
     }
 
-    function hideErrorBanner() {}
 
     function updateProgress(percent, sub, main) {
         const boundedPercent = Math.floor(Math.min(100, Math.max(0, percent)));
@@ -2379,7 +2342,7 @@
     }
 
     function showToast(message) {
-        showNotification(message, 'info');
+        SendlyToast.success(message);
     }
 
     function resetUpload() {
