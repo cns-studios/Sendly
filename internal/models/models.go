@@ -101,6 +101,33 @@ type FileAccessKeyEnvelope struct {
 	UpdatedAt           time.Time      `db:"updated_at" json:"updated_at"`
 }
 
+// RewrappedFileKey is a file key a client re-wrapped for the account's active
+// identity key, from an older one (rescue) or the legacy user key (migration).
+type RewrappedFileKey struct {
+	FileID                string `json:"file_id"`
+	IdentityWrappedDEKB64 string `json:"identity_wrapped_dek_b64"`
+	IdentityDEKWrapAlg    string `json:"identity_dek_wrap_alg"`
+}
+
+type LockedFileKeyItem struct {
+	FileID        string `json:"file_id"`
+	WrappedDEKB64 string `json:"wrapped_dek_b64"`
+	DEKWrapAlg    string `json:"dek_wrap_alg"`
+}
+
+type LockedFileKeysResponse struct {
+	Items     []LockedFileKeyItem `json:"items"`
+	Remaining int                 `json:"remaining"`
+}
+
+// RescueFileKeysRequest carries file keys re-wrapped from an older identity
+// key version (FromVersion) for the account's active one.
+type RescueFileKeysRequest struct {
+	FromVersion int                `json:"from_version" binding:"required"`
+	ToVersion   int                `json:"to_version" binding:"required"`
+	Items       []RewrappedFileKey `json:"items" binding:"required"`
+}
+
 type DeviceEnrollment struct {
 	ID                 string         `db:"id" json:"id"`
 	CNSUserID          int64          `db:"cns_user_id" json:"cns_user_id"`

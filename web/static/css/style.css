@@ -5759,3 +5759,21 @@ body.page-transfers .sk-line.medium { width: 45%; }
         }
     }
 }
+
+/* Temporary: progress of moving an account's files onto its identity key
+   (identity-migration.js). */
+.identity-migration-notice {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    z-index: 2000;
+    max-width: calc(100vw - 32px);
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: #1A1A1F;
+    color: #fff;
+    font-family: 'Arimo', sans-serif;
+    font-size: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}

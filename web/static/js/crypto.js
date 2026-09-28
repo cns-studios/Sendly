@@ -417,9 +417,70 @@ const SecureCrypto = (function() {
             payload = await send();
         }
 
+        // Temporary: an account from before identity keys (or one of its
+        // devices without the identity key yet) is moved onto them with its
+        // legacy user key; see identity-migration.js.
+        const migration = window.SendlyIdentityMigration;
+        for (let attempt = 0; migration && attempt < 2 && !payload.identity_key_envelope; attempt++) {
+            if (!await migration.obtainIdentityKey({ userId, identity, payload, headers })) break;
+            payload = await send();
+        }
+
         const identityKey = await identityKeyFromPayload(payload, identity);
-        if (identityKey) saveIdentityKey(userId, identityKey);
+        if (identityKey) {
+            saveIdentityKey(userId, identityKey);
+            migration?.migrateFilesInBackground({ userId, identity, identityKey, headers });
+        }
+        rescueLockedFileKeysInBackground({ userId, payload, headers });
         return { identity, identityKey, payload };
+    }
+
+    // After a recovery, file keys wrapped for an older identity key version
+    // stay locked. If this browser still holds such a version (e.g. it was
+    // offline during the recovery), it re-wraps them for the account's active
+    // public key as the server reports it. Runs once per page load.
+    let rescueRun = null;
+    function rescueLockedFileKeysInBackground({ userId, payload, headers }) {
+        const active = payload?.identity_public_key;
+        const stored = getIdentityKey(userId);
+        if (rescueRun || !active?.public_key_jwk || !stored) return rescueRun;
+        const oldKeys = [stored, ...(stored.retired || [])]
+            .filter((key) => key?.privateKeyJWK && key.keyVersion < active.key_version);
+        if (!oldKeys.length) return null;
+
+        rescueRun = (async () => {
+            for (const oldKey of oldKeys) {
+                let after = '';
+                for (;;) {
+                    const response = await fetch(`/api/me/identity-rescue/locked?version=${oldKey.keyVersion}&after=${encodeURIComponent(after)}`, { headers });
+                    const page = response.ok ? await response.json().catch(() => null) : null;
+                    if (!page?.items?.length) break;
+                    const items = [];
+                    for (const item of page.items) {
+                        try {
+                            const dek = await rsaOaepDecrypt(fromBase64(item.wrapped_dek_b64), oldKey.privateKeyJWK);
+                            items.push({
+                                file_id: item.file_id,
+                                identity_wrapped_dek_b64: toBase64(await wrapFileDEKForIdentity(dek, active.public_key_jwk)),
+                                identity_dek_wrap_alg: 'RSA-OAEP-2048-v1'
+                            });
+                        } catch (_) {
+                            // Not openable with this key; it stays locked.
+                        }
+                    }
+                    if (items.length) {
+                        const saved = await fetch('/api/me/identity-rescue', {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify({ from_version: oldKey.keyVersion, to_version: active.key_version, items })
+                        });
+                        if (!saved.ok) break;
+                    }
+                    after = page.items[page.items.length - 1].file_id;
+                }
+            }
+        })().catch((error) => console.warn('Rescuing locked file keys failed:', error));
+        return rescueRun;
     }
 
     // Two JWKs describe the same RSA key if modulus and exponent match; a
@@ -809,6 +870,7 @@ reject(new Error(t('error_failed_read_file')));
         unwrapWithLegacyUserKey,
         rsaOaepEncrypt,
         rsaOaepDecrypt,
+        isSameRsaKey,
         parseEnvelope,
         unwrapFileDEK,
         wrapFileDEKForIdentity,

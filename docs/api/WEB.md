@@ -463,6 +463,27 @@ Request JSON:
 }
 ```
 
+## Identity Key Rescue
+
+After a recovery, file keys wrapped for an older identity key version are locked. A browser that still holds such a version (typically a device that was revoked by the recovery) re-wraps them for the active version. Any signed-in session may call these; see the trust note in SECURITY.md.
+
+### `GET /api/me/identity-rescue/locked?version=<n>&after=<file_id>`
+The caller's file keys wrapped for identity key `version` (older than the active one), 100 per page ordered by file id: `{ "items": [{ "file_id", "wrapped_dek_b64", "dek_wrap_alg" }], "remaining": n }`.
+
+### `POST /api/me/identity-rescue`
+`{ "from_version": 1, "to_version": 2, "items": [{ "file_id", "identity_wrapped_dek_b64", "identity_dek_wrap_alg" }] }`. Replaces only keys that are still locked to `from_version`, and only when `to_version` is the active version; returns `{ "rescued": n }`.
+
+## Identity Migration (temporary)
+
+Moves accounts from before identity keys (legacy AES user key in `user_key_envelopes`) onto them. All crypto happens in the browser (`identity-migration.js`). Removed once every account is migrated.
+
+- `GET /api/me/identity-migration/legacy-key?device_id=` — this device's copy of the legacy user key (`404 LEGACY_USER_KEY_NOT_FOUND` if it has none).
+- `POST /api/me/identity-migration/start` — from a device holding the legacy user key, for an account without an identity key: creates identity key version 1 with the device's self-wrapped copy and the escrow (the identity private key encrypted with the user key). `409 IDENTITY_KEY_EXISTS` if another device was first.
+- `GET /api/me/identity-migration/escrow?device_id=` — the escrow, to a device holding the legacy user key, if it is for the active identity key.
+- `POST /api/me/identity-migration/adopt` — a legacy device stores its own copy of the identity key, decrypted from the escrow; no approval needed.
+- `GET /api/me/identity-migration/files?device_id=&after=` — trusted device only: the caller's uploads whose key is still only wrapped with the legacy user key.
+- `POST /api/me/identity-migration/files` — trusted device only: their keys re-wrapped for the active identity key; files that already have one are left alone.
+
 ## Notes
 
 - `/api` endpoints assume browser session context and CSRF controls.
