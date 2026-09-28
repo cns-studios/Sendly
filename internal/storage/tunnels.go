@@ -1,12 +1,12 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -129,151 +129,328 @@ func (p *Postgres) GetTunnelFileIDs(ctx context.Context, tunnelID string) ([]str
 	return fileIDs, err
 }
 
-func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, userID int64, deviceID string) (*models.Tunnel, error) {
+// JoinTunnel adds the caller as a participant. A device ID that already has a
+// participant row may only be re-joined by that row's owner (same CNS user, or
+// an anonymous caller presenting the row's participant token); anyone else
+// gets ErrParticipantConflict, so a joiner can never replace another
+// participant's public key. It reports whether join.NewTokenHash was stored,
+// i.e. whether a new anonymous participant was created.
+func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, join models.TunnelJoin) (*models.Tunnel, bool, error) {
+	userID, deviceID := join.UserID, strings.TrimSpace(join.DeviceID)
+	if userID == 0 && deviceID == "" {
+		return nil, false, models.ErrGuestDeviceRequired
+	}
+
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	var tunnel models.Tunnel
 	if err := tx.GetContext(ctx, &tunnel, `SELECT * FROM tunnels WHERE id = $1 FOR UPDATE`, tunnelID); err != nil {
 		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, models.ErrFileNotFound
+			return nil, false, models.ErrFileNotFound
 		}
-		return nil, err
+		return nil, false, err
 	}
 
 	if time.Now().After(tunnel.ExpiresAt) || strings.EqualFold(tunnel.Status, models.TunnelStatusEnded) || strings.EqualFold(tunnel.Status, models.TunnelStatusExpired) {
 		_ = tx.Rollback()
-		return nil, models.ErrFileExpired
+		return nil, false, models.ErrFileExpired
 	}
 
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id)
-		VALUES ($1, $2, $3)
-		ON CONFLICT DO NOTHING
-	`, tunnelID, nullableInt64(userID), nullableString(deviceID))
-	if err != nil {
+	var rejected bool
+	if err := tx.GetContext(ctx, &rejected, `
+		SELECT EXISTS (
+			SELECT 1 FROM tunnel_rejections
+			WHERE tunnel_id = $1
+			  AND (($2 <> 0 AND cns_user_id = $2) OR ($3 <> '' AND device_id = $3))
+		)
+	`, tunnelID, userID, deviceID); err != nil {
 		_ = tx.Rollback()
-		return nil, err
+		return nil, false, err
+	}
+	if rejected {
+		_ = tx.Rollback()
+		return nil, false, models.ErrParticipantRejected
 	}
 
-	if !tunnel.PeerCNSUserID.Valid && userID != 0 {
-		_, err = tx.ExecContext(ctx, `
-			UPDATE tunnels
-			SET peer_cns_user_id = $1,
-				peer_device_id = $2,
-				peer_confirmed = TRUE,
-				status = CASE WHEN initiator_confirmed THEN $3 ELSE $4 END,
-				confirmed_at = CASE WHEN initiator_confirmed THEN NOW() ELSE confirmed_at END
-			WHERE id = $5
-		`, userID, nullableString(deviceID), models.TunnelStatusActive, models.TunnelStatusJoined, tunnelID)
-		if err != nil {
+	var existing models.TunnelParticipant
+	var found bool
+	if deviceID != "" {
+		err = tx.GetContext(ctx, &existing, `
+			SELECT id, tunnel_id, cns_user_id, device_id, joined_at,
+				COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+				key_algorithm, key_version, participant_token_hash, approved_at
+			FROM tunnel_participants
+			WHERE tunnel_id = $1 AND device_id::text = $2
+			FOR UPDATE
+		`, tunnelID, deviceID)
+	} else {
+		err = tx.GetContext(ctx, &existing, `
+			SELECT id, tunnel_id, cns_user_id, device_id, joined_at,
+				COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+				key_algorithm, key_version, participant_token_hash, approved_at
+			FROM tunnel_participants
+			WHERE tunnel_id = $1 AND cns_user_id = $2 AND device_id IS NULL
+			FOR UPDATE
+		`, tunnelID, userID)
+	}
+	switch {
+	case err == nil:
+		found = true
+	case errors.Is(err, sql.ErrNoRows):
+	default:
+		_ = tx.Rollback()
+		return nil, false, err
+	}
+
+	issued := false
+	if found {
+		if !participantOwnedBy(existing, userID, join.PresentedTokenHash) {
 			_ = tx.Rollback()
-			return nil, err
+			return nil, false, models.ErrParticipantConflict
 		}
-	} else if !tunnel.PeerCNSUserID.Valid && userID == 0 && deviceID != "" {
-		_, err = tx.ExecContext(ctx, `
-			UPDATE tunnels
-			SET peer_device_id = $1,
-				peer_confirmed = TRUE,
-				status = CASE WHEN initiator_confirmed THEN $2 ELSE $3 END,
-				confirmed_at = CASE WHEN initiator_confirmed THEN NOW() ELSE confirmed_at END
+	} else {
+		var tokenHash sql.NullString
+		if userID == 0 {
+			tokenHash = nullableString(join.NewTokenHash)
+			issued = tokenHash.Valid
+		}
+		if err := tx.GetContext(ctx, &existing.ID, `
+			INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id, participant_token_hash)
+			VALUES ($1, $2, $3, $4)
+			RETURNING id
+		`, tunnelID, nullableInt64(userID), nullableString(deviceID), tokenHash); err != nil {
+			_ = tx.Rollback()
+			return nil, false, err
+		}
+	}
+
+	if len(join.PublicKeyJWK) > 0 && deviceID != "" && !bytes.Equal(existing.PublicKeyJWK, join.PublicKeyJWK) {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE tunnel_participants
+			SET public_key_jwk = $1, key_algorithm = $2, key_version = $3
 			WHERE id = $4
-		`, nullableString(deviceID), models.TunnelStatusActive, models.TunnelStatusJoined, tunnelID)
-		if err != nil {
+		`, join.PublicKeyJWK, join.KeyAlgorithm, join.KeyVersion, existing.ID); err != nil {
 			_ = tx.Rollback()
-			return nil, err
+			return nil, false, err
 		}
+		// An envelope wrapped for the previous key is useless now; drop it so
+		// the host wraps the session key for the new one.
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM tunnel_participant_envelopes
+			WHERE tunnel_id = $1 AND participant_device_id = $2
+		`, tunnelID, deviceID); err != nil {
+			_ = tx.Rollback()
+			return nil, false, err
+		}
+	}
+
+	// A pending session shows as joined once someone is in; the host's Start
+	// (ConfirmTunnel) makes it active.
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE tunnels SET status = $2 WHERE id = $1 AND status = $3
+	`, tunnelID, models.TunnelStatusJoined, models.TunnelStatusPending); err != nil {
+		_ = tx.Rollback()
+		return nil, false, err
 	}
 
 	if err := tx.GetContext(ctx, &tunnel, `SELECT * FROM tunnels WHERE id = $1`, tunnelID); err != nil {
 		_ = tx.Rollback()
-		return nil, err
+		return nil, false, err
 	}
 
-	return &tunnel, tx.Commit()
+	return &tunnel, issued, tx.Commit()
 }
 
+// participantOwnedBy reports whether the caller owns a participant row: a
+// signed-in caller by CNS user, an anonymous caller by the participant token.
+func participantOwnedBy(participant models.TunnelParticipant, userID int64, presentedTokenHash string) bool {
+	if userID != 0 {
+		return participant.CNSUserID.Valid && participant.CNSUserID.Int64 == userID
+	}
+	return !participant.CNSUserID.Valid && participant.TokenHash.Valid && presentedTokenHash != "" &&
+		subtle.ConstantTimeCompare([]byte(participant.TokenHash.String), []byte(presentedTokenHash)) == 1
+}
+
+// FindTunnelParticipant returns the participant row owned by the caller, or
+// nil: for a signed-in caller the row with their CNS user (preferring the
+// given device), for an anonymous caller the row for deviceID whose token
+// matches presentedTokenHash.
+func (p *Postgres) FindTunnelParticipant(ctx context.Context, tunnelID string, userID int64, deviceID, presentedTokenHash string) (*models.TunnelParticipant, error) {
+	var participants []models.TunnelParticipant
+	var err error
+	const columns = `id, tunnel_id, cns_user_id, device_id, joined_at,
+		COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+		key_algorithm, key_version, participant_token_hash, approved_at`
+	if userID != 0 {
+		err = p.db.SelectContext(ctx, &participants, `
+			SELECT `+columns+`
+			FROM tunnel_participants
+			WHERE tunnel_id = $1 AND cns_user_id = $2
+			ORDER BY (device_id::text = $3) DESC NULLS LAST, joined_at ASC
+		`, tunnelID, userID, strings.TrimSpace(deviceID))
+	} else {
+		if strings.TrimSpace(deviceID) == "" || presentedTokenHash == "" {
+			return nil, nil
+		}
+		err = p.db.SelectContext(ctx, &participants, `
+			SELECT `+columns+`
+			FROM tunnel_participants
+			WHERE tunnel_id = $1 AND device_id::text = $2 AND cns_user_id IS NULL
+		`, tunnelID, strings.TrimSpace(deviceID))
+	}
+	if err != nil {
+		return nil, err
+	}
+	markApproved(participants)
+	for i := range participants {
+		if participantOwnedBy(participants[i], userID, presentedTokenHash) {
+			return &participants[i], nil
+		}
+	}
+	return nil, nil
+}
+
+func markApproved(participants []models.TunnelParticipant) {
+	for i := range participants {
+		participants[i].Approved = participants[i].ApprovedAt.Valid
+	}
+}
+
+// GetTunnelParticipantByDevice returns the participant row for a device, or
+// nil if there is none.
+func (p *Postgres) GetTunnelParticipantByDevice(ctx context.Context, tunnelID, deviceID string) (*models.TunnelParticipant, error) {
+	var participant models.TunnelParticipant
+	err := p.db.GetContext(ctx, &participant, `
+		SELECT id, tunnel_id, cns_user_id, device_id, joined_at,
+			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			key_algorithm, key_version, participant_token_hash, approved_at
+		FROM tunnel_participants
+		WHERE tunnel_id = $1 AND device_id::text = $2
+		ORDER BY joined_at ASC
+		LIMIT 1
+	`, tunnelID, strings.TrimSpace(deviceID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	participant.Approved = participant.ApprovedAt.Valid
+	return &participant, nil
+}
+
+// ApproveTunnelParticipant marks a participant approved by the host.
+func (p *Postgres) ApproveTunnelParticipant(ctx context.Context, tunnelID, participantID string) error {
+	res, err := p.db.ExecContext(ctx, `
+		UPDATE tunnel_participants
+		SET approved_at = COALESCE(approved_at, NOW())
+		WHERE tunnel_id = $1 AND id::text = $2
+	`, tunnelID, participantID)
+	if err != nil {
+		return err
+	}
+	if rows, err := res.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return models.ErrFileNotFound
+	}
+	return nil
+}
+
+// RejectTunnelParticipant removes a participant and its key envelope and
+// keeps it from joining the tunnel again. It returns the removed row.
+func (p *Postgres) RejectTunnelParticipant(ctx context.Context, tunnelID, participantID string) (*models.TunnelParticipant, error) {
+	tx, err := p.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var participant models.TunnelParticipant
+	err = tx.GetContext(ctx, &participant, `
+		DELETE FROM tunnel_participants
+		WHERE tunnel_id = $1 AND id::text = $2
+		RETURNING id, tunnel_id, cns_user_id, device_id, joined_at,
+			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			key_algorithm, key_version, participant_token_hash, approved_at
+	`, tunnelID, participantID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, models.ErrFileNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if participant.DeviceID.Valid {
+		if _, err := tx.ExecContext(ctx, `
+			DELETE FROM tunnel_participant_envelopes
+			WHERE tunnel_id = $1 AND participant_device_id = $2
+		`, tunnelID, participant.DeviceID.String); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO tunnel_rejections (tunnel_id, cns_user_id, device_id) VALUES ($1, $2, $3)
+	`, tunnelID, participant.CNSUserID, participant.DeviceID); err != nil {
+		return nil, err
+	}
+	return &participant, tx.Commit()
+}
+
+// ConfirmTunnel starts a session: when the host confirms, the tunnel becomes
+// active for every participant the host approved. Only the host can start it.
 func (p *Postgres) ConfirmTunnel(ctx context.Context, tunnelID string, userID int64, deviceID string) (*models.Tunnel, error) {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
+	defer tx.Rollback()
 
 	var tunnel models.Tunnel
 	if err := tx.GetContext(ctx, &tunnel, `SELECT * FROM tunnels WHERE id = $1 FOR UPDATE`, tunnelID); err != nil {
-		_ = tx.Rollback()
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, models.ErrFileNotFound
 		}
 		return nil, err
 	}
-
 	if time.Now().After(tunnel.ExpiresAt) || strings.EqualFold(tunnel.Status, models.TunnelStatusEnded) || strings.EqualFold(tunnel.Status, models.TunnelStatusExpired) {
-		_ = tx.Rollback()
 		return nil, models.ErrFileExpired
 	}
-
-	isInitiatorActor := tunnel.InitiatorCNSUserID == userID || (userID == 0 && tunnel.InitiatorDeviceID.Valid && tunnel.InitiatorDeviceID.String == deviceID)
-	isPeerActor := (tunnel.PeerCNSUserID.Valid && tunnel.PeerCNSUserID.Int64 == userID) || (userID == 0 && tunnel.PeerDeviceID.Valid && tunnel.PeerDeviceID.String == deviceID)
-	setInitiator := isInitiatorActor && !tunnel.InitiatorConfirmed
-	setPeer := isPeerActor && !tunnel.PeerConfirmed
-	if !isInitiatorActor && !isPeerActor {
-		_ = tx.Rollback()
+	isHost := (userID != 0 && tunnel.InitiatorCNSUserID == userID) ||
+		(userID == 0 && tunnel.InitiatorCNSUserID == 0 && tunnel.InitiatorDeviceID.Valid && tunnel.InitiatorDeviceID.String == deviceID)
+	if !isHost {
 		return nil, models.ErrFileNotFound
 	}
-
-	if !setInitiator && !setPeer {
-		return &tunnel, tx.Commit()
-	}
-
-	updates := []string{}
-	args := []any{}
-	idx := 1
-	if setInitiator {
-		updates = append(updates, fmt.Sprintf("initiator_confirmed = $%d", idx))
-		args = append(args, true)
-		idx++
-	}
-	if setPeer {
-		updates = append(updates, fmt.Sprintf("peer_confirmed = $%d", idx))
-		args = append(args, true)
-		idx++
-	}
-	if tunnel.InitiatorConfirmed || setInitiator {
-		if tunnel.PeerConfirmed || setPeer {
-			updates = append(updates, fmt.Sprintf("status = $%d", idx))
-			args = append(args, models.TunnelStatusActive)
-			idx++
-			updates = append(updates, fmt.Sprintf("confirmed_at = NOW()"))
-		} else {
-			updates = append(updates, fmt.Sprintf("status = $%d", idx))
-			args = append(args, models.TunnelStatusJoined)
-			idx++
+	if !tunnel.InitiatorConfirmed || tunnel.Status != models.TunnelStatusActive {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE tunnels SET initiator_confirmed = TRUE, status = $2, confirmed_at = COALESCE(confirmed_at, NOW())
+			WHERE id = $1
+		`, tunnelID, models.TunnelStatusActive); err != nil {
+			return nil, err
 		}
-	} else if setPeer {
-		updates = append(updates, fmt.Sprintf("status = $%d", idx))
-		args = append(args, models.TunnelStatusJoined)
-		idx++
+		if err := tx.GetContext(ctx, &tunnel, `SELECT * FROM tunnels WHERE id = $1`, tunnelID); err != nil {
+			return nil, err
+		}
 	}
-
-	query := fmt.Sprintf(`UPDATE tunnels SET %s WHERE id = $%d`, strings.Join(updates, ", "), idx)
-	args = append(args, tunnelID)
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-
-	if err := tx.GetContext(ctx, &tunnel, `SELECT * FROM tunnels WHERE id = $1`, tunnelID); err != nil {
-		_ = tx.Rollback()
-		return nil, err
-	}
-
 	return &tunnel, tx.Commit()
 }
 
+// IsRejectedFromTunnel reports whether the host declined this user (signed
+// in) or device (guest) in the tunnel.
+func (p *Postgres) IsRejectedFromTunnel(ctx context.Context, tunnelID string, userID int64, deviceID string) (bool, error) {
+	var rejected bool
+	err := p.db.GetContext(ctx, &rejected, `
+		SELECT EXISTS (
+			SELECT 1 FROM tunnel_rejections
+			WHERE tunnel_id = $1
+			  AND (($2 <> 0 AND cns_user_id = $2) OR ($3 <> '' AND device_id = $3))
+		)
+	`, tunnelID, userID, strings.TrimSpace(deviceID))
+	return rejected, err
+}
 func (p *Postgres) EndTunnel(ctx context.Context, tunnelID string, userID int64, deviceID string) error {
 	query := `
 		UPDATE tunnels
@@ -303,21 +480,6 @@ func (p *Postgres) DeleteTunnel(ctx context.Context, tunnelID string) error {
 	return err
 }
 
-func (p *Postgres) TunnelBelongsToUser(ctx context.Context, tunnelID string, userID int64) (bool, error) {
-	var count int
-	query := `
-		SELECT COUNT(*)
-		FROM tunnels
-		WHERE id = $1
-		  AND (
-			initiator_cns_user_id = $2
-			OR peer_cns_user_id = $2
-		  )
-	`
-	err := p.db.GetContext(ctx, &count, query, tunnelID, userID)
-	return count > 0, err
-}
-
 func (p *Postgres) TunnelCodeExists(ctx context.Context, code string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM tunnels WHERE code = $1`
@@ -325,10 +487,12 @@ func (p *Postgres) TunnelCodeExists(ctx context.Context, code string) (bool, err
 	return count > 0, err
 }
 
+// AddTunnelParticipant adds the host's own participant row, which is approved
+// from the start.
 func (p *Postgres) AddTunnelParticipant(ctx context.Context, tunnelID string, userID int64, deviceID string) error {
 	_, err := p.db.ExecContext(ctx, `
-		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id)
-		VALUES ($1, $2, $3)
+		INSERT INTO tunnel_participants (tunnel_id, cns_user_id, device_id, approved_at)
+		VALUES ($1, $2, $3, NOW())
 		ON CONFLICT DO NOTHING
 	`, tunnelID, nullableInt64(userID), nullableString(deviceID))
 	return err
@@ -338,22 +502,27 @@ func (p *Postgres) GetTunnelParticipants(ctx context.Context, tunnelID string) (
 	var participants []models.TunnelParticipant
 	query := `
 		SELECT
-			id,
-			tunnel_id,
-			cns_user_id,
-			device_id,
-			joined_at,
-			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
-			COALESCE(key_algorithm, '') AS key_algorithm,
-			COALESCE(key_version, 0) AS key_version
-		FROM tunnel_participants
-		WHERE tunnel_id = $1
-		ORDER BY joined_at ASC
+			tp.id,
+			tp.tunnel_id,
+			tp.cns_user_id,
+			tp.device_id,
+			tp.joined_at,
+			COALESCE(tp.public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			COALESCE(tp.key_algorithm, '') AS key_algorithm,
+			COALESCE(tp.key_version, 0) AS key_version,
+			tp.approved_at,
+			COALESCE(u.username, '') AS username,
+			COALESCE(u.avatar_url, '') AS avatar_url
+		FROM tunnel_participants tp
+		LEFT JOIN users u ON u.cns_user_id = tp.cns_user_id
+		WHERE tp.tunnel_id = $1
+		ORDER BY tp.joined_at ASC
 	`
 	err := p.db.SelectContext(ctx, &participants, query, tunnelID)
 	if err != nil {
 		return participants, err
 	}
+	markApproved(participants)
 	return participants, nil
 }
 
@@ -391,20 +560,6 @@ func nullableString(value string) sql.NullString {
 
 
 
-func (p *Postgres) SaveParticipantPublicKey(ctx context.Context, tunnelID, deviceID string, publicKeyJWK json.RawMessage, keyAlgorithm string, keyVersion int) error {
-	_, err := p.db.ExecContext(ctx, `
-		UPDATE tunnel_participants
-		SET    public_key_jwk = $1,
-		       key_algorithm  = $2,
-		       key_version    = $3
-		WHERE  tunnel_id = $4
-		  AND  device_id = $5
-	`, publicKeyJWK, keyAlgorithm, keyVersion, tunnelID, deviceID)
-	return err
-}
-
-
-
 func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID string) ([]models.TunnelParticipant, error) {
 	var participants []models.TunnelParticipant
 	err := p.db.SelectContext(ctx, &participants, `
@@ -413,25 +568,30 @@ func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID s
 		  AND  public_key_jwk IS NOT NULL
 		ORDER BY joined_at ASC
 	`, tunnelID)
+	markApproved(participants)
 	return participants, err
 }
 
 
 
 func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, participantDeviceID string, wrappedDEK, nonce []byte, wrapAlg string, wrapVersion int) error {
-	_, err := p.db.ExecContext(ctx, `
+	res, err := p.db.ExecContext(ctx, `
 		INSERT INTO tunnel_participant_envelopes
 			(tunnel_id, participant_device_id, wrapped_dek, dek_wrap_alg, dek_wrap_nonce, dek_wrap_version)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (tunnel_id, participant_device_id)
-		DO UPDATE SET
-			wrapped_dek      = EXCLUDED.wrapped_dek,
-			dek_wrap_alg     = EXCLUDED.dek_wrap_alg,
-			dek_wrap_nonce   = EXCLUDED.dek_wrap_nonce,
-			dek_wrap_version = EXCLUDED.dek_wrap_version,
-			created_at       = NOW()
+		ON CONFLICT (tunnel_id, participant_device_id) DO NOTHING
 	`, tunnelID, participantDeviceID, wrappedDEK, wrapAlg, nonce, wrapVersion)
-	return err
+	if err != nil {
+		return err
+	}
+	// An existing envelope is never replaced: whoever could overwrite it
+	// could hand the participant a key of their own choosing.
+	if rows, err := res.RowsAffected(); err != nil {
+		return err
+	} else if rows == 0 {
+		return models.ErrEnvelopeExists
+	}
+	return nil
 }
 
 

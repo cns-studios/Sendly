@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -27,8 +28,16 @@ type Config struct {
 
 	DataDir  string
 	ChunkDir string
+	// AdoptDataDir lets the server claim storage that already holds data
+	// but has no instance marker. A one-time switch for existing
+	// deployments; see storage.ClaimStorage.
+	AdoptDataDir bool
 
 	BehindCloudflare bool
+	// TrustedProxies lists the proxy IPs/CIDRs whose forwarding headers
+	// (X-Forwarded-For, CF-Connecting-IP) are believed. Requests from any
+	// other peer are attributed to their direct remote address.
+	TrustedProxies []string
 
 	MaxFileSize           int64
 	AutoDeleteReportCount int
@@ -43,8 +52,19 @@ type Config struct {
 	CNSAuthClientID        string
 	CNSAuthDesktopClientID string
 	CNSAuthServiceKey      string
-	AuthMaxFileSize        int64
-	MigrationsDir          string
+	// CNSServiceAPIURL is CNS's service-to-service API gateway
+	// (GET /api/service/me, /api/data/{service}/*) — a different host from
+	// CNSAuthURL, which is the user-facing accounts surface (/api/me,
+	// /api/account/me, /api/auth/token/refresh) used for cookie-based
+	// browser auth.
+	CNSServiceAPIURL string
+	CNSServiceSlug   string
+	AuthMaxFileSize  int64
+	MigrationsDir    string
+
+	UserCacheTTL               time.Duration
+	UserCacheReconcileInterval time.Duration
+	UserCacheStaleAfter        time.Duration
 
 	RateLimitMaxPerMinute          int64
 	RateLimitWindowSeconds         int64
@@ -61,7 +81,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                           getEnv("PORT", "8085"),
 		BaseURL:                        getEnv("BASE_URL", "http://localhost:8085"),
-		TOSVersion:                     getEnv("TOS_VERSION", "2026-04-05"),
+		TOSVersion:                     getEnv("TOS_VERSION", "2026-09-25"),
 		PostgresHost:                   getEnv("POSTGRES_HOST", "localhost"),
 		PostgresPort:                   getEnv("POSTGRES_PORT", "5432"),
 		PostgresUser:                   getEnv("POSTGRES_USER", "sendly"),
@@ -71,7 +91,9 @@ func Load() (*Config, error) {
 		RedisPort:                      getEnv("REDIS_PORT", "6379"),
 		DataDir:                        getEnv("DATA_DIR", "./data"),
 		ChunkDir:                       getEnv("CHUNK_DIR", ""),
+		AdoptDataDir:                   getEnvBool("SENDLY_ADOPT_DATA_DIR", false),
 		BehindCloudflare:               getEnvBool("BEHIND_CLOUDFLARE", false),
+		TrustedProxies:                 getEnvList("TRUSTED_PROXIES"),
 		MaxFileSize:                    getEnvInt64("MAX_FILE_SIZE", 786432000),
 		AutoDeleteReportCount:          getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
 		DiscordWebhookURL:              getEnv("DISCORD_WEBHOOK_URL", ""),
@@ -82,14 +104,23 @@ func Load() (*Config, error) {
 		CNSAuthClientID:                getEnv("CNS_AUTH_CLIENT_ID", ""),
 		CNSAuthDesktopClientID:         getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),
 		CNSAuthServiceKey:              getEnv("CNS_AUTH_SERVICE_KEY", ""),
+		CNSServiceAPIURL:               getEnv("CNS_SERVICE_API_URL", ""),
+		CNSServiceSlug:                 getEnv("CNS_SERVICE_SLUG", "sendly"),
 		AuthMaxFileSize:                getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
 		MigrationsDir:                  getEnv("MIGRATIONS_DIR", "db/migrations"),
+		UserCacheTTL:                   time.Duration(getEnvInt("USER_CACHE_TTL_HOURS", 24)) * time.Hour,
+		UserCacheReconcileInterval:     time.Duration(getEnvInt("USER_CACHE_RECONCILE_INTERVAL_MINUTES", 60)) * time.Minute,
+		UserCacheStaleAfter:            time.Duration(getEnvInt("USER_CACHE_STALE_AFTER_DAYS", 30)) * 24 * time.Hour,
 		RateLimitMaxPerMinute:          getEnvInt64("RATE_LIMIT_MAX_PER_MINUTE", 30),
 		RateLimitWindowSeconds:         getEnvInt64("RATE_LIMIT_WINDOW_SECONDS", 60),
 		StrictRateLimitMaxPerMinute:    getEnvInt64("RATE_LIMIT_STRICT_MAX_PER_MINUTE", 15),
 		StrictRateLimitWindowSeconds:   getEnvInt64("RATE_LIMIT_STRICT_WINDOW_SECONDS", 60),
 		DownloadRateLimitMaxPerMinute:  getEnvInt64("RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE", 60),
 		DownloadRateLimitWindowSeconds: getEnvInt64("RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", 60),
+	}
+
+	if cfg.BehindCloudflare && len(cfg.TrustedProxies) == 0 {
+		cfg.TrustedProxies = append([]string(nil), cloudflareIPRanges...)
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -112,7 +143,28 @@ func (c *Config) validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("DATA_DIR is required")
 	}
+	for _, proxy := range c.TrustedProxies {
+		if _, _, err := net.ParseCIDR(proxy); err == nil {
+			continue
+		}
+		if net.ParseIP(proxy) == nil {
+			return fmt.Errorf("TRUSTED_PROXIES entry %q is not an IP or CIDR", proxy)
+		}
+	}
 	return nil
+}
+
+// cloudflareIPRanges are Cloudflare's published edge ranges
+// (https://www.cloudflare.com/ips/). They are the default trusted proxies
+// when BEHIND_CLOUDFLARE is set and TRUSTED_PROXIES is empty, i.e. when
+// Cloudflare connects to this server directly.
+var cloudflareIPRanges = []string{
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
+	"141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+	"197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+	"104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32",
+	"2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
 }
 
 func (c *Config) PostgresDSN() string {
@@ -155,6 +207,16 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+func getEnvList(key string) []string {
+	var items []string
+	for _, item := range strings.Split(os.Getenv(key), ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
 }
 
 func getEnvBool(key string, defaultValue bool) bool {

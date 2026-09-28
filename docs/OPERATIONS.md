@@ -26,21 +26,23 @@ On startup, server performs:
 3. Migration run
 4. Redis connect
 5. Filesystem storage init
-6. Cleanup background service start
-7. Upload pending-cleanup background service start
-8. HTTP server listen
+6. Storage claim (instance marker check, see below)
+7. Cleanup background service start
+8. Upload pending-cleanup background service start
+9. HTTP server listen
 
 ## Health and Runtime Checks
 
-- Health endpoint: `GET /health`
+- `GET /health` probes PostgreSQL (ping), Redis (ping) and storage (durable
+  write into `DATA_DIR` and `CHUNK_DIR`, plus the instance marker) with a 2s
+  timeout each. It answers 200 `{"status":"healthy","checks":{...}}`, or 503
+  `{"status":"unhealthy",...}` with the failing check marked `error`. Error
+  details go to the log (`Health check "redis" failed: ...`), never to the
+  response. Results are cached for 5s. The Docker `HEALTHCHECK` uses it.
+- `GET /livez` only reports that the process answers requests.
 - Logs include component startup milestones.
 
-Recommended checks:
-
-- DB connectivity
-- Redis connectivity
-- Filesystem write permissions on data/chunk paths
-- Migration state consistency
+Not covered by `/health`: migration state consistency.
 
 ## Cleanup Behavior
 
@@ -53,11 +55,47 @@ Cleanup service runs every 5 minutes and:
 
 Upload service cleanup runs every minute for pending/session artifacts.
 
+## Storage Ownership
+
+Orphan cleanup deletes every blob that its database doesn't know about and
+every chunk session that its Redis doesn't know about. Two instances sharing
+storage (for example staging started with the prod compose override, which
+bind-mounts `/mnt/shareit`) therefore delete each other's files within
+minutes.
+
+To prevent this, each database holds a random ID (`instance_meta`), and the
+server writes it to a `.sendly-instance` marker in `DATA_DIR` and in
+`CHUNK_DIR` when that lies outside `DATA_DIR`. On startup:
+
+- Marker matches this database: start normally.
+- No marker, directory holds no data: claim it and start.
+- No marker, directory holds data: refuse to start. If the storage really
+  belongs to this database (an existing deployment), start once with
+  `SENDLY_ADOPT_DATA_DIR=true`, then unset it.
+- Marker from another database: refuse to start. Give the instance its own
+  storage. `SENDLY_ADOPT_DATA_DIR` does not override this; only deleting the
+  marker by hand does.
+
+The admin CLI only verifies the marker and never claims storage.
+
+Staging and other non-prod stacks should use the base `docker-compose.yaml`
+alone (named volumes, namespaced by compose project name), never
+`docker-compose.prod.yaml`.
+
 ## Migration Operations
 
 - Migrations auto-run at startup.
 - Use `MIGRATIONS_DIR` to control migration source path.
 - Avoid editing already-applied migration files (checksum mismatch risk).
+
+### Removing the identity migration
+
+Accounts from before identity keys move onto them the first time a device holding their legacy user key logs in. Once no account still needs that (no rows in `user_key_envelopes` for users without an active identity key, and no `file_key_envelopes` with `dek_wrap_alg = 'AES-GCM-UK-v1'` on live files), remove:
+
+- `internal/handlers/identity_migration.go`, `internal/storage/legacy_user_key.go`, `internal/models/legacy_migration.go` and the `/api/me/identity-migration` routes;
+- `web/static/js/identity-migration.js`, its script tags, the `SendlyIdentityMigration` hooks and the legacy user key helpers in `crypto.js`;
+- the `needs_identity_migration` response and `UserHasLegacyUserKey` check in device registration;
+- then add a migration dropping `legacy_identity_escrow`, `user_key_envelopes` and `file_recipient_key_envelopes`.
 
 ## Rate-Limit Tuning Procedure
 

@@ -54,6 +54,19 @@ func main() {
 	}
 	log.Println("Filesystem storage initialized")
 
+	// Claim storage before any cleanup runs: cleanup deletes whatever this
+	// database doesn't know, so it must never run against another
+	// instance's files.
+	instanceCtx, instanceCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	instanceID, err := db.GetInstanceID(instanceCtx)
+	instanceCancel()
+	if err != nil {
+		log.Fatalf("Failed to read instance ID: %v", err)
+	}
+	if err := fs.ClaimStorage(instanceID, cfg.AdoptDataDir); err != nil {
+		log.Fatalf("Refusing to start: %v", err)
+	}
+
 	discord := services.NewDiscord(cfg)
 
 	cleanup := services.NewCleanup(cfg, db, rdb, fs)
@@ -71,6 +84,12 @@ func main() {
 	defer uploadService.Stop()
 	log.Println("Upload service started")
 
+	cnsClient := services.NewCNSClient(cfg)
+	userCache := services.NewUserCache(cfg, db, cnsClient)
+	userCache.Start()
+	defer userCache.Stop()
+	log.Println("User cache reconciliation service started")
+
 	if cfg.IsProd() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -78,6 +97,11 @@ func main() {
 	
 
 	router := gin.New()
+	// Only forwarding headers from configured proxies are believed; with no
+	// TRUSTED_PROXIES, ClientIP is always the direct peer address.
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("Invalid TRUSTED_PROXIES: %v", err)
+	}
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
 
@@ -92,6 +116,7 @@ func main() {
 
 	router.Use(ipMiddleware.Handler())
 	router.Use(cnsAuth)
+	router.Use(middleware.UserCacheSyncMiddleware(userCache))
 	router.Use(middleware.LocaleMiddleware())
 
 	pageHandler := handlers.NewPageHandler(cfg, translator, db)
@@ -102,6 +127,9 @@ func main() {
 	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService, tracker)
 	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, uploadService, tracker)
 	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db)
+	identityRescueHandler := handlers.NewIdentityRescueHandler(db)
+	// Temporary: moves accounts from before identity keys onto them.
+	identityMigrationHandler := handlers.NewIdentityMigrationHandler(db)
 	recentUploadsHandler.SetAndroidHub(androidHandler.Hub())
 	androidHandler.SetDeviceHub(recentUploadsHandler.Hub())
 	tunnelHandler := handlers.NewTunnelHandler(cfg, db, fs)
@@ -116,9 +144,13 @@ func main() {
 	router.GET("/static/*filepath", serveStatic)
 	router.HEAD("/static/*filepath", serveStatic)
 
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
-	})
+	healthHandler := handlers.NewHealthHandler(
+		handlers.HealthCheck{Name: "postgres", Check: db.Ping},
+		handlers.HealthCheck{Name: "redis", Check: rdb.Ping},
+		handlers.HealthCheck{Name: "storage", Check: func(context.Context) error { return fs.CheckHealth(instanceID) }},
+	)
+	router.GET("/health", healthHandler.Health)
+	router.GET("/livez", healthHandler.Live)
 
 	router.GET("/robots.txt", pageHandler.RobotsTXT)
 	router.GET("/sitemap.xml", pageHandler.Sitemap)
@@ -133,6 +165,7 @@ func main() {
 	router.GET("/data-encryption", pageHandler.DataEncryption)
 	router.GET("/help", pageHandler.HelpPage)
 	router.GET("/shared/:id", pageHandler.SharedFile)
+	router.GET("/transfers", pageHandler.Transfers)
 	router.GET("/uploaded", pageHandler.Uploaded)
 
 	auth := router.Group("/auth")
@@ -147,6 +180,8 @@ func main() {
 	api.Use(middleware.CSRFMiddleware())
 	{
 		api.GET("/limits", pageHandler.Limits)
+		api.GET("/users/lookup", standardRateLimiter.Handler(), recentUploadsHandler.LookupUsers)
+		api.GET("/users/:id/identity-key", standardRateLimiter.Handler(), recentUploadsHandler.GetUserIdentityKey)
 
 		upload := api.Group("/upload")
 		{
@@ -163,7 +198,8 @@ func main() {
 			file.GET("/:id/download", downloadRateLimiter.Handler(), downloadHandler.Download)
 			file.GET("/:id", downloadHandler.GetMetadata)
 			file.GET("/code/:code", downloadHandler.GetByCode)
-			file.POST("/:id/report", reportHandler.Report)
+			file.POST("/:id/report", strictRateLimiter.Handler(), reportHandler.Report)
+			file.POST("/:id/share-to-user", standardRateLimiter.Handler(), recentUploadsHandler.ShareFileToUser)
 		}
 
 		api.GET("/tunnels/:id/files/:file_id/access", tunnelHandler.GuestFileAccess)
@@ -171,12 +207,18 @@ func main() {
 		me := api.Group("/me")
 		{
 			me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
+			me.GET("/shared-with-me", recentUploadsHandler.SharedWithMe)
+			me.GET("/recent-share-recipients", recentUploadsHandler.RecentShareRecipients)
+			me.GET("/transfers", recentUploadsHandler.ListTransfers)
+			me.GET("/transfers/pending-count", recentUploadsHandler.PendingTransferCount)
+			me.POST("/transfers/:file_id/accept", recentUploadsHandler.AcceptTransfer)
+			me.POST("/transfers/:file_id/decline", recentUploadsHandler.DeclineTransfer)
+			me.POST("/transfers/:file_id/report", strictRateLimiter.Handler(), reportHandler.ReportTransfer)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 			me.POST("/tunnels/start", tunnelHandler.Start)
-			me.POST("/tunnels/join", tunnelHandler.Join)
+			me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
 			me.GET("/tunnels/:id", tunnelHandler.Get)
 			me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
-			me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 			me.GET("/tunnels/:id/files", tunnelHandler.Files)
 			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 			me.DELETE("/tunnels/:id", tunnelHandler.End)
@@ -185,6 +227,8 @@ func main() {
 			me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 			me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
 			me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
+			me.POST("/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
+			me.POST("/tunnels/:id/participants/:participant_id/reject", tunnelHandler.RejectParticipant)
 
 			devices := me.Group("/devices")
 			{
@@ -195,6 +239,19 @@ func main() {
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
 				devices.POST("/enrollments/:id/reject", strictRateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+			}
+
+			me.GET("/identity-rescue/locked", standardRateLimiter.Handler(), identityRescueHandler.Locked)
+			me.POST("/identity-rescue", standardRateLimiter.Handler(), identityRescueHandler.Rescue)
+
+			migration := me.Group("/identity-migration")
+			{
+				migration.GET("/legacy-key", strictRateLimiter.Handler(), identityMigrationHandler.LegacyKey)
+				migration.POST("/start", strictRateLimiter.Handler(), identityMigrationHandler.Start)
+				migration.GET("/escrow", strictRateLimiter.Handler(), identityMigrationHandler.Escrow)
+				migration.POST("/adopt", strictRateLimiter.Handler(), identityMigrationHandler.Adopt)
+				migration.GET("/files", standardRateLimiter.Handler(), identityMigrationHandler.Files)
+				migration.POST("/files", standardRateLimiter.Handler(), identityMigrationHandler.StoreFiles)
 			}
 		}
 	}
@@ -242,7 +299,7 @@ func main() {
 	desktopCORS := func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization, X-Device-ID")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-KEY, Authorization, X-Device-ID, X-Host-Token, X-Participant-Token")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -269,7 +326,6 @@ func main() {
 	router.OPTIONS("/desktop/me/tunnels/start", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/join", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id", desktopCORS)
-	router.OPTIONS("/desktop/me/tunnels/:id/peer-wrap-key", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/files", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/confirm", desktopCORS)
 	router.OPTIONS("/desktop/me/files/:id/access", desktopCORS)
@@ -284,6 +340,8 @@ func main() {
 	router.OPTIONS("/desktop/me/tunnels/:id/participant-keys", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/envelopes", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/envelopes/:device_id", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/participants/:participant_id/approve", desktopCORS)
+	router.OPTIONS("/desktop/me/tunnels/:id/participants/:participant_id/reject", desktopCORS)
 
 	desktop := router.Group("/desktop")
 	desktop.Use(desktopCORS)
@@ -317,7 +375,7 @@ func main() {
 			file := desktopAuth.Group("/file")
 			{
 				file.GET("/code/:code", downloadHandler.GetByCode)
-				file.POST("/:id/report", reportHandler.Report)
+				file.POST("/:id/report", strictRateLimiter.Handler(), reportHandler.Report)
 			}
 
 			me := desktopAuth.Group("/me")
@@ -325,10 +383,9 @@ func main() {
 				me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 				me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
 				me.POST("/tunnels/start", tunnelHandler.Start)
-				me.POST("/tunnels/join", tunnelHandler.Join)
+				me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
 				me.GET("/tunnels/:id", tunnelHandler.Get)
 				me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
-				me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 				me.GET("/tunnels/:id/files", tunnelHandler.Files)
 				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 				me.DELETE("/tunnels/:id", tunnelHandler.End)
@@ -337,6 +394,8 @@ func main() {
 				me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
 				me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
 				me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
+				me.POST("/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
+				me.POST("/tunnels/:id/participants/:participant_id/reject", tunnelHandler.RejectParticipant)
 
 				devices := me.Group("/devices")
 				{

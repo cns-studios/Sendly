@@ -263,8 +263,8 @@ Report file.
 ### `GET /desktop/me/recent-uploads`
 Paginated recent owned uploads.
 
-### `GET /desktop/me/files/:id/access?device_id=<device_id>`
-Get envelope material needed for secure download/decrypt workflows.
+### `GET /desktop/me/files/:id/access`
+Return the caller's identity-wrapped copy of a file key; same response as `GET /api/me/files/:id/access` (WEB.md).
 
 ## Tunnels
 
@@ -272,7 +272,13 @@ Get envelope material needed for secure download/decrypt workflows.
 Create tunnel.
 
 ### `POST /desktop/me/tunnels/join`
-Join tunnel by short code.
+Join tunnel by short code. Rate-limited. Callers without a CNS bearer token (API key only) are anonymous joiners: they receive `participant_token` and must send `X-Device-ID` + `X-Participant-Token` on later tunnel calls. See the Tunnels section of WEB.md for authentication and host approval.
+
+### `POST /desktop/me/tunnels/:id/participants/:participant_id/approve`
+Host only. Admit a joiner; session keys may only be wrapped for approved participants.
+
+### `POST /desktop/me/tunnels/:id/participants/:participant_id/reject`
+Host only. Remove a joiner.
 
 ### `GET /desktop/me/tunnels/:id`
 Get tunnel and files.
@@ -284,7 +290,7 @@ Get tunnel file list.
 Confirm tunnel participation.
 
 ### `DELETE /desktop/me/tunnels/:id`
-End tunnel and remove tunnel files.
+Leave the tunnel; the last participant leaving removes the tunnel files.
 
 ## Devices and Enrollment
 
@@ -316,7 +322,7 @@ Create enrollment request.
 List pending enrollment requests.
 
 ### `POST /desktop/me/devices/enrollments/:id/approve`
-Approve enrollment and attach wrapped user key.
+Approve enrollment by handing over the identity key; same request as `POST /api/me/devices/enrollments/:id/approve` (WEB.md).
 
 ### `POST /desktop/me/devices/enrollments/:id/reject`
 Reject enrollment.

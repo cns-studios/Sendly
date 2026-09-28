@@ -8,7 +8,7 @@
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
-    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-04-05';
+    const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
     const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const RETENTION = AUTHENTICATED ? '90d' : '7d';
@@ -30,8 +30,9 @@
     let uploadStartedAt = 0;
     let finalizeEnvelopePayload = null;
     let authDeviceIdentity = null;
-    let authUserKeyRaw = null;
+    let authIdentityKey = null;
     let lastShareUrl = '';
+    let uploadedFileID = '';
     let idleCopyDone = false;
     let idleCopyBannerShown = false;
 
@@ -47,15 +48,43 @@
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
     const outExpiryLabel = document.getElementById('out-expiry-label');
+    const uploadedFileMeta = document.getElementById('uploaded-file-meta');
+    const uploadFileName = document.getElementById('upload-file-name');
+    const uploadFileSize = document.getElementById('upload-file-size');
+    const uploadFileType = document.getElementById('upload-file-type');
+    const uploadExpiryPill = document.getElementById('upload-expiry-pill');
+    const uploadSubhead = document.getElementById('upload-subhead');
+    const shareRecipientInput = document.getElementById('share-recipient-input');
+    const shareRecipientSend = document.getElementById('share-recipient-send');
+    const shareRecipientStatus = document.getElementById('share-recipient-status');
+    const shareSuggestList = document.getElementById('share-suggest-list');
+    const shareSentChips = document.getElementById('share-sent-chips');
+    const shareLinkInput = document.getElementById('share-link-input');
+    const shareLinkCopy = document.getElementById('share-link-copy');
+    const shareAnotherFile = document.getElementById('share-another-file');
     const shareUrlModal = document.getElementById('share-url-modal');
     const shareUrlText = document.getElementById('shareUrlText');
     const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
     const shareUrlNativeBtn = document.getElementById('shareUrlNativeBtn');
     const shareUrlDiscardBtn = document.getElementById('shareUrlDiscardBtn');
-    let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
+    let recipientLookupTimer = null;
+    let recipientMatches = [];
+    let shareInFlight = false;
+    let selectedRecipient = null;
+    let recentRecipients = [];
+    let currentSuggestions = [];
+    let suggestActiveIndex = -1;
+    let lookupSeq = 0;
+    const sentRecipientIds = new Set();
+
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[char]));
+    }
 
     function getCookieValue(name) {
         const value = `; ${document.cookie}`;
@@ -97,42 +126,21 @@
 
     async function ensureDeviceReady() {
         try {
-            authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity();
-            // Offer a key in case this is the account's first trusted device. For any other
-            // device the server keeps the envelope it already has and returns that instead.
-            const offeredKey = SecureCrypto.getUserKeyRaw(CNS_USER_ID) || SecureCrypto.generateUserKeyRaw();
-            const wrappedOffer = await SecureCrypto.wrapUserKeyForDevice(offeredKey, authDeviceIdentity.publicKeyJWK);
-            const response = await fetch('/api/me/devices/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-                body: JSON.stringify({
-                    device_id: authDeviceIdentity.deviceId,
-                    device_label: `${CNS_USERNAME || t('user_default')} device`,
-                    public_key_jwk: authDeviceIdentity.publicKeyJWK,
-                    key_algorithm: authDeviceIdentity.keyAlgorithm,
-                    key_version: authDeviceIdentity.keyVersion,
-                    wrapped_user_key_b64: SecureCrypto.toBase64(wrappedOffer),
-                    uk_wrap_alg: 'RSA-OAEP-2048-v1',
-                    uk_wrap_meta: { type: 'self-wrap', device_id: authDeviceIdentity.deviceId },
-                })
+            const result = await SecureCrypto.registerAuthenticatedDevice({
+                userId: CNS_USER_ID,
+                username: CNS_USERNAME,
+                csrfToken: getCookieValue('csrf_token')
             });
-            if (!response.ok) throw new Error('Device registration failed');
-            const payload = await response.json();
-            if (payload.needs_enrollment) {
-                authUserKeyRaw = null;
+            authDeviceIdentity = result.identity;
+            authIdentityKey = result.identityKey;
+            if (!authIdentityKey) {
                 showErrorBanner(t('toast_device_approve'));
                 return false;
             }
-            // Only ever wrap uploads with the key the server holds, otherwise the share
-            // link can't be recovered later from the uploaded files page.
-            const wrappedUKB64 = payload.user_key_envelope?.wrapped_uk_b64;
-            if (!wrappedUKB64) throw new Error('Missing user key envelope');
-            authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(SecureCrypto.fromBase64(wrappedUKB64), authDeviceIdentity.privateKeyJWK);
-            SecureCrypto.saveUserKeyRaw(CNS_USER_ID, authUserKeyRaw);
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
-            authUserKeyRaw = null;
+            authIdentityKey = null;
             return false;
         }
     }
@@ -144,6 +152,23 @@
         dropZone.addEventListener('drop', handleDrop);
         fileInput.addEventListener('change', handleFileSelect);
         finalizeBtn.addEventListener('click', handleFinalize);
+        shareRecipientInput?.addEventListener('input', handleRecipientInput);
+        shareRecipientInput?.addEventListener('keydown', handleRecipientKeydown);
+        shareRecipientInput?.addEventListener('focus', () => {
+            if (!selectedRecipient && shareRecipientInput.value.trim()) renderSuggestions(shareRecipientInput.value);
+        });
+        shareRecipientSend?.addEventListener('click', () => {
+            if (selectedRecipient) shareFileWithUser(selectedRecipient);
+        });
+        shareLinkCopy?.addEventListener('click', copyUploadedLink);
+        shareAnotherFile?.addEventListener('click', resetUpload);
+
+        // Close suggestions on click outside
+        document.addEventListener('click', (e) => {
+            if (shareSuggestList && !e.target.closest('.user-input-wrap')) {
+                closeSuggestions();
+            }
+        });
 
         shareUrlModal?.addEventListener('click', (e) => {
             if (e.target === shareUrlModal) hideShareUrlModal();
@@ -168,6 +193,372 @@
                 // user cancelled the native share sheet or it failed silently; nothing to do
             }
         });
+    }
+
+    function announceRecipientStatus(message) {
+        if (shareRecipientStatus) shareRecipientStatus.textContent = message;
+    }
+
+    function recipientInputWrap() {
+        return shareRecipientInput?.closest('.user-input-wrap') || null;
+    }
+
+    // The input has four visual states, driven by data-state on its wrapper:
+    // idle (search icon), searching (spinner), found (check + avatar) and
+    // not-found (red x with tooltip).
+    function setRecipientInputState(state) {
+        const wrap = recipientInputWrap();
+        if (wrap) wrap.dataset.state = state;
+    }
+
+    function userAvatar(user, size) {
+        return window.buildUserAvatar(user?.username || '?', user?.avatar_url || '', size);
+    }
+
+    function setLeadAvatar(user) {
+        const wrap = recipientInputWrap();
+        const slot = wrap?.querySelector('.user-input-lead-avatar');
+        if (!slot) return;
+        slot.replaceChildren();
+        if (user) slot.appendChild(userAvatar(user, 20));
+        wrap.classList.toggle('has-avatar', !!user);
+    }
+
+    function sameUser(a, b) {
+        return !!a && !!b && String(a.user_id) === String(b.user_id);
+    }
+
+    function closeSuggestions() {
+        suggestActiveIndex = -1;
+        shareSuggestList?.classList.remove('open');
+        shareRecipientInput?.setAttribute('aria-expanded', 'false');
+        shareRecipientInput?.removeAttribute('aria-activedescendant');
+    }
+
+    // Suggestions merge the user's recent recipients (instant, local) with
+    // server lookup results, recent ones first.
+    function suggestionMatches(query) {
+        const q = query.trim().toLowerCase();
+        if (!q) return [];
+        const matches = recentRecipients.filter(u => u.username.toLowerCase().includes(q));
+        for (const u of recipientMatches) {
+            if (matches.length >= 5) break;
+            if (!matches.some(m => sameUser(m, u))) matches.push(u);
+        }
+        return matches.slice(0, 5);
+    }
+
+    function renderSuggestions(query) {
+        if (!shareSuggestList) return;
+        currentSuggestions = suggestionMatches(query);
+        suggestActiveIndex = -1;
+        if (currentSuggestions.length === 0) {
+            shareSuggestList.replaceChildren();
+            closeSuggestions();
+            return;
+        }
+        shareSuggestList.replaceChildren(...currentSuggestions.map((u, i) => {
+            const item = document.createElement('li');
+            item.className = 'suggest-item';
+            item.id = `share-suggest-${i}`;
+            item.setAttribute('role', 'option');
+            const avatar = document.createElement('span');
+            avatar.className = 'suggest-avatar';
+            avatar.appendChild(userAvatar(u, 28));
+            const name = document.createElement('span');
+            name.className = 'suggest-name';
+            name.textContent = u.username;
+            item.append(avatar, name);
+            if (sentRecipientIds.has(String(u.user_id))) {
+                item.insertAdjacentHTML('beforeend', '<svg class="suggest-sent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>');
+            }
+            // mousedown (not click) so the input doesn't blur first
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                selectRecipient(u);
+            });
+            return item;
+        }));
+        shareSuggestList.classList.add('open');
+        shareRecipientInput?.setAttribute('aria-expanded', 'true');
+    }
+
+    function setActiveSuggestion(index) {
+        const items = shareSuggestList?.querySelectorAll('.suggest-item') || [];
+        if (!items.length) return;
+        suggestActiveIndex = (index + items.length) % items.length;
+        items.forEach((item, i) => item.classList.toggle('active', i === suggestActiveIndex));
+        shareRecipientInput.setAttribute('aria-activedescendant', items[suggestActiveIndex].id);
+    }
+
+    function handleRecipientKeydown(e) {
+        const open = shareSuggestList?.classList.contains('open');
+        if (e.key === 'ArrowDown' && open) {
+            e.preventDefault();
+            setActiveSuggestion(suggestActiveIndex + 1);
+        } else if (e.key === 'ArrowUp' && open) {
+            e.preventDefault();
+            setActiveSuggestion(suggestActiveIndex - 1);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (open && suggestActiveIndex >= 0) {
+                selectRecipient(currentSuggestions[suggestActiveIndex]);
+            } else if (selectedRecipient && !shareRecipientSend.disabled) {
+                shareFileWithUser(selectedRecipient);
+            }
+        } else if (e.key === 'Escape' && open) {
+            closeSuggestions();
+        }
+    }
+
+    function selectRecipient(u) {
+        if (!u) return;
+        cancelPendingLookup();
+        selectedRecipient = u;
+        shareRecipientInput.value = u.username;
+        setRecipientInputState('found');
+        setLeadAvatar(u);
+        closeSuggestions();
+        shareRecipientSend.disabled = shareInFlight;
+        highlightRecentRecipient(u);
+        announceRecipientStatus(tpl('share_user_found', {name: u.username}));
+    }
+
+    function clearSelectedRecipient() {
+        selectedRecipient = null;
+        shareRecipientSend.disabled = true;
+        setLeadAvatar(null);
+        highlightRecentRecipient(null);
+    }
+
+    function cancelPendingLookup() {
+        if (recipientLookupTimer) clearTimeout(recipientLookupTimer);
+        recipientLookupTimer = null;
+        lookupSeq++;
+    }
+
+    function handleRecipientInput() {
+        const query = shareRecipientInput.value.trim();
+        cancelPendingLookup();
+        recipientMatches = [];
+        clearSelectedRecipient();
+        announceRecipientStatus('');
+
+        if (query.length < 3) {
+            setRecipientInputState('idle');
+            renderSuggestions(query);
+            return;
+        }
+
+        // Exact match among recent recipients: select immediately, no lookup.
+        const recentExact = recentRecipients.find(u => u.username.toLowerCase() === query.toLowerCase());
+        if (recentExact) {
+            selectRecipient(recentExact);
+            return;
+        }
+
+        setRecipientInputState('searching');
+        renderSuggestions(query);
+        const seq = lookupSeq;
+        recipientLookupTimer = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/users/lookup?q=${encodeURIComponent(query)}`, {
+                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (seq !== lookupSeq) return; // a newer keystroke superseded this lookup
+                if (!response.ok) throw SendlyToast.apiError(payload, t('share_lookup_failed'));
+                recipientMatches = payload.items || [];
+
+                const exactMatch = recipientMatches.find(u => u.username.toLowerCase() === query.toLowerCase());
+                if (exactMatch) {
+                    selectRecipient(exactMatch);
+                    return;
+                }
+                renderSuggestions(query);
+                if (currentSuggestions.length === 0) {
+                    setRecipientInputState('not-found');
+                    announceRecipientStatus(t('share_user_not_found'));
+                } else {
+                    setRecipientInputState('idle');
+                }
+            } catch (error) {
+                if (seq !== lookupSeq) return;
+                console.error('User lookup failed:', error);
+                setRecipientInputState('idle');
+                showErrorBanner(t('share_lookup_failed'));
+            }
+        }, 300);
+    }
+
+    async function shareFileWithUser(recipient) {
+        if (shareInFlight || !recipient || !generatedPassword) return;
+        shareInFlight = true;
+        shareRecipientSend.disabled = true;
+        shareRecipientSend.classList.add('is-loading');
+        shareRecipientInput.disabled = true;
+        announceRecipientStatus(t('share_sending'));
+        try {
+            let keyPayload;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                const keyResponse = await fetch(`/api/users/${encodeURIComponent(recipient.user_id)}/identity-key`, {
+                    headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
+                });
+                keyPayload = await keyResponse.json().catch(() => ({}));
+                if (!keyResponse.ok) {
+                    if (keyPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
+                    throw SendlyToast.apiError(keyPayload, t('share_failed'));
+                }
+                const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
+                    new TextEncoder().encode(generatedPassword), keyPayload.public_key_jwk
+                );
+                const response = await fetch(`/api/file/${encodeURIComponent(uploadedFileID)}/share-to-user`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
+                    body: JSON.stringify({
+                        recipient_user_id: Number(recipient.user_id),
+                        wrapped_dek: SecureCrypto.toBase64(wrapped),
+                        dek_wrap_alg: 'RSA-OAEP-2048-v1',
+                        recipient_key_version: keyPayload.key_version
+                    })
+                });
+                if (response.ok) {
+                    handleShareSuccess(recipient);
+                    return;
+                }
+                const errorPayload = await response.json().catch(() => ({}));
+                if (errorPayload.code === 'TRANSFER_EXISTS') {
+                    // A file goes to each person only once; treat it as already sent.
+                    handleShareSuccess(recipient, true);
+                    return;
+                }
+                if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH' && attempt === 0) continue;
+                if (errorPayload.code === 'RECIPIENT_NOT_READY') throw new Error(t('share_recipient_not_ready'));
+                if (errorPayload.code === 'RECIPIENT_KEY_VERSION_MISMATCH') throw new Error(t('share_key_changed'));
+                throw SendlyToast.apiError(errorPayload, t('share_failed'));
+            }
+        } catch (error) {
+            announceRecipientStatus(error.message);
+            SendlyToast.fail(error, t('share_failed'));
+        } finally {
+            shareInFlight = false;
+            shareRecipientSend.classList.remove('is-loading');
+            shareRecipientInput.disabled = false;
+            // Keep a failed recipient selected so the user can simply retry.
+            shareRecipientSend.disabled = !selectedRecipient;
+        }
+    }
+
+    function handleShareSuccess(recipient, alreadyTransferred = false) {
+        const key = String(recipient.user_id);
+        const alreadySent = alreadyTransferred || sentRecipientIds.has(key);
+        sentRecipientIds.add(key);
+        if (!shareSentChips?.querySelector(`[data-user-id="${key}"]`)) addSentChip(recipient);
+        if (!recentRecipients.some(u => sameUser(u, recipient))) {
+            recentRecipients.unshift(recipient);
+        }
+        shareRecipientInput.value = '';
+        setRecipientInputState('idle');
+        clearSelectedRecipient();
+        renderRecentRecipients();
+        announceRecipientStatus(tpl('share_sent_to', {name: recipient.username}));
+        showToast(tpl(alreadySent ? 'share_already_sent' : 'share_sent_pending', {name: recipient.username}));
+    }
+
+    function addSentChip(recipient) {
+        if (!shareSentChips) return;
+        const chip = document.createElement('div');
+        chip.className = 'sent-chip';
+        chip.dataset.userId = String(recipient.user_id);
+        const avatar = document.createElement('span');
+        avatar.className = 'chip-avatar';
+        avatar.appendChild(userAvatar(recipient, 18));
+        const label = document.createElement('span');
+        label.textContent = tpl('share_sent_to', {name: recipient.username});
+        chip.append(avatar, label);
+        chip.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>');
+        shareSentChips.appendChild(chip);
+    }
+
+    // Recent recipients render as avatar tiles (name beneath) above the
+    // search input; clicking one selects that user as the recipient.
+    function renderRecentRecipients() {
+        const box = document.getElementById('share-recent-recipients');
+        const list = document.getElementById('share-recent-list');
+        if (!box || !list) return;
+        if (!recentRecipients.length) {
+            box.classList.add('hidden');
+            return;
+        }
+        list.replaceChildren(...recentRecipients.slice(0, 8).map(u => {
+            const tile = document.createElement('button');
+            tile.type = 'button';
+            tile.className = 'recent-recipient';
+            tile.dataset.userId = String(u.user_id);
+            tile.title = u.username;
+            tile.setAttribute('role', 'listitem');
+            tile.setAttribute('aria-pressed', sameUser(u, selectedRecipient) ? 'true' : 'false');
+            if (sentRecipientIds.has(String(u.user_id))) tile.classList.add('is-sent');
+            if (sameUser(u, selectedRecipient)) tile.classList.add('is-selected');
+            const avatar = document.createElement('span');
+            avatar.className = 'recent-recipient-avatar';
+            avatar.appendChild(userAvatar(u, 44));
+            avatar.insertAdjacentHTML('beforeend', '<span class="recent-recipient-badge" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>');
+            const name = document.createElement('span');
+            name.className = 'recent-recipient-name';
+            name.textContent = u.username;
+            tile.append(avatar, name);
+            tile.addEventListener('click', () => {
+                if (shareInFlight) return;
+                if (sameUser(u, selectedRecipient)) {
+                    shareRecipientInput.value = '';
+                    setRecipientInputState('idle');
+                    clearSelectedRecipient();
+                    return;
+                }
+                selectRecipient(u);
+                shareRecipientSend.focus();
+            });
+            return tile;
+        }));
+        box.classList.remove('hidden');
+    }
+
+    function highlightRecentRecipient(user) {
+        document.querySelectorAll('#share-recent-list .recent-recipient').forEach(tile => {
+            const selected = !!user && tile.dataset.userId === String(user.user_id);
+            tile.classList.toggle('is-selected', selected);
+            tile.setAttribute('aria-pressed', selected ? 'true' : 'false');
+        });
+    }
+
+    async function copyUploadedLink() {
+        if (!shareLinkInput?.value) return;
+        const ok = await copyToClipboard(shareLinkInput.value, true);
+        if (ok) {
+            shareLinkCopy.setAttribute('aria-label', t('share_copied'));
+            shareLinkCopy.classList.add('copied');
+            // Flash the link field
+            shareLinkInput.classList.add('flash');
+            setTimeout(() => {
+                shareLinkCopy.setAttribute('aria-label', t('share_copy'));
+                shareLinkCopy.classList.remove('copied');
+                shareLinkInput.classList.remove('flash');
+            }, 1800);
+        }
+    }
+
+    async function loadRecentShareRecipients() {
+        if (!AUTHENTICATED) return;
+        try {
+            const response = await fetch('/api/me/recent-share-recipients', { headers: { 'X-CSRF-Token': getCookieValue('csrf_token') } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            recentRecipients = payload.items || [];
+            renderRecentRecipients();
+        } catch (error) {
+            console.error('Failed to load recent recipients:', error);
+        }
     }
 
     function handleZoneClick(e) {
@@ -277,14 +668,14 @@
         else if (uploadError) {
             isFinalizing = false; updateFinalizeButtonState();
             stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
-            showErrorBanner(tpl('link_upload_failed', {msg: uploadError}));
+            SendlyToast.fail(uploadError, t('link_upload_failed'));
         } else {
             const poll = setInterval(() => {
                 if (uploadComplete) { clearInterval(poll); finalizeUpload(); }
                 else if (uploadError) {
                     clearInterval(poll); isFinalizing = false; updateFinalizeButtonState();
                     stageProcessing.classList.add('hidden'); stagePending.classList.remove('hidden');
-                    showErrorBanner(tpl('link_upload_failed', {msg: uploadError}));
+                    SendlyToast.fail(uploadError, t('link_upload_failed'));
                 }
             }, 500);
         }
@@ -335,16 +726,11 @@
             const dekBytes = new TextEncoder().encode(generatedPassword);
 
             if (AUTHENTICATED) {
-                if (!authUserKeyRaw) await ensureDeviceReady();
-                if (authUserKeyRaw) {
-                    const wrapped = await SecureCrypto.wrapSecretWithUserKey(dekBytes, authUserKeyRaw);
-                    finalizeEnvelopePayload = {
-                        wrapped_dek_b64: SecureCrypto.toBase64(wrapped.wrapped),
-                        dek_wrap_alg: 'AES-GCM-UK-v1',
-                        dek_wrap_nonce_b64: SecureCrypto.toBase64(wrapped.nonce),
-                        dek_wrap_version: 1
-                    };
+                if (!authIdentityKey) await ensureDeviceReady();
+                if (!authIdentityKey) {
+                    throw new Error(t('toast_device_approve'));
                 }
+                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             }
 
             zoneSubtext.textContent = t('status_uploading');
@@ -384,7 +770,7 @@
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
             setDropZoneState('error', error.message);
-            showErrorBanner(tpl('link_upload_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('link_upload_failed'));
         }
     }
 
@@ -398,7 +784,7 @@
                 formData.append('chunk_index', chunkIndex.toString());
                 formData.append('chunk', new Blob([chunkData]));
                 const response = await fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
-                if (!response.ok) { const error = await response.json(); throw new Error(error.error || `Chunk ${chunkIndex + 1} failed`); }
+                if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, `Chunk ${chunkIndex + 1} failed`); }
                 return;
             } catch (error) { lastError = error; }
         }
@@ -411,7 +797,7 @@
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
             body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE })
         });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to initialize'); }
+        if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to initialize'); }
         return response.json();
     }
 
@@ -421,7 +807,7 @@
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
             body: JSON.stringify({ session_id: uploadSessionId, confirmed: true })
         });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to complete'); }
+        if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to complete'); }
         return response.json();
     }
 
@@ -446,14 +832,14 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
                 body: JSON.stringify(finalizePayload)
             });
-            if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to finalize'); }
+            if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to finalize'); }
             const payload = await response.json();
             showSuccess(payload);
         } catch (error) {
             console.error('Finalize failed:', error);
             isFinalizing = false; updateFinalizeButtonState();
             setDropZoneState('error', error.message);
-            showErrorBanner(tpl('toast_finalize_failed', {msg: error.message}));
+            SendlyToast.fail(error, t('toast_finalize_failed'));
         }
     }
 
@@ -463,22 +849,36 @@
         if (response.file_id && generatedPassword) SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         lastShareUrl = fullShareUrl;
+        uploadedFileID = response.file_id || '';
 
-        setDropZoneState('success', selectedFile?.name);
-        const zoneIcon = dropZone.querySelector('.drop-zone-icon');
-        const zoneHeading = dropZone.querySelector('h3');
-        const zoneSubtext = dropZone.querySelector('p');
-        zoneIcon.setAttribute('data-lucide', 'circle-check-big');
-        zoneHeading.textContent = t('status_complete');
-        zoneSubtext.textContent = t('state_click_share_link');
-        if (window.lucide && lucide.createIcons) lucide.createIcons();
+        // Populate file metadata
+        if (uploadFileName) uploadFileName.textContent = selectedFile?.name || '';
+        if (uploadFileSize) uploadFileSize.textContent = SecureCrypto.formatFileSize(selectedFile?.size || 0);
+        if (uploadFileType) {
+            const ext = selectedFile?.name?.split('.').pop()?.toUpperCase() || 'FILE';
+            uploadFileType.textContent = ext + ' document';
+        }
+        if (uploadExpiryPill) uploadExpiryPill.textContent = tpl('link_expires_in', {retention: RETENTION_LABEL});
+        if (uploadSubhead) uploadSubhead.textContent = t('link_upload_subhead');
+
+        // Populate share link
+        if (shareLinkInput) shareLinkInput.value = fullShareUrl;
+
+        // Refresh recent recipients so the tiles reflect the latest shares
+        if (AUTHENTICATED) loadRecentShareRecipients();
 
         uploadSessionId = null;
+        stageEntry.classList.add('hidden');
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
-        stageOutput.classList.add('hidden');
+        stageOutput.classList.remove('hidden');
 
-        showShareUrlModal(fullShareUrl);
+        // Trigger animations on stage output elements
+        requestAnimationFrame(() => {
+            stageOutput.querySelectorAll('.card').forEach((card, i) => {
+                card.style.animationDelay = `${0.30 + i * 0.08}s`;
+            });
+        });
     }
 
     function setupIdleCopy(text) {
@@ -570,42 +970,7 @@
     }
 
     function showNotification(message, type) {
-        const pill = document.getElementById('notification-pill');
-        const icon = document.getElementById('notification-icon');
-        const text = document.getElementById('notification-text');
-        if (!pill || !text) return;
-
-        if (notificationTimer) {
-            clearTimeout(notificationTimer);
-            notificationTimer = null;
-        }
-
-        pill.classList.remove('visible');
-        pill.classList.add('hidden');
-
-        text.textContent = message;
-
-        if (icon) {
-            if (type === 'error') {
-                icon.setAttribute('data-lucide', 'circle-x');
-                icon.style.color = '#FF3B30';
-            } else {
-                icon.setAttribute('data-lucide', 'info');
-                icon.style.color = '#000';
-            }
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-
-        pill.classList.remove('hidden');
-        pill.offsetHeight;
-        pill.classList.add('visible');
-
-        notificationTimer = setTimeout(() => {
-            pill.classList.remove('visible');
-            setTimeout(() => pill.classList.add('hidden'), 350);
-        }, 3500);
+        SendlyToast.show(message, { type });
     }
 
     function showShareBanner() {
@@ -613,16 +978,27 @@
     }
 
     function showToast(message) {
-        showNotification(message, 'info');
+        SendlyToast.success(message);
     }
 
     function resetUpload() {
         clearPendingCountdown();
-        selectedFile = null; generatedPassword = null;
+        selectedFile = null; generatedPassword = null; uploadedFileID = '';
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;
         idleCopyDone = false;
+        // Per-file share state must not leak into the next upload.
+        sentRecipientIds.clear();
+        shareSentChips?.replaceChildren();
+        if (shareRecipientInput) {
+            cancelPendingLookup();
+            shareRecipientInput.value = '';
+            setRecipientInputState('idle');
+            clearSelectedRecipient();
+            closeSuggestions();
+            renderRecentRecipients();
+        }
         if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
         fileInput.value = '';
 
@@ -654,15 +1030,15 @@
     }
 
     function showErrorBanner(message) {
-        showNotification(message, 'error');
+        SendlyToast.error(message);
     }
 
-    function hideErrorBanner() {}
 
     async function init() {
         setupTOSGate();
         try { await SecureCrypto.loadWordList(); } catch (error) { console.error('Word list failed:', error); }
         setupEventListeners();
+        loadRecentShareRecipients();
     }
 
     const style = document.createElement('style');

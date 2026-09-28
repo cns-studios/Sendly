@@ -43,6 +43,18 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	// Commands like delete and cleanup remove blobs, so never run against
+	// storage owned by a different database.
+	instanceID, err := db.GetInstanceID(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading instance ID: %v\n", err)
+		os.Exit(1)
+	}
+	if err := fs.VerifyStorage(instanceID); err != nil {
+		fmt.Fprintf(os.Stderr, "Refusing to run: %v\n", err)
+		os.Exit(1)
+	}
+
 	command := os.Args[1]
 
 	switch command {
@@ -458,21 +470,31 @@ func showReports(ctx context.Context, db *storage.Postgres, fileID string) {
 		return
 	}
 
-	fmt.Println(strings.Repeat("=", 80))
+	fmt.Println(strings.Repeat("=", 120))
 	fmt.Printf("REPORTS FOR FILE: %s\n", fileID)
-	fmt.Println(strings.Repeat("=", 80))
-	fmt.Printf("%-6s %-20s %-30s\n", "ID", "REPORTER IP", "TIME")
-	fmt.Println(strings.Repeat("-", 80))
+	fmt.Println(strings.Repeat("=", 120))
+	fmt.Printf("%-6s %-20s %-12s %-38s %-30s\n", "ID", "REPORTER IP", "USER", "TRANSFER", "TIME")
+	fmt.Println(strings.Repeat("-", 120))
 
 	for _, report := range reports {
-		fmt.Printf("%-6d %-20s %-30s\n",
+		reporter := "-"
+		if report.ReporterCNSUserID.Valid {
+			reporter = fmt.Sprintf("%d", report.ReporterCNSUserID.Int64)
+		}
+		transfer := "-"
+		if report.TransferID.Valid {
+			transfer = report.TransferID.String
+		}
+		fmt.Printf("%-6d %-20s %-12s %-38s %-30s\n",
 			report.ID,
 			report.ReporterIP,
+			reporter,
+			transfer,
 			report.CreatedAt.Format(time.RFC3339),
 		)
 	}
 
-	fmt.Println(strings.Repeat("=", 80))
+	fmt.Println(strings.Repeat("=", 120))
 	fmt.Printf("Total reports: %d\n", len(reports))
 }
 

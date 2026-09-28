@@ -44,6 +44,29 @@ type TunnelParticipant struct {
 	PublicKeyJWK json.RawMessage `db:"public_key_jwk" json:"public_key_jwk,omitempty"`
 	KeyAlgorithm sql.NullString  `db:"key_algorithm" json:"key_algorithm,omitempty"`
 	KeyVersion   sql.NullInt32   `db:"key_version"   json:"key_version,omitempty"`
+	// TokenHash is the SHA-256 (hex) of an anonymous participant's secret.
+	TokenHash  sql.NullString `db:"participant_token_hash" json:"-"`
+	ApprovedAt sql.NullTime   `db:"approved_at" json:"-"`
+	// Approved mirrors ApprovedAt for API consumers.
+	Approved bool `db:"-" json:"approved"`
+	// Username and AvatarURL come from the users cache for signed-in
+	// participants, so the session can show who is in it.
+	Username  string `db:"username"   json:"username,omitempty"`
+	AvatarURL string `db:"avatar_url" json:"avatar_url,omitempty"`
+}
+
+// TunnelJoin describes a join attempt. PresentedTokenHash is the hash of the
+// X-Participant-Token the caller sent, used when an anonymous caller re-joins
+// with a device ID that already has a participant row; NewTokenHash is stored
+// when an anonymous caller joins for the first time.
+type TunnelJoin struct {
+	UserID             int64
+	DeviceID           string
+	PresentedTokenHash string
+	NewTokenHash       string
+	PublicKeyJWK       json.RawMessage
+	KeyAlgorithm       string
+	KeyVersion         int
 }
 
 
@@ -55,7 +78,8 @@ type TunnelParticipantPublicKey struct {
 	PublicKeyJWK  json.RawMessage `json:"public_key_jwk"`
 	KeyAlgorithm  string          `json:"key_algorithm"`
 	KeyVersion    int             `json:"key_version"`
-	
+	Approved      bool            `json:"approved"`
+
 	HasEnvelope bool `json:"has_envelope"`
 }
 
@@ -69,6 +93,9 @@ type TunnelStartResponse struct {
 	QRPayload    string              `json:"qr_payload"`
 	Participants []TunnelParticipant `json:"participants,omitempty"`
 	HostToken    string              `json:"host_token,omitempty"`
+	// ParticipantToken is returned once to an anonymous joiner, who must send
+	// it as X-Participant-Token on later calls.
+	ParticipantToken string `json:"participant_token,omitempty"`
 }
 
 type TunnelJoinRequest struct {
@@ -98,14 +125,6 @@ type TunnelGuestEnvelope struct {
 	DEKWrapAlg      string `json:"dek_wrap_alg"`
 	DEKWrapNonceB64 string `json:"dek_wrap_nonce_b64"`
 	DEKWrapVersion  int    `json:"dek_wrap_version"`
-}
-
-type TunnelPeerWrapKeyResponse struct {
-	PeerCNSUserID int64           `json:"peer_cns_user_id"`
-	PeerDeviceID  string          `json:"peer_device_id"`
-	PublicKeyJWK  json.RawMessage `json:"public_key_jwk"`
-	KeyAlgorithm  string          `json:"key_algorithm"`
-	KeyVersion    int             `json:"key_version"`
 }
 
 type TunnelEndRequest struct {

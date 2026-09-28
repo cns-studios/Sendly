@@ -16,6 +16,7 @@ const SecureCrypto = (function() {
 
     const DEVICE_STORAGE_KEY = 'sendly_device_identity_v1';
     const USER_KEY_PREFIX = 'sendly_user_key_v1_';
+    const IDENTITY_KEY_PREFIX = 'sendly_identity_key_v1_';
     const FILE_KEY_PREFIX = 'sendly_file_key_v1_';
 
      
@@ -108,12 +109,36 @@ const SecureCrypto = (function() {
         return bytes;
     }
 
-    async function getOrCreateDeviceIdentity() {
+    function userDeviceStorageKey(userId) {
+        return `${DEVICE_STORAGE_KEY}_u${userId}`;
+    }
+
+    // The browser-wide identity is used unless this account already got its
+    // own one because the browser-wide device id belongs to another account
+    // (see registerAuthenticatedDevice).
+    async function getOrCreateDeviceIdentity(userId = 0) {
+        if (userId) {
+            const scoped = localStorage.getItem(userDeviceStorageKey(userId));
+            if (scoped) {
+                return JSON.parse(scoped);
+            }
+        }
         const cached = localStorage.getItem(DEVICE_STORAGE_KEY);
         if (cached) {
             return JSON.parse(cached);
         }
+        const identity = await generateDeviceIdentity();
+        localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(identity));
+        return identity;
+    }
 
+    async function createUserScopedDeviceIdentity(userId) {
+        const identity = await generateDeviceIdentity();
+        localStorage.setItem(userDeviceStorageKey(userId), JSON.stringify(identity));
+        return identity;
+    }
+
+    async function generateDeviceIdentity() {
         const keyPair = await crypto.subtle.generateKey(
             {
                 name: 'RSA-OAEP',
@@ -133,21 +158,34 @@ const SecureCrypto = (function() {
             publicKeyJWK: publicJWK,
             privateKeyJWK: privateJWK
         };
-        localStorage.setItem(DEVICE_STORAGE_KEY, JSON.stringify(identity));
         return identity;
     }
 
-    function userKeyStorageKey(userId) {
-        return `${USER_KEY_PREFIX}${userId || 'guest'}`;
+    function identityKeyStorageKey(userId) {
+        return `${IDENTITY_KEY_PREFIX}${userId || 'guest'}`;
     }
 
-    function saveUserKeyRaw(userId, keyRaw) {
-        localStorage.setItem(userKeyStorageKey(userId), toBase64(keyRaw));
+    // Stores the account's current identity key. Private keys of earlier
+    // versions are kept under `retired`: after a recovery they are the only
+    // way to re-wrap files and transfers sent to those versions.
+    function saveIdentityKey(userId, keyData) {
+        if (!keyData) return;
+        const stored = getIdentityKey(userId);
+        const retired = (stored?.retired || []).filter((key) => key.keyVersion !== keyData.keyVersion);
+        if (stored?.privateKeyJWK && stored.keyVersion !== keyData.keyVersion) {
+            retired.push({ keyVersion: stored.keyVersion, privateKeyJWK: stored.privateKeyJWK });
+        }
+        localStorage.setItem(identityKeyStorageKey(userId), JSON.stringify({ ...keyData, retired }));
     }
 
-    function getUserKeyRaw(userId) {
-        const value = localStorage.getItem(userKeyStorageKey(userId));
-        return value ? fromBase64(value) : null;
+    function getIdentityKey(userId) {
+        const value = localStorage.getItem(identityKeyStorageKey(userId));
+        if (!value) return null;
+        try {
+            return JSON.parse(value);
+        } catch (_) {
+            return null;
+        }
     }
 
     function cacheFileKey(fileId, keyString) {
@@ -165,45 +203,7 @@ const SecureCrypto = (function() {
         sessionStorage.removeItem(`${FILE_KEY_PREFIX}${fileId}`);
     }
 
-    function generateUserKeyRaw() {
-        return generateRandomBytes(32);
-    }
-
-    async function importUserKey(rawKey) {
-        return crypto.subtle.importKey(
-            'raw',
-            rawKey,
-            { name: 'AES-GCM' },
-            false,
-            ['encrypt', 'decrypt']
-        );
-    }
-
-    async function wrapSecretWithUserKey(secretBytes, userKeyRaw) {
-        const iv = generateRandomBytes(12);
-        const key = await importUserKey(userKeyRaw);
-        const wrapped = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv },
-            key,
-            secretBytes
-        );
-        return {
-            wrapped: new Uint8Array(wrapped),
-            nonce: iv
-        };
-    }
-
-    async function unwrapSecretWithUserKey(wrappedBytes, nonceBytes, userKeyRaw) {
-        const key = await importUserKey(userKeyRaw);
-        const raw = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: nonceBytes },
-            key,
-            wrappedBytes
-        );
-        return new Uint8Array(raw);
-    }
-
-    async function wrapUserKeyForDevice(userKeyRaw, publicKeyJWK) {
+    async function rsaOaepEncrypt(plaintextBytes, publicKeyJWK) {
         const publicKey = await crypto.subtle.importKey(
             'jwk',
             publicKeyJWK,
@@ -211,11 +211,11 @@ const SecureCrypto = (function() {
             false,
             ['encrypt']
         );
-        const wrapped = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, userKeyRaw);
+        const wrapped = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, plaintextBytes);
         return new Uint8Array(wrapped);
     }
 
-    async function unwrapUserKeyForDevice(wrappedUserKeyBytes, privateKeyJWK) {
+    async function rsaOaepDecrypt(wrappedBytes, privateKeyJWK) {
         const privateKey = await crypto.subtle.importKey(
             'jwk',
             privateKeyJWK,
@@ -223,10 +223,305 @@ const SecureCrypto = (function() {
             false,
             ['decrypt']
         );
-        const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedUserKeyBytes);
+        const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, wrappedBytes);
         return new Uint8Array(raw);
     }
 
+    async function generateIdentityKeypair() {
+        const keyPair = await crypto.subtle.generateKey(
+            {
+                name: 'RSA-OAEP',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1]),
+                hash: 'SHA-256'
+            },
+            true,
+            ['encrypt', 'decrypt']
+        );
+        const publicJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+        const privateJWK = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+        return {
+            keyAlgorithm: 'RSA-OAEP-2048',
+            keyVersion: 1,
+            publicKeyJWK: publicJWK,
+            privateKeyJWK: privateJWK
+        };
+    }
+
+    async function wrapIdentityKeyForDevice(identityPrivateKeyJWK, devicePublicKeyJWK) {
+        const aesKey = await crypto.subtle.generateKey(
+            { name: 'AES-GCM', length: 256 },
+            true,
+            ['encrypt', 'decrypt']
+        );
+        const rawAesKey = new Uint8Array(await crypto.subtle.exportKey('raw', aesKey));
+        const wrappedAesKey = await rsaOaepEncrypt(rawAesKey, devicePublicKeyJWK);
+        const iv = generateRandomBytes(CONFIG.ivLength);
+        const plaintext = new TextEncoder().encode(JSON.stringify(identityPrivateKeyJWK));
+        const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            aesKey,
+            plaintext
+        ));
+        const combined = new Uint8Array(wrappedAesKey.length + iv.length + ciphertext.length);
+        combined.set(wrappedAesKey, 0);
+        combined.set(iv, wrappedAesKey.length);
+        combined.set(ciphertext, wrappedAesKey.length + iv.length);
+        return combined;
+    }
+
+    async function unwrapIdentityKeyForDevice(wrappedBytes, devicePrivateKeyJWK) {
+        if (!wrappedBytes || wrappedBytes.length < 268) {
+            throw new Error('Invalid wrapped identity key payload: insufficient length');
+        }
+        const wrappedAesKey = wrappedBytes.slice(0, 256);
+        const iv = wrappedBytes.slice(256, 268);
+        const ciphertext = wrappedBytes.slice(268);
+
+        const rawAesKey = await rsaOaepDecrypt(wrappedAesKey, devicePrivateKeyJWK);
+        const aesKey = await crypto.subtle.importKey(
+            'raw',
+            rawAesKey,
+            { name: 'AES-GCM' },
+            false,
+            ['decrypt']
+        );
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            aesKey,
+            ciphertext
+        );
+        return JSON.parse(new TextDecoder().decode(decrypted));
+    }
+
+    function parseEnvelope(envelope) {
+        const wrapAlg = String(envelope?.dek_wrap_alg || '').trim().toUpperCase();
+        if (!envelope?.wrapped_dek_b64) throw new Error('Missing file key envelope');
+        return {
+            wrappedBytes: fromBase64(envelope.wrapped_dek_b64),
+            wrapAlg,
+            nonceBytes: envelope.dek_wrap_nonce_b64 ? fromBase64(envelope.dek_wrap_nonce_b64) : new Uint8Array()
+        };
+    }
+
+    // Opens a file key envelope: a raw key (guest share links), or one wrapped
+    // with RSA-OAEP for a quick share guest's throwaway key or for the user's
+    // identity key.
+    async function unwrapFileDEK(envelope, {
+        authenticated = !!window.CONFIG?.authenticated,
+        ephemeralPrivateKey = null,
+        identityPrivateKeyJWK = null
+    } = {}) {
+        const parsed = parseEnvelope(envelope);
+        if (parsed.wrapAlg.startsWith('RAW-DEK')) {
+            if (authenticated) throw new Error('Raw file keys are not valid for authenticated access');
+            return parsed.wrappedBytes;
+        }
+        if (parsed.wrapAlg.startsWith('RSA-OAEP')) {
+            const privateKey = ephemeralPrivateKey || (identityPrivateKeyJWK
+                ? await crypto.subtle.importKey('jwk', identityPrivateKeyJWK,
+                    { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt'])
+                : null);
+            if (!privateKey) throw new Error('No private key available for file envelope');
+            const raw = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, privateKey, parsed.wrappedBytes);
+            return new Uint8Array(raw);
+        }
+        throw new Error('Unsupported file key envelope');
+    }
+
+    async function wrapFileDEKForIdentity(dekBytes, identityPublicKeyJWK) {
+        return rsaOaepEncrypt(dekBytes, identityPublicKeyJWK);
+    }
+
+    // ── Legacy user key (read-only) ──
+    // Before identity keys, each account had one AES "user key" that wrapped
+    // its file keys. Nothing is wrapped with it anymore; it is only read to
+    // migrate an account's files to its identity key. Remove with the
+    // identity migration.
+    function getLegacyUserKeyRaw(userId) {
+        const value = localStorage.getItem(`${USER_KEY_PREFIX}${userId || 'guest'}`);
+        return value ? fromBase64(value) : null;
+    }
+
+    async function unwrapWithLegacyUserKey(wrappedBytes, nonceBytes, userKeyRaw) {
+        const key = await crypto.subtle.importKey('raw', userKeyRaw, { name: 'AES-GCM' }, false, ['decrypt']);
+        const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonceBytes }, key, wrappedBytes);
+        return new Uint8Array(raw);
+    }
+
+    // Registers this browser as a device of the signed-in account and returns
+    // the account's identity key if this device holds a copy of it. The
+    // server's copy is authoritative. A new identity keypair is only generated
+    // when the server asks for one (a brand-new account) or on recovery,
+    // which replaces the account's identity key with a new version.
+    //
+    // payload.needs_enrollment: another device has to approve this one.
+    // payload.needs_identity_migration: the account predates identity keys.
+    async function registerAuthenticatedDevice({
+        endpoint = '/api/me/devices/register',
+        userId = window.CONFIG?.cnsUserId || 0,
+        username = window.CONFIG?.cnsUsername || '',
+        csrfToken = ''
+    } = {}) {
+        const recovering = /\/recover$/.test(endpoint);
+        let identity = await getOrCreateDeviceIdentity(userId);
+        let newIdentityKey = null;
+
+        const deviceFields = () => ({
+            device_id: identity.deviceId,
+            device_label: `${username || t('user_default')} device`,
+            public_key_jwk: identity.publicKeyJWK,
+            key_algorithm: identity.keyAlgorithm,
+            key_version: identity.keyVersion
+        });
+        const identitySetupFields = async () => newIdentityKey ? {
+            identity_public_key_jwk: newIdentityKey.publicKeyJWK,
+            identity_key_algorithm: newIdentityKey.keyAlgorithm,
+            wrapped_identity_private_key_b64: toBase64(await wrapIdentityKeyForDevice(newIdentityKey.privateKeyJWK, identity.publicKeyJWK)),
+            identity_key_wrap_alg: 'RSA-OAEP-2048+AES-GCM-256-v1',
+            identity_key_wrap_meta: { type: 'self-wrap', device_id: identity.deviceId }
+        } : {};
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        const send = async () => {
+            let response = await fetch(endpoint, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ ...deviceFields(), ...(await identitySetupFields()) })
+            });
+            if (response.status === 409 && userId) {
+                const conflict = await response.clone().json().catch(() => ({}));
+                if (conflict.code === 'DEVICE_ID_CONFLICT') {
+                    // This browser's device id is registered to another account
+                    // (shared browser). Give this account its own device identity.
+                    identity = await createUserScopedDeviceIdentity(userId);
+                    response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ ...deviceFields(), ...(await identitySetupFields()) })
+                    });
+                }
+            }
+            if (!response.ok) {
+                const payload = await response.json().catch(() => ({}));
+                throw new Error(payload.error || 'Device registration failed');
+            }
+            return response.json().catch(() => ({}));
+        };
+
+        if (recovering) newIdentityKey = await generateIdentityKeypair();
+        let payload = await send();
+        if (payload.needs_identity_setup) {
+            newIdentityKey = await generateIdentityKeypair();
+            payload = await send();
+        }
+
+        // Temporary: an account from before identity keys (or one of its
+        // devices without the identity key yet) is moved onto them with its
+        // legacy user key; see identity-migration.js.
+        const migration = window.SendlyIdentityMigration;
+        for (let attempt = 0; migration && attempt < 2 && !payload.identity_key_envelope; attempt++) {
+            if (!await migration.obtainIdentityKey({ userId, identity, payload, headers })) break;
+            payload = await send();
+        }
+
+        const identityKey = await identityKeyFromPayload(payload, identity);
+        if (identityKey) {
+            saveIdentityKey(userId, identityKey);
+            migration?.migrateFilesInBackground({ userId, identity, identityKey, headers });
+        }
+        rescueLockedFileKeysInBackground({ userId, payload, headers });
+        return { identity, identityKey, payload };
+    }
+
+    // After a recovery, file keys wrapped for an older identity key version
+    // stay locked. If this browser still holds such a version (e.g. it was
+    // offline during the recovery), it re-wraps them for the account's active
+    // public key as the server reports it. Runs once per page load.
+    let rescueRun = null;
+    function rescueLockedFileKeysInBackground({ userId, payload, headers }) {
+        const active = payload?.identity_public_key;
+        const stored = getIdentityKey(userId);
+        if (rescueRun || !active?.public_key_jwk || !stored) return rescueRun;
+        const oldKeys = [stored, ...(stored.retired || [])]
+            .filter((key) => key?.privateKeyJWK && key.keyVersion < active.key_version);
+        if (!oldKeys.length) return null;
+
+        rescueRun = (async () => {
+            for (const oldKey of oldKeys) {
+                let after = '';
+                for (;;) {
+                    const response = await fetch(`/api/me/identity-rescue/locked?version=${oldKey.keyVersion}&after=${encodeURIComponent(after)}`, { headers });
+                    const page = response.ok ? await response.json().catch(() => null) : null;
+                    if (!page?.items?.length) break;
+                    const items = [];
+                    for (const item of page.items) {
+                        try {
+                            const dek = await rsaOaepDecrypt(fromBase64(item.wrapped_dek_b64), oldKey.privateKeyJWK);
+                            items.push({
+                                file_id: item.file_id,
+                                identity_wrapped_dek_b64: toBase64(await wrapFileDEKForIdentity(dek, active.public_key_jwk)),
+                                identity_dek_wrap_alg: 'RSA-OAEP-2048-v1'
+                            });
+                        } catch (_) {
+                            // Not openable with this key; it stays locked.
+                        }
+                    }
+                    if (items.length) {
+                        const saved = await fetch('/api/me/identity-rescue', {
+                            method: 'POST',
+                            headers,
+                            body: JSON.stringify({ from_version: oldKey.keyVersion, to_version: active.key_version, items })
+                        });
+                        if (!saved.ok) break;
+                    }
+                    after = page.items[page.items.length - 1].file_id;
+                }
+            }
+        })().catch((error) => console.warn('Rescuing locked file keys failed:', error));
+        return rescueRun;
+    }
+
+    // Two JWKs describe the same RSA key if modulus and exponent match; a
+    // private JWK carries both, so it can be checked against a public one.
+    function isSameRsaKey(jwk, publicJWK) {
+        return !!jwk?.n && jwk.n === publicJWK?.n && jwk.e === publicJWK?.e;
+    }
+
+    // Opens this device's copy of the identity key from a registration
+    // response. A copy that doesn't open, or doesn't belong to the account's
+    // active identity public key, counts as none.
+    async function identityKeyFromPayload(payload, identity) {
+        const envelope = payload?.identity_key_envelope;
+        const active = payload?.identity_public_key;
+        if (!envelope?.wrapped_private_key_b64 || !active?.public_key_jwk) return null;
+        try {
+            const privateKeyJWK = await unwrapIdentityKeyForDevice(fromBase64(envelope.wrapped_private_key_b64), identity.privateKeyJWK);
+            if (!isSameRsaKey(privateKeyJWK, active.public_key_jwk)) return null;
+            return {
+                keyVersion: active.key_version,
+                keyAlgorithm: active.key_algorithm || 'RSA-OAEP-2048',
+                publicKeyJWK: active.public_key_jwk,
+                privateKeyJWK
+            };
+        } catch (error) {
+            console.error('Could not open this device\'s identity key copy:', error);
+            return null;
+        }
+    }
+
+    // Wraps a file key (or session password) for the signed-in user's own
+    // identity key, as the uploader's 'owner' envelope.
+    async function buildOwnerEnvelope(secretBytes, identityKey) {
+        if (!identityKey?.publicKeyJWK) throw new Error('This device has no identity key');
+        return {
+            identity_wrapped_dek_b64: toBase64(await wrapFileDEKForIdentity(secretBytes, identityKey.publicKeyJWK)),
+            identity_dek_wrap_alg: 'RSA-OAEP-2048-v1',
+            identity_dek_wrap_version: 1,
+            identity_key_version: identityKey.keyVersion
+        };
+    }
 
     async function encrypt(data, password) {
         const salt = generateRandomBytes(CONFIG.saltLength);
@@ -571,16 +866,24 @@ reject(new Error(t('error_failed_read_file')));
         toBase64,
         fromBase64,
         getOrCreateDeviceIdentity,
-        saveUserKeyRaw,
-        getUserKeyRaw,
-        generateUserKeyRaw,
-        wrapSecretWithUserKey,
-        unwrapSecretWithUserKey,
-        wrapUserKeyForDevice,
-        unwrapUserKeyForDevice,
+        getLegacyUserKeyRaw,
+        unwrapWithLegacyUserKey,
+        rsaOaepEncrypt,
+        rsaOaepDecrypt,
+        isSameRsaKey,
+        parseEnvelope,
+        unwrapFileDEK,
+        wrapFileDEKForIdentity,
+        buildOwnerEnvelope,
+        registerAuthenticatedDevice,
         cacheFileKey,
         getCachedFileKey,
-        removeCachedFileKey
+        removeCachedFileKey,
+        generateIdentityKeypair,
+        wrapIdentityKeyForDevice,
+        unwrapIdentityKeyForDevice,
+        saveIdentityKey,
+        getIdentityKey
     };
 })();
 
