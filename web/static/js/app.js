@@ -18,6 +18,7 @@
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
     const RECENT_UPLOADS_PER_PAGE = 10;
     const RECENT_SEARCH_DEBOUNCE_MS = 180;
+    const PAGE_LOCALE = document.documentElement.lang || undefined;
 
     let totalChunks = 0;
     let uploadedChunks = 0;
@@ -43,7 +44,7 @@
     let recentSearchQuery = '';
     let recentCurrentPage = 1;
     let recentTotalPages = 0;
-    let recentSearchOpen = false;
+    let recentLoadToken = 0;
     let recentSearchDebounceTimer = null;
     let activeTunnel = null;
     let tunnelPollTimer = null;
@@ -77,14 +78,11 @@
     const recentEmpty = document.getElementById('recent-empty');
     const recentList = document.getElementById('recent-list');
     const recentCount = document.getElementById('recent-count');
-    const recentSearchToggle = document.getElementById('recent-search-toggle');
-    const recentSearchWrap = document.getElementById('recent-search-wrap');
     const recentSearchInput = document.getElementById('recent-search-input');
     const recentRecoverDevice = document.getElementById('recent-recover-device');
-    const recentPagination = document.getElementById('recent-pagination');
-    const recentPrev = document.getElementById('recent-prev');
-    const recentNext = document.getElementById('recent-next');
-    const recentPageLabel = document.getElementById('recent-page-label');
+    const recentDeviceNotice = document.getElementById('recent-device-notice');
+    const recentMore = document.getElementById('recent-more');
+    const recentRetry = document.getElementById('recent-retry');
     const tunnelFilesSection = document.getElementById('tunnel-files-section');
     const tunnelList = document.getElementById('tunnel-list');
     const tunnelEmpty = document.getElementById('tunnel-empty');
@@ -128,6 +126,7 @@
     let pendingEnrollmentRefreshTimer = null;
     let pendingEnrollmentSocketEverOpened = false;
     let isDeviceUntrusted = false;
+    let initialDeviceReady = null;
     const recentFileStates = new Map();
     const activeDownloads = new Set();
     const LOCKED_FILE_INFO = t('device_connect_locked_info');
@@ -205,13 +204,9 @@
         }
 
         if (AUTHENTICATED) {
-            ensureDeviceReady().catch(() => {});
+            initialDeviceReady = ensureDeviceReady().catch(() => false);
             loadRecentUploads().catch(() => {});
             loadPendingEnrollments().catch(() => {});
-
-            refreshRecentFilesCache();
-            if (recentFilesCacheTimer) clearInterval(recentFilesCacheTimer);
-            recentFilesCacheTimer = setInterval(refreshRecentFilesCache, 60000);
         }
     }
 
@@ -336,9 +331,16 @@
         setRecoveryActionVisible(isDeviceUntrusted);
 
         if (!payload.needs_enrollment) {
-            if (!authUserKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
-                const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
-                authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+            // The server's envelope is authoritative: a locally stored key can be stale
+            // (e.g. generated on a page that never got it registered), and wrapping new
+            // uploads with it would make them unreadable everywhere else.
+            if (payload.user_key_envelope?.wrapped_uk_b64) {
+                try {
+                    const wrappedUK = SecureCrypto.fromBase64(payload.user_key_envelope.wrapped_uk_b64);
+                    authUserKeyRaw = await SecureCrypto.unwrapUserKeyForDevice(wrappedUK, authDeviceIdentity.privateKeyJWK);
+                } catch (error) {
+                    console.error('Failed to unwrap server user key envelope:', error);
+                }
             }
 
             if (!authUserKeyRaw && bootstrapUserKeyRaw) {
@@ -381,8 +383,14 @@
 
     async function loadRecentUploads(page = 1) {
         if (!recentSection || !AUTHENTICATED) return;
-        recentSection.classList.remove('hidden');
-        setRecentState('loading');
+        const append = page > 1;
+        const token = ++recentLoadToken;
+        if (append) {
+            recentMore?.classList.add('is-loading');
+            if (recentMore) recentMore.disabled = true;
+        } else {
+            setRecentState('loading');
+        }
 
         try {
             const params = new URLSearchParams({
@@ -400,11 +408,22 @@
                 throw new Error('Failed to load recent uploads');
             }
             const payload = await response.json();
-            renderRecentUploads(payload);
+            if (token !== recentLoadToken) return;
+            renderRecentUploads(payload, append);
             prefetchRecentLockStates(payload?.items || []).catch(() => {});
         } catch (error) {
+            if (token !== recentLoadToken) return;
             console.error(error);
-            setRecentState('error');
+            if (append) {
+                showErrorBanner(t('state_failed_load'));
+            } else {
+                setRecentState('error');
+            }
+        } finally {
+            if (token === recentLoadToken && recentMore) {
+                recentMore.classList.remove('is-loading');
+                recentMore.disabled = false;
+            }
         }
     }
 
@@ -847,63 +866,113 @@
         recentError.classList.toggle('hidden', state !== 'error');
         recentEmpty.classList.toggle('hidden', state !== 'empty');
         recentList.classList.toggle('hidden', state !== 'ready');
-        if (recentPagination && state !== 'ready') {
-            recentPagination.classList.add('hidden');
+        if (recentMore && state !== 'ready') {
+            recentMore.classList.add('hidden');
         }
     }
 
-    function renderRecentUploads(payload) {
+    const FILE_KIND_ICONS = [
+        [/^(png|jpe?g|gif|webp|svg|heic|heif|avif|bmp|tiff?|ico)$/, 'file-image'],
+        [/^(mp4|mov|mkv|webm|avi|m4v|wmv|flv)$/, 'file-video-camera'],
+        [/^(mp3|wav|flac|ogg|m4a|aac|opus|wma)$/, 'file-music'],
+        [/^(zip|rar|7z|tar|gz|tgz|bz2|xz|zst|iso|dmg)$/, 'file-archive'],
+        [/^(xlsx?|csv|ods|numbers|tsv)$/, 'file-spreadsheet'],
+        [/^(js|ts|jsx|tsx|go|py|rb|rs|java|kt|c|cc|cpp|h|cs|php|sh|json|ya?ml|toml|xml|html?|css|sql)$/, 'file-code'],
+        [/^(pdf|docx?|odt|rtf|txt|md|pages|pptx?|key|odp|epub)$/, 'file-text'],
+    ];
+
+    function fileExtension(name) {
+        const match = /\.([a-z0-9]{1,8})$/i.exec(String(name || ''));
+        return match ? match[1].toLowerCase() : '';
+    }
+
+    function fileKindIcon(ext) {
+        const hit = FILE_KIND_ICONS.find(([pattern]) => pattern.test(ext));
+        return hit ? hit[1] : 'file';
+    }
+
+    function formatExpiryRelative(dateStr) {
+        const msLeft = new Date(dateStr) - new Date();
+        if (!(msLeft > 0)) return { label: t('format_expired'), soon: true };
+        const hours = msLeft / 3600000;
+        if (hours < 24) {
+            return { label: tpl('uploaded_expires_hours', { n: Math.max(1, Math.ceil(hours)) }), soon: true };
+        }
+        const days = Math.ceil(hours / 24);
+        return {
+            label: days === 1 ? tpl('uploaded_expires_days_one', { n: days }) : tpl('uploaded_expires_days', { n: days }),
+            soon: days <= 3
+        };
+    }
+
+    function renderRecentCard(item, index = 0) {
+        const locked = recentFileStates.get(item.file_id)?.locked;
+        const expiry = formatExpiryRelative(item.expires_at);
+        const expiresAbs = new Date(item.expires_at).toLocaleString(PAGE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
+        const name = escapeHtml(item.filename);
+        return `
+            <article class="uploaded-card${locked ? ' is-locked' : ''}" style="--i:${Math.min(index, 12)}" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${name}" data-share-url="${escapeHtml(item.share_url)}" data-expires-at="${escapeHtml(item.expires_at)}">
+                <div class="uploaded-card-top">
+                    <div class="uploaded-file-icon" aria-hidden="true"><i data-lucide="${fileKindIcon(fileExtension(item.filename))}"></i></div>
+                    <div class="uploaded-file-info">
+                        <p class="uploaded-file-name" title="${name}">${name}</p>
+                        <p class="uploaded-file-meta">
+                            <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
+                            <span class="uploaded-meta-dot" aria-hidden="true"></span>
+                            <span class="uploaded-meta-date">${escapeHtml(formatUploadDate(item.created_at))}</span>
+                            <span class="uploaded-meta-dot" aria-hidden="true"></span>
+                            <span class="uploaded-expiry${expiry.soon ? ' is-soon' : ''}" title="${escapeHtml(t('label_expires') + expiresAbs)}">${escapeHtml(expiry.label)}</span>
+                            <span class="uploaded-locked" title="${escapeHtml(LOCKED_FILE_INFO)}">${t('uploaded_locked')}</span>
+                            <span class="uploaded-progress-text" aria-live="polite"></span>
+                        </p>
+                    </div>
+                    <div class="uploaded-actions">
+                        <button type="button" class="uploaded-action" data-action="copy" aria-label="${t('label_copy_share')}" title="${t('label_copy_share')}" ${locked ? 'disabled' : ''}>
+                            <i data-lucide="link" class="uploaded-ic" aria-hidden="true"></i><i data-lucide="check" class="uploaded-ic-done" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="uploaded-action uploaded-action-primary" data-action="download" aria-label="${t('label_download_file')}" title="${t('label_download_file')}" ${locked ? 'disabled' : ''}>
+                            <i data-lucide="download" class="uploaded-ic" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="download-bar-track"><div class="download-bar-fill"></div></div>
+            </article>
+        `;
+    }
+
+    function renderRecentUploads(payload, append = false) {
         if (!recentList) return;
         const items = payload?.items || [];
         recentCurrentPage = payload?.page || 1;
         recentTotalPages = payload?.total_pages || 0;
         const totalItems = payload?.total || 0;
 
-        if (!items.length) {
+        if (recentCount) {
+            recentCount.textContent = `${totalItems} ${t(totalItems === 1 ? 'label_file' : 'label_files')}`;
+            recentCount.classList.toggle('hidden', !totalItems && !recentSearchQuery);
+        }
+
+        if (!append && !items.length) {
             setRecentState('empty');
-            if (recentEmpty) {
-                recentEmpty.textContent = recentSearchQuery
-                    ? t('state_no_search_results')
-                    : t('state_no_uploads');
-            }
-            updateRecentPagination();
+            const emptyTitle = document.getElementById('recent-empty-title');
+            const emptyDesc = document.getElementById('recent-empty-desc');
+            const emptyCta = document.getElementById('recent-empty-cta');
+            if (emptyTitle) emptyTitle.textContent = recentSearchQuery ? t('state_no_search_results') : t('uploaded_empty_title');
+            if (emptyDesc) emptyDesc.classList.toggle('hidden', !!recentSearchQuery);
+            if (emptyCta) emptyCta.classList.toggle('hidden', !!recentSearchQuery);
             return;
         }
 
         setRecentState('ready');
-
-        recentList.innerHTML = items.map((item, idx) => {
-            const locked = recentFileStates.get(item.file_id)?.locked;
-            const opacity = Math.max(0.05, 1.0 - idx * 0.19);
-            const expiresLabel = formatExpiryDate(item.expires_at);
-            return `
-                <div class="file-entry${locked ? ' is-locked' : ''}" style="opacity: ${opacity};" data-file-id="${item.file_id}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${item.share_url}" data-expires-at="${item.expires_at}"${locked ? ` title="${LOCKED_FILE_INFO}"` : ''}>
-                    <div class="file-entry-left">
-                        <span class="file-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
-                        <span class="file-info">${locked ? t('label_file_info_locked') + expiresLabel : SecureCrypto.formatFileSize(item.size_bytes) + t('label_expires_sep') + expiresLabel}</span>
-                    </div>
-                    <div class="file-entry-right">
-                        <button class="recent-action" data-action="copy" aria-label="${t('label_copy_share')}" title="${t('label_copy_share')}" ${locked ? 'disabled' : ''}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-                            </svg>
-                        </button>
-                        <button class="recent-action" data-action="download" aria-label="${t('label_download_file')}" title="${t('label_download_file')}" ${locked ? 'disabled' : ''}>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                <polyline points="7 10 12 15 17 10"/>
-                                <line x1="12" y1="15" x2="12" y2="3"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        recentList.querySelectorAll('.recent-action').forEach((btn) => {
-            btn.addEventListener('click', handleRecentAction);
-        });
+        const html = items.map((item, index) => renderRecentCard(item, index)).join('');
+        if (append) {
+            recentList.insertAdjacentHTML('beforeend', html);
+        } else {
+            recentList.innerHTML = html;
+        }
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
+        }
         updateRecentPagination();
     }
 
@@ -1227,6 +1296,10 @@
         if (!Array.isArray(items) || !items.length) {
             return;
         }
+        // Let the initial device registration finish first, otherwise every item
+        // would kick off its own registration request.
+        await initialDeviceReady;
+        if (isDeviceUntrusted) return;
 
         await Promise.allSettled(items.map(async (item) => {
             const fileId = item?.file_id;
@@ -1244,46 +1317,8 @@
     }
 
     function updateRecentPagination() {
-        if (!recentPagination || !recentPrev || !recentNext || !recentPageLabel) return;
-
-        const hasPages = recentTotalPages > 1;
-        recentPagination.classList.toggle('hidden', !hasPages);
-        if (!hasPages) {
-            return;
-        }
-
-        recentPrev.disabled = recentCurrentPage <= 1;
-        recentNext.disabled = recentCurrentPage >= recentTotalPages;
-        recentPageLabel.textContent = `Page ${recentCurrentPage} of ${recentTotalPages}`;
-    }
-
-    function setRecentSearchOpen(isOpen) {
-        recentSearchOpen = isOpen;
-        if (!recentSearchWrap || !recentSearchToggle) return;
-
-        recentSearchWrap.classList.toggle('hidden', !isOpen);
-        recentSearchToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        recentSearchToggle.innerHTML = isOpen
-            ? '<i data-lucide="x" style="width: 0.9rem; height: 0.9rem;"></i>'
-            : '<i data-lucide="search" style="width: 0.9rem; height: 0.9rem;"></i>';
-
-        if (window.lucide?.createIcons) {
-            window.lucide.createIcons();
-        }
-
-        if (isOpen) {
-            recentSearchInput?.focus();
-            return;
-        }
-
-        if (recentSearchQuery) {
-            recentSearchQuery = '';
-            if (recentSearchInput) {
-                recentSearchInput.value = '';
-            }
-            recentCurrentPage = 1;
-            loadRecentUploads(1);
-        }
+        if (!recentMore) return;
+        recentMore.classList.toggle('hidden', recentCurrentPage >= recentTotalPages);
     }
 
     function handleRecentSearchInput() {
@@ -1303,52 +1338,88 @@
     }
 
     async function handleRecentAction(event) {
-        const button = event.currentTarget;
-        const item = button.closest('.file-entry');
-        if (!item) return;
+        const button = event.target.closest('.uploaded-action');
+        if (!button || button.disabled) return;
+        const item = button.closest('.uploaded-card');
+        if (!item || item.classList.contains('is-locked')) return;
 
         const fileId = item.dataset.fileId;
         const fileName = item.dataset.fileName;
-        const shareUrl = item.dataset.shareUrl;
         const action = button.dataset.action;
-        let keepDisabled = false;
 
         try {
             if (action === 'download') {
-                button.disabled = true;
                 await downloadOwnedFile(fileId, fileName, '', item);
             } else if (action === 'copy') {
-                const passphrase = await getOwnedFilePassphrase(fileId);
-                const copied = await copyToClipboard(`${shareUrl}#${passphrase}`, false, true);
-                if (!copied) {
-                    showToast(t('toast_copy_failed'));
-                }
+                await copyRecentShareLink(item, button);
             }
         } catch (error) {
             console.error(error);
             if (isLockedFileError(error)) {
                 markRecentFileLocked(fileId, error.message);
-                keepDisabled = true;
                 showErrorBanner(error.message);
                 return;
             }
             showErrorBanner(tpl('toast_action_failed', {msg: error.message}));
-        } finally {
-            if (!keepDisabled) {
-                button.disabled = false;
+        }
+    }
+
+    async function copyRecentShareLink(item, button) {
+        const fileId = item.dataset.fileId;
+        const shareUrl = item.dataset.shareUrl;
+        if (!fileId || !shareUrl) return;
+
+        // Clipboard writes must happen close to the click. If the key is not cached yet,
+        // hand the clipboard a promise (Safari/Chrome) instead of awaiting network first.
+        const linkPromise = getOwnedFilePassphrase(fileId).then((passphrase) => `${shareUrl}#${passphrase}`);
+        let copied = false;
+        if (!SecureCrypto.getCachedFileKey(fileId) && window.ClipboardItem && navigator.clipboard?.write) {
+            try {
+                await navigator.clipboard.write([
+                    new ClipboardItem({ 'text/plain': linkPromise.then((link) => new Blob([link], { type: 'text/plain' })) })
+                ]);
+                copied = true;
+            } catch (error) {
+                await linkPromise;
             }
         }
+        if (!copied) {
+            copied = await copyToClipboard(await linkPromise, true);
+        }
+        if (!copied) {
+            showToast(t('toast_copy_failed'));
+            return;
+        }
+
+        showToast(t('toast_link_copied'));
+        clearTimeout(button._copiedTimer);
+        button.classList.add('is-copied');
+        button._copiedTimer = setTimeout(() => button.classList.remove('is-copied'), 1800);
+    }
+
+    function setRecentCardProgress(cardEl, state, pct = 0, text = '') {
+        cardEl.classList.remove('active', 'done', 'error');
+        if (state) cardEl.classList.add(state);
+        const fill = cardEl.querySelector('.download-bar-fill');
+        if (fill) fill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+        const textEl = cardEl.querySelector('.uploaded-progress-text');
+        if (textEl) textEl.textContent = text;
     }
 
     async function downloadOwnedFile(fileId, fileName, tunnelId = '', cardEl = null) {
         if (activeDownloads.has(fileId)) return;
-        const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
+        const isUploadedCard = !!cardEl?.classList.contains('uploaded-card');
 
         let progressFill = null;
         let downloadBtn = null;
         let originalBtnHtml = '';
 
-        if (cardEl) {
+        activeDownloads.add(fileId);
+        if (isUploadedCard) {
+            downloadBtn = cardEl.querySelector('.uploaded-action[data-action="download"]');
+            if (downloadBtn) downloadBtn.disabled = true;
+            setRecentCardProgress(cardEl, 'active', 0, t('status_downloading'));
+        } else if (cardEl) {
             const progressBar = document.createElement('div');
             progressBar.className = 'file-download-progress';
             progressFill = document.createElement('div');
@@ -1356,7 +1427,6 @@
             progressBar.appendChild(progressFill);
             cardEl.appendChild(progressBar);
 
-            activeDownloads.add(fileId);
             downloadBtn = cardEl.querySelector('.recent-action[data-action="download"]');
             if (downloadBtn && !downloadBtn.disabled) {
                 originalBtnHtml = downloadBtn.innerHTML;
@@ -1365,13 +1435,17 @@
             }
         }
 
-        const updateProgress = (pct) => {
-            if (progressFill) {
+        const updateProgress = (pct, text) => {
+            if (isUploadedCard) {
+                setRecentCardProgress(cardEl, 'active', pct, `${text} ${Math.floor(pct)}%`);
+            } else if (progressFill) {
                 progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
             }
         };
 
+        let succeeded = false;
         try {
+            const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
             const response = await fetch(`/api/file/${fileId}/download`);
             if (!response.ok) {
                 throw new Error('Failed to download encrypted file');
@@ -1389,7 +1463,7 @@
                 chunks.push(value);
                 received += value.length;
                 if (total) {
-                    updateProgress((received / total) * 80);
+                    updateProgress((received / total) * 80, t('status_downloading'));
                 }
             }
 
@@ -1397,7 +1471,7 @@
             let decrypted;
             try {
                 decrypted = await SecureCrypto.decryptBlob(encryptedBlob, passphrase, (progress) => {
-                    updateProgress(80 + progress * 0.2);
+                    updateProgress(80 + progress * 0.2, t('status_decrypting'));
                 });
             } catch (error) {
                 const lockedError = new Error('This file is locked. This could happen if you recovered your account after you uploaded this file.');
@@ -1413,12 +1487,28 @@
             document.body.appendChild(a);
             a.click();
             a.remove();
-            URL.revokeObjectURL(url);
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
 
-            updateProgress(100);
-            await new Promise((resolve) => setTimeout(resolve, 600));
+            succeeded = true;
+            if (isUploadedCard) {
+                setRecentCardProgress(cardEl, 'done', 100, t('shared_complete'));
+            } else {
+                updateProgress(100);
+            }
+            await new Promise((resolve) => setTimeout(resolve, isUploadedCard ? 2200 : 600));
         } finally {
             activeDownloads.delete(fileId);
+            if (isUploadedCard) {
+                if (succeeded || !cardEl.classList.contains('is-locked')) {
+                    setRecentCardProgress(cardEl, succeeded ? '' : 'error', 0, succeeded ? '' : t('toast_download_failed'));
+                }
+                if (!succeeded) {
+                    setTimeout(() => {
+                        if (cardEl.classList.contains('error')) setRecentCardProgress(cardEl, '', 0, '');
+                    }, 4000);
+                }
+                if (downloadBtn && !cardEl.classList.contains('is-locked')) downloadBtn.disabled = false;
+            }
             if (progressFill && progressFill.parentNode) {
                 const bar = progressFill.parentNode;
                 if (bar.parentNode) bar.parentNode.removeChild(bar);
@@ -1436,6 +1526,9 @@
             return cached;
         }
 
+        if (initialDeviceReady) {
+            await initialDeviceReady;
+        }
         if (!authDeviceIdentity) {
             const ready = await ensureDeviceReady();
             if (!ready && isDeviceUntrusted) {
@@ -1604,31 +1697,13 @@
 
     function updateRecentFileLockedState(fileId) {
         if (!fileId) return;
+        const item = recentList?.querySelector(`.uploaded-card[data-file-id="${CSS.escape(fileId)}"]`);
+        if (!item) return;
 
-        const selectors = [
-            recentList?.querySelector(`.file-entry[data-file-id="${CSS.escape(fileId)}"]`),
-            popupRecentList?.querySelector(`.popup-entry[data-file-id="${CSS.escape(fileId)}"]`)
-        ];
-
-        selectors.forEach((item) => {
-            if (!item) return;
-
-            item.classList.add('is-locked');
-            item.setAttribute('title', LOCKED_FILE_INFO);
-
-            if (item.classList.contains('file-entry')) {
-                item.querySelectorAll('.recent-action').forEach((btn) => {
-                    btn.disabled = true;
-                });
-                const infoEl = item.querySelector('.file-info');
-                const expiresAt = item.dataset.expiresAt;
-                if (infoEl && expiresAt) {
-                    infoEl.textContent = t('label_file_info_locked') + formatExpiryDate(expiresAt);
-                }
-            } else if (item.classList.contains('popup-entry')) {
-                const downloadBtn = item.querySelector('.popup-entry-download');
-                if (downloadBtn) downloadBtn.disabled = true;
-            }
+        item.classList.add('is-locked');
+        item.setAttribute('title', LOCKED_FILE_INFO);
+        item.querySelectorAll('.uploaded-action').forEach((btn) => {
+            btn.disabled = true;
         });
     }
 
@@ -1638,11 +1713,11 @@
         const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         const dayDiff = Math.round((dateStart - todayStart) / 86400000);
-        const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const time = date.toLocaleTimeString(PAGE_LOCALE, { hour: '2-digit', minute: '2-digit' });
 
-        if (dayDiff === 0) return `Today ${time}`;
-        if (dayDiff === -1) return `Yesterday ${time}`;
-        return date.toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        if (dayDiff === 0) return `${t('format_today')} ${time}`;
+        if (dayDiff === -1) return `${t('format_yesterday')} ${time}`;
+        return date.toLocaleString(PAGE_LOCALE, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
     function formatExpiryDate(dateStr) {
@@ -1673,105 +1748,6 @@
     }
 
      
-
-    const recentFilesOverlay = document.getElementById('recent-files-overlay');
-    const recentFilesPopup = recentFilesOverlay?.querySelector('.recent-files-popup');
-    const popupRecentList = document.getElementById('popup-recent-list');
-    const popupClose = recentFilesOverlay?.querySelector('.popup-close');
-
-    let recentFilesCache = null;
-    let recentFilesCacheTimer = null;
-
-    async function refreshRecentFilesCache() {
-        if (!AUTHENTICATED) return;
-        try {
-            const params = new URLSearchParams({ page: '1', per_page: '100' });
-            const response = await fetch(`/api/me/recent-uploads?${params.toString()}`, {
-                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-            });
-            if (!response.ok) throw new Error('Failed to load uploads');
-            const payload = await response.json();
-            recentFilesCache = payload.items || [];
-        } catch (error) {
-            console.error('Failed to refresh recent files cache:', error);
-        }
-    }
-
-    async function openRecentFilesPopup() {
-        if (!AUTHENTICATED || !recentFilesOverlay || !recentFilesPopup) return;
-
-        recentFilesOverlay.classList.remove('hidden');
-        recentFilesPopup.classList.remove('closing');
-        document.addEventListener('keydown', onEscKey);
-
-        if (window.lucide && lucide.createIcons) {
-            lucide.createIcons();
-        }
-
-        if (recentFilesCache) {
-            renderPopupRecentFiles(recentFilesCache);
-        } else {
-            popupRecentList.innerHTML = '<p class="popup-empty">' + t('state_loading') + '</p>';
-            await refreshRecentFilesCache();
-            if (recentFilesCache) {
-                renderPopupRecentFiles(recentFilesCache);
-            } else {
-                popupRecentList.innerHTML = '<p class="popup-empty">' + t('state_failed_load') + '</p>';
-            }
-        }
-
-        prefetchRecentLockStates(recentFilesCache || []).catch(() => {});
-    }
-
-    function closeRecentFilesPopup() {
-        if (!recentFilesOverlay || !recentFilesPopup) return;
-        recentFilesOverlay.classList.add('hidden');
-        recentFilesPopup.classList.remove('closing');
-        document.removeEventListener('keydown', onEscKey);
-    }
-
-    function onEscKey(e) {
-        if (e.key === 'Escape') closeRecentFilesPopup();
-    }
-
-    function renderPopupRecentFiles(items) {
-        if (!items.length) {
-            popupRecentList.innerHTML = '<p class="popup-empty">' + t('state_no_files_yet') + '</p>';
-            return;
-        }
-
-        popupRecentList.innerHTML = items.map((item) => {
-            const locked = recentFileStates.get(item.file_id)?.locked;
-            const expiresText = formatExpiryDate(item.expires_at);
-            return `
-                <div class="popup-entry${locked ? ' is-locked' : ''}" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${escapeHtml(item.filename)}" data-share-url="${escapeHtml(item.share_url)}" data-expires-at="${item.expires_at}"${locked ? ` title="${LOCKED_FILE_INFO}"` : ''}>
-                    <span class="popup-entry-filename" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</span>
-                    <span class="popup-entry-expires">${t('label_expires')}${expiresText}</span>
-                    <button class="popup-entry-download" aria-label="${t('label_download')}" title="${t('label_download')}" ${locked ? 'disabled' : ''}>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                        </svg>
-                    </button>
-                </div>
-            `;
-        }).join('');
-
-        popupRecentList.querySelectorAll('.popup-entry-download').forEach((btn) => {
-            const entry = btn.closest('.popup-entry');
-            if (!entry) return;
-            btn.addEventListener('click', () => {
-                if (entry.classList.contains('is-locked')) return;
-                const fileId = entry.dataset.fileId;
-                const fileName = entry.dataset.fileName;
-                const shareUrl = entry.dataset.shareUrl;
-                if (fileId && fileName) {
-                    downloadOwnedFile(fileId, fileName, '', entry);
-                }
-            });
-        });
-    }
 
     function setupEventListeners() {
         dropZone?.addEventListener('click', () => fileInput?.click());
@@ -1812,20 +1788,14 @@
             });
         });
 
-        recentSearchToggle?.addEventListener('click', () => {
-            setRecentSearchOpen(!recentSearchOpen);
-        });
         recentSearchInput?.addEventListener('input', handleRecentSearchInput);
-        recentPrev?.addEventListener('click', () => {
-            if (recentCurrentPage > 1) {
-                loadRecentUploads(recentCurrentPage - 1);
-            }
-        });
-        recentNext?.addEventListener('click', () => {
+        recentList?.addEventListener('click', handleRecentAction);
+        recentMore?.addEventListener('click', () => {
             if (recentCurrentPage < recentTotalPages) {
                 loadRecentUploads(recentCurrentPage + 1);
             }
         });
+        recentRetry?.addEventListener('click', () => loadRecentUploads(1));
 
         recentRecoverDevice?.addEventListener('click', handleRecoverLostDevice);
 
@@ -1864,20 +1834,6 @@
                 await handleEndTunnel();
             } catch (error) {
                 showErrorBanner(error.message || t('toast_tunnel_failed_end'));
-            }
-        });
-
-         
-
-        const recentFilesLink = document.querySelector('.recent-files-link');
-        recentFilesLink?.addEventListener('click', (e) => {
-            e.preventDefault();
-            openRecentFilesPopup();
-        });
-        popupClose?.addEventListener('click', closeRecentFilesPopup);
-        recentFilesOverlay?.addEventListener('click', (e) => {
-            if (e.target === recentFilesOverlay) {
-                closeRecentFilesPopup();
             }
         });
     }
@@ -2672,8 +2628,7 @@
     }
 
     function setRecoveryActionVisible(visible) {
-        if (!recentRecoverDevice) return;
-        recentRecoverDevice.classList.toggle('hidden', !(visible && isDeviceUntrusted));
+        (recentDeviceNotice || recentRecoverDevice)?.classList.toggle('hidden', !(visible && isDeviceUntrusted));
     }
 
     function showDownloadActivityOverlay(show) {

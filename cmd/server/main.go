@@ -133,6 +133,7 @@ func main() {
 	router.GET("/data-encryption", pageHandler.DataEncryption)
 	router.GET("/help", pageHandler.HelpPage)
 	router.GET("/shared/:id", pageHandler.SharedFile)
+	router.GET("/uploaded", pageHandler.Uploaded)
 
 	auth := router.Group("/auth")
 	{
