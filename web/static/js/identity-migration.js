@@ -116,17 +116,18 @@ const SendlyIdentityMigration = (function () {
     }
 
     // Re-wraps the account's files from the legacy user key to the identity
-    // key, page by page, showing progress. Runs once per page load.
+    // key, page by page, showing progress. Runs once per page load. Files this
+    // device can't open (wrapped with another user key) stay locked and come
+    // back on every run, so notices only count files that were migrated.
     async function migrateFiles({ userId, identity, identityKey, headers }) {
         const userKey = await legacyUserKey(userId, identity, headers);
         if (!userKey) return;
         let after = '';
-        let done = 0;
+        let seen = 0;
+        let migrated = 0;
         for (;;) {
             const page = await getJSON(`/api/me/identity-migration/files?device_id=${encodeURIComponent(identity.deviceId)}&after=${encodeURIComponent(after)}`, headers);
             if (!page?.items?.length) break;
-            const total = done + page.items.length + (page.remaining || 0);
-            showNotice(t('identity_migration_progress').replace('{done}', done).replace('{total}', total));
 
             const items = [];
             for (const item of page.items) {
@@ -146,18 +147,27 @@ const SendlyIdentityMigration = (function () {
                     console.warn('Could not migrate file', item.file_id, error);
                 }
             }
+            seen += page.items.length;
             if (items.length) {
+                const total = seen + (page.remaining || 0);
+                showNotice(t('identity_migration_progress').replace('{done}', seen).replace('{total}', total));
                 const response = await postJSON('/api/me/identity-migration/files', headers, {
                     device_id: identity.deviceId,
                     identity_key_version: identityKey.keyVersion,
                     items
                 });
-                if (!response.ok) return;
+                if (!response.ok) {
+                    if (migrated) showNotice(t('identity_migration_done'), true);
+                    else SendlyToast.dismiss('identity-migration');
+                    return;
+                }
+                const result = await response.json().catch(() => null);
+                migrated += result?.stored ?? items.length;
             }
-            done += page.items.length;
             after = page.items[page.items.length - 1].file_id;
         }
-        if (done) showNotice(t('identity_migration_done'), true);
+        if (migrated) showNotice(t('identity_migration_done'), true);
+        else SendlyToast.dismiss('identity-migration');
     }
 
     function migrateFilesInBackground(options) {
