@@ -6,3 +6,14 @@ volumes:
   postgres_data:
   redis_data:
   chunk_data:
+# Fixed name and subnet: Coolify deploys under a random project name, which
+# otherwise gives this network a new name (and gateway) on every deploy.
+# Traffic from the published port arrives from the gateway (10.250.250.1),
+# which is what TRUSTED_PROXIES has to name.
+networks:
+  sendly:
+    name: sendly-prod
+    ipam:
+      config:
+        - subnet: 10.250.250.0/24
+          gateway: 10.250.250.1
