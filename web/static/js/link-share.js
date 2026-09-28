@@ -134,15 +134,42 @@
             authDeviceIdentity = result.identity;
             authIdentityKey = result.identityKey;
             if (!authIdentityKey) {
-                showErrorBanner(t('toast_device_approve'));
+                await requestDeviceApproval(result.payload);
                 return false;
             }
+            SendlyToast.dismiss('device-approval');
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
             authIdentityKey = null;
             return false;
         }
+    }
+
+    // This page has no approval dialog: ask for approval (the server returns
+    // the pending request if there already is one) and keep a notice up. An
+    // account from before identity keys is approved by one of its older
+    // devices, once that device has opened Sendly and updated the account.
+    async function requestDeviceApproval(payload) {
+        const legacy = !!payload?.needs_identity_migration;
+        if (!payload?.needs_enrollment && !legacy) {
+            showErrorBanner(t('toast_device_approve'));
+            return;
+        }
+        try {
+            await fetch('/api/me/devices/enrollments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
+                body: JSON.stringify({ request_device_id: authDeviceIdentity?.deviceId })
+            });
+        } catch (error) {
+            console.warn('Device approval request failed:', error);
+        }
+        SendlyToast.show(t(legacy ? 'toast_device_pending_legacy' : 'toast_device_pending'), {
+            id: 'device-approval',
+            type: 'info',
+            duration: 0
+        });
     }
 
     function setupEventListeners() {
@@ -1039,6 +1066,7 @@
         try { await SecureCrypto.loadWordList(); } catch (error) { console.error('Word list failed:', error); }
         setupEventListeners();
         loadRecentShareRecipients();
+        if (AUTHENTICATED) ensureDeviceReady();
     }
 
     const style = document.createElement('style');

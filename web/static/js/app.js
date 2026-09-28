@@ -125,6 +125,10 @@
     let pendingEnrollmentRefreshTimer = null;
     let pendingEnrollmentSocketEverOpened = false;
     let isDeviceUntrusted = false;
+    // The account predates identity keys and this device can't migrate it:
+    // it waits for approval from an older device, which migrates the account
+    // when it next opens Sendly.
+    let awaitingLegacyApproval = false;
     let initialDeviceReady = null;
     const recentFileStates = new Map();
     const activeDownloads = new Set();
@@ -228,13 +232,8 @@
     async function ensureDeviceReady() {
         try {
         const payload = await registerCurrentDevice();
-        if (payload?.needs_identity_migration) {
-            // The account predates identity keys; a device holding its legacy
-            // user key has to migrate it before this device can be trusted.
-            isDeviceUntrusted = true;
-            return false;
-        }
-        if (payload?.needs_enrollment) {
+        awaitingLegacyApproval = !!payload?.needs_identity_migration && !authIdentityKey;
+        if (payload?.needs_enrollment || awaitingLegacyApproval) {
             isDeviceUntrusted = true;
             setRecoveryActionVisible(true);
 
@@ -302,7 +301,7 @@
         authIdentityKey = result.identityKey;
         const payload = result.payload;
         isDeviceUntrusted = !authIdentityKey;
-        setRecoveryActionVisible(!!payload.needs_enrollment);
+        setRecoveryActionVisible(!!payload.needs_enrollment || (!!payload.needs_identity_migration && !authIdentityKey));
         return payload;
     }
 
@@ -501,7 +500,7 @@
         const requestedAt = enrollment.created_at ? formatUploadDate(enrollment.created_at) : 'just now';
 
         deviceApprovalTitle.textContent = t('device_pending_title');
-        deviceApprovalMessage.textContent = t('device_pending_message');
+        deviceApprovalMessage.textContent = t(awaitingLegacyApproval ? 'device_pending_message_legacy' : 'device_pending_message');
         deviceApprovalMeta.innerHTML = [
             `<span>${t('device_connect_device')}${escapeHtml(deviceName)}</span>`,
             `<span>${t('device_connect_device_id')}${escapeHtml(deviceId)}</span>`,
@@ -866,7 +865,7 @@
         const expiresAbs = new Date(item.expires_at).toLocaleString(PAGE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' });
         const name = escapeHtml(item.filename);
         return `
-            <article class="uploaded-card${locked ? ' is-locked' : ''}" style="--i:${Math.min(index, 12)}" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${name}" data-share-url="${escapeHtml(item.share_url)}" data-expires-at="${escapeHtml(item.expires_at)}">
+            <article class="uploaded-card${locked ? ' is-locked' : ''}" style="--i:${Math.min(index, 12)}" data-locked-tip="${escapeHtml(t('uploaded_locked_tooltip'))}" data-file-id="${escapeHtml(item.file_id)}" data-file-name="${name}" data-share-url="${escapeHtml(item.share_url)}" data-expires-at="${escapeHtml(item.expires_at)}">
                 <div class="uploaded-card-top">
                     <div class="uploaded-file-icon" aria-hidden="true"><i data-lucide="${fileKindIcon(fileExtension(item.filename))}"></i></div>
                     <div class="uploaded-file-info">
@@ -877,7 +876,7 @@
                             <span class="uploaded-meta-date">${escapeHtml(formatUploadDate(item.created_at))}</span>
                             <span class="uploaded-meta-dot" aria-hidden="true"></span>
                             <span class="uploaded-expiry${expiry.soon ? ' is-soon' : ''}" title="${escapeHtml(t('label_expires') + expiresAbs)}">${escapeHtml(expiry.label)}</span>
-                            <span class="uploaded-locked" title="${escapeHtml(LOCKED_FILE_INFO)}">${t('uploaded_locked')}</span>
+                            <span class="uploaded-locked" tabindex="0" aria-label="${escapeHtml(t('uploaded_locked') + ': ' + t('uploaded_locked_tooltip'))}">${t('uploaded_locked')}<i data-lucide="info" aria-hidden="true"></i></span>
                             <span class="uploaded-progress-text" aria-live="polite"></span>
                         </p>
                     </div>
@@ -1571,7 +1570,6 @@
         if (!item) return;
 
         item.classList.add('is-locked');
-        item.setAttribute('title', LOCKED_FILE_INFO);
         item.querySelectorAll('.uploaded-action').forEach((btn) => {
             btn.disabled = true;
         });
