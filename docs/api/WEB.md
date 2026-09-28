@@ -303,7 +303,7 @@ Caller authentication for all tunnel endpoints below:
 - Host: the initiating CNS user, or for a guest-started tunnel the `host_token` returned by `start`, sent as `X-Host-Token`.
 - Participant: a signed-in caller by CNS user; an anonymous joiner by `X-Device-ID` plus the `participant_token` returned by `join`, sent as `X-Participant-Token`.
 
-Non-members get `403 TUNNEL_FORBIDDEN`. Joiners must be approved by the host; until then they only see the lobby (tunnel, participants), and file lists, file access, uploads and key envelopes return `403 PARTICIPANT_NOT_APPROVED`.
+Non-members get `403 TUNNEL_FORBIDDEN`, a joiner the host declined gets `403 PARTICIPANT_REJECTED`. Joiners must be approved by the host; until then they only see the lobby (tunnel, participants), and file lists, file access, uploads and key envelopes return `403 PARTICIPANT_NOT_APPROVED`.
 
 Keys: the host's browser generates a session password and wraps it for each approved participant's throwaway public key (`POST /api/me/tunnels/:id/envelopes`); every file in the session is encrypted with it. A signed-in uploader also stores its own copy, wrapped with its identity key (`identity_*` fields on finalize); a guest uploader's copy is wrapped for its throwaway key (`wrapped_dek_*`).
 
@@ -335,13 +335,13 @@ Request JSON:
 }
 ```
 
-Anonymous joiners receive `participant_token` in the response (returned once). Re-joining with a `device_id` that already belongs to another participant returns `409 PARTICIPANT_CONFLICT`; the owner can re-join (same CNS user, or the same `X-Participant-Token`) to replace its key. Rate-limited with the strict limiter.
+Anonymous joiners receive `participant_token` in the response (returned once). Re-joining with a `device_id` that already belongs to another participant returns `409 PARTICIPANT_CONFLICT`; the owner can re-join (same CNS user, or the same `X-Participant-Token`) to replace its key. A joiner the host declined gets `403 PARTICIPANT_REJECTED` (checked before the tunnel's state, so it also applies after the start); otherwise an active tunnel returns `410 TUNNEL_ALREADY_ACTIVE`. Rate-limited with the strict limiter.
 
 ### `POST /api/me/tunnels/:id/participants/:participant_id/approve`
 Host only. Admit a joiner so the host can wrap the session key for it.
 
 ### `POST /api/me/tunnels/:id/participants/:participant_id/reject`
-Host only. Remove a joiner together with its key envelope and peer assignment.
+Host only. Remove a joiner together with its key envelope, and block its CNS user or device from joining this tunnel again (`tunnel_rejections`).
 
 ### `GET /api/me/tunnels/:id/participant-keys`
 Host only. Participants with public keys, including `approved` and `has_envelope`.
@@ -359,6 +359,8 @@ Get tunnel metadata and tunnel file list.
 Get only tunnel files.
 
 ### `POST /api/me/tunnels/:id/confirm`
+Host only. Starts the session: the tunnel becomes `active` and every approved participant moves into it. Anyone else gets `403 TUNNEL_NOT_AVAILABLE`.
+
 Request JSON:
 
 ```json

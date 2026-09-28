@@ -414,10 +414,9 @@
   "user_default": "User",
   "nobody_joined": "Nobody joined yet",
   "quickshare_approval_heading": "Waiting to join",
-  "quickshare_approval_hint": "Only let in people you invited. The code next to each name must match the code on their screen.",
+  "quickshare_approval_hint": "Only let in people you know. The code should match the one on their screen.",
   "quickshare_approve": "Let in",
   "quickshare_decline": "Decline",
-  "quickshare_waiting_approval": "Waiting for the host to let you in. Your code: {code}",
   "quickshare_pending_suffix": " (waiting)",
   "quickshare_approve_failed": "Could not update participant: {msg}",
 
@@ -463,5 +462,19 @@
   "app_0_pct": "0%",
 
   "identity_migration_progress": "Upgrading your encryption… {done} of {total} files",
-  "identity_migration_done": "Your encryption is upgraded."
+  "identity_migration_done": "Your encryption is upgraded.",
+
+  "quickshare_status_wait_title": "Waiting for the host",
+  "quickshare_status_wait_text": "Tell the host this code so they know it's you.",
+  "quickshare_status_in_title": "You're in",
+  "quickshare_status_in_text": "It starts as soon as the host taps Start.",
+  "quickshare_declined_title": "The host declined your request",
+  "quickshare_declined_desc": "You can't join this quick share.",
+  "quickshare_declined_home": "Back to start",
+  "quickshare_approve_all": "Let everyone in",
+  "quickshare_new_request": "{name} wants to join",
+  "quickshare_start_waiting_title": "Start without them?",
+  "quickshare_start_waiting_desc": "{count} still waiting to join. You can let them in later.",
+  "quickshare_start_waiting_desc_one": "1 person is still waiting to join. You can let them in later.",
+  "quickshare_start_anyway": "Start anyway"
 }

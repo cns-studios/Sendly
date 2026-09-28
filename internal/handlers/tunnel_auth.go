@@ -54,17 +54,6 @@ func (tc *tunnelCaller) approved() bool {
 	return tc.isHost || (tc.participant != nil && tc.participant.ApprovedAt.Valid)
 }
 
-func tunnelPeerApproved(c *gin.Context, db *storage.Postgres, tunnel *models.Tunnel, peerUserID int64, peerDeviceID string) (bool, error) {
-	if peerUserID == tunnel.InitiatorCNSUserID {
-		return true, nil
-	}
-	participant, err := db.FindTunnelParticipant(c.Request.Context(), tunnel.ID, peerUserID, peerDeviceID, "")
-	if err != nil {
-		return false, err
-	}
-	return participant != nil && participant.ApprovedAt.Valid, nil
-}
-
 func isTunnelHost(c *gin.Context, tunnel *models.Tunnel) bool {
 	if tunnel.InitiatorCNSUserID != 0 {
 		user := middleware.GetCNSUser(c)

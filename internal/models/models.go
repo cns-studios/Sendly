@@ -487,6 +487,7 @@ var (
 	ErrParticipantConflict      = &AppError{Code: "PARTICIPANT_CONFLICT", Message: "this device already belongs to another tunnel participant"}
 	ErrGuestDeviceRequired      = &AppError{Code: "DEVICE_ID_REQUIRED", Message: "device_id is required to join as a guest"}
 	ErrParticipantNotApproved   = &AppError{Code: "PARTICIPANT_NOT_APPROVED", Message: "the host has not approved this participant yet"}
+	ErrParticipantRejected      = &AppError{Code: "PARTICIPANT_REJECTED", Message: "the host declined this participant"}
 	ErrEnvelopeExists           = &AppError{Code: "ENVELOPE_EXISTS", Message: "participant already has a key envelope"}
 	ErrDeviceIDConflict         = &AppError{Code: "DEVICE_ID_CONFLICT", Message: "device id is registered to another account"}
 	ErrApproverNotTrusted       = &AppError{Code: "APPROVER_NOT_TRUSTED", Message: "approver device is not trusted"}
