@@ -4,9 +4,13 @@
 (function(){
     var card=document.getElementById('transfers-promo');
     if(!card)return;
+    // once dismissed, never shown again in this browser
+    var DISMISSED_KEY='sendly_transfers_promo_dismissed';
+    try{if(localStorage.getItem(DISMISSED_KEY)){card.remove();return;}}catch(e){}
     // wait while a modal (terms, device approval, ...) is open
     function modalOpen(){return !!document.querySelector('.tos-overlay:not(.hidden)');}
     function dismiss(){
+        try{localStorage.setItem(DISMISSED_KEY,'1');}catch(e){}
         card.classList.add('is-leaving');
         card.classList.remove('is-visible');
         setTimeout(function(){card.remove();},400);
