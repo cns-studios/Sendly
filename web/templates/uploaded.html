@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="{{.locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <meta name="description" content="{{.description}}">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="canonical" href="{{.canonicalURL}}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Sendly">
+    <meta property="og:title" content="{{.title}}">
+    <meta property="og:description" content="{{.description}}">
+    <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Sendly - Simply File Sharing">
+    <meta property="og:url" content="{{.canonicalURL}}">
+    <meta property="og:locale" content="{{.ogLocale}}">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="de_DE">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{.title}}">
+    <meta name="twitter:description" content="{{.description}}">
+    <meta name="twitter:image" content="{{.ogImage}}">
+    <meta name="twitter:image:alt" content="Sendly - Simply File Sharing">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
+
+
+    <script src="https://unpkg.com/lucide@latest"></script>
+<link rel="icon" type="image/png" href="/static/favicon.png">
+</head>
+<body class="page-shared page-uploaded">
+
+    <div id="tos-overlay" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="tos-modal-title" aria-describedby="tos-modal-description">
+            <p class="tos-modal-kicker">{{.t.tos_modal_kicker}}</p>
+            <h2 id="tos-modal-title">{{.t.tos_modal_title}}</h2>
+            <p id="tos-modal-description" class="tos-modal-description">
+                {{.t.tos_accept_desc}} <a href="/tos" target="_blank" rel="noopener">{{.t.footer_tos}}</a> {{.t.tos_accept_and}} <a href="/privacy" target="_blank" rel="noopener">{{.t.footer_privacy}}</a> {{.t.tos_accept_to_use_sendly}}
+            </p>
+            <div class="tos-modal-actions">
+                <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
+                <button id="tos-accept-btn" class="btn btn-accent btn-large">{{.t.tos_accept}}</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification-pill" class="notification-pill hidden" aria-live="polite">
+        <i id="notification-icon" class="notification-icon" data-lucide="info" style="width: 20px; height: 20px;"></i>
+        <span id="notification-text" class="notification-text"></span>
+    </div>
+
+    <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
+                <nav class="quicklinks">
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
+                </nav>
+            </div>
+            {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
+        </header>
+    </div>
+
+    {{template "mobile_menu" .}}
+
+    <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
+            <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
+                {{.t.device_approval_desc}}
+            </p>
+            <div id="device-approval-meta" style="margin-bottom:28px;font-size:14px;color:#555;line-height:1.6;"></div>
+            <div id="device-approval-waiting" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:20px;margin-bottom:28px;">
+                <div class="downloading-spinner" style="width:36px;height:36px;"></div>
+                <button id="device-approval-recover" type="button" style="background:none;border:none;color:#595959;font-size:15px;text-decoration:underline;cursor:pointer;padding:0;">
+                    {{.t.device_approval_recover}}
+                </button>
+            </div>
+            <span id="device-approval-count" style="display:none;"></span>
+            <div class="tos-modal-actions">
+                <button id="device-approval-decline" class="btn btn-secondary btn-large">{{.t.device_approval_decline}}</button>
+                <button id="device-approval-approve" class="btn btn-accent btn-large">{{.t.device_approval_approve}}</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="shared-content-wrapper uploaded-wrapper">
+            <section id="recent-uploads-section" class="uploaded-section" aria-labelledby="uploaded-title">
+                <div class="uploaded-head">
+                    <h1 id="uploaded-title" class="uploaded-title">{{.t.recent_files_title}}</h1>
+                    <p class="uploaded-subtitle">
+                        <span id="recent-count" class="uploaded-count hidden"></span>
+                        <span>{{.t.uploaded_subtitle}}</span>
+                    </p>
+                </div>
+
+                <label class="uploaded-search" for="recent-search-input">
+                    <i data-lucide="search" aria-hidden="true"></i>
+                    <input type="search" id="recent-search-input" placeholder="{{.t.uploaded_search_placeholder}}" autocomplete="off" enterkeyhint="search" aria-label="{{.t.uploaded_search_placeholder}}">
+                </label>
+
+                <div id="recent-device-notice" class="uploaded-notice hidden" role="status">
+                    <i data-lucide="shield-alert" aria-hidden="true"></i>
+                    <div class="uploaded-notice-text">
+                        <p>{{.t.uploaded_device_untrusted}}</p>
+                        <button type="button" id="recent-recover-device" class="uploaded-notice-link">{{.t.device_approval_recover}}</button>
+                    </div>
+                </div>
+
+                <div id="recent-loading" class="uploaded-list" aria-busy="true" aria-label="{{.t.state_loading}}">
+                    <div class="uploaded-card uploaded-skeleton"></div>
+                    <div class="uploaded-card uploaded-skeleton"></div>
+                    <div class="uploaded-card uploaded-skeleton"></div>
+                </div>
+
+                <div id="recent-error" class="uploaded-state hidden">
+                    <div class="uploaded-state-icon"><i data-lucide="cloud-off" aria-hidden="true"></i></div>
+                    <p class="uploaded-state-title">{{.t.state_failed_load}}</p>
+                    <button type="button" id="recent-retry" class="uploaded-state-btn">{{.t.quickshare_retry}}</button>
+                </div>
+
+                <div id="recent-empty" class="uploaded-state hidden">
+                    <div class="uploaded-state-icon"><i data-lucide="inbox" aria-hidden="true"></i></div>
+                    <p class="uploaded-state-title" id="recent-empty-title">{{.t.uploaded_empty_title}}</p>
+                    <p class="uploaded-state-desc" id="recent-empty-desc">{{.t.uploaded_empty_desc}}</p>
+                    <a href="/link" class="uploaded-state-btn" id="recent-empty-cta">{{.t.card_send_btn}}</a>
+                </div>
+
+                <div id="recent-list" class="uploaded-list hidden"></div>
+
+                <button type="button" id="recent-more" class="uploaded-more hidden">{{.t.uploaded_load_more}}</button>
+            </section>
+        </div>
+    </div>
+
+    <div id="action-modal" class="tos-overlay hidden" aria-hidden="true">
+        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="action-modal-title" aria-describedby="action-modal-description">
+            <h2 id="action-modal-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.action_modal_title}}</h2>
+            <p id="action-modal-description" class="tos-modal-description" style="margin-bottom:28px;"></p>
+            <div class="tos-modal-actions">
+                <button id="action-modal-cancel" class="btn btn-secondary btn-large">{{.t.action_modal_cancel}}</button>
+                <button id="action-modal-confirm" class="btn btn-accent btn-large">{{.t.action_modal_continue}}</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer page-shared-footer">
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
+    </footer>
+
+    <script>
+        window.CONFIG = {{.configJSON}};
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            if (window.lucide && lucide.createIcons) {
+                lucide.createIcons();
+            } else if (window.lucide && lucide.replace) {
+                lucide.replace();
+            }
+        });
+
+        // Build initials avatar fallback
+        function buildInitialsAvatar(username) {
+            if (!username) return document.createElement('span');
+            var initials = username.trim().split(/\s+/).map(function(w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+            // Deterministic color from username - WCAG AA compliant (≥4.5:1 against white)
+            var hash = 0;
+            for (var i = 0; i < username.length; i++) {
+                hash = username.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            var palette = [
+                '#004AAD', '#006B3F', '#8B0000', '#6B3A00', '#4B0082',
+                '#800040', '#005A7A', '#2E6B2E', '#6B4000', '#4A006B'
+            ];
+            var color = palette[Math.abs(hash) % palette.length];
+            var span = document.createElement('span');
+            span.textContent = initials;
+            span.style.cssText = 'display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:600;color:#fff;background:' + color + ';';
+            return span;
+        }
+
+        // Hydrate initials placeholders on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.account-menu-avatar-placeholder').forEach(function(el) {
+                var username = el.closest('[data-username]')?.dataset.username || '';
+                if (username) {
+                    var avatar = buildInitialsAvatar(username);
+                    el.replaceWith(avatar);
+                }
+            });
+        });
+
+        (function(){var h=document.querySelector('.header');if(h&&h.scrollWidth>h.clientWidth){h.style.width=(h.scrollWidth+28)+'px';h.style.minWidth='auto'}})();
+    </script>
+    <script src="/static/js/crypto.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script>
+        (function(){var ua=navigator.userAgent,o=false;if(/MSIE|Trident/.test(ua))o=true;else if(!/Edg/.test(ua)&&/Chrome\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<80)o=true;else if(/Firefox\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<74)o=true;else if(/Version\/(\d+\.?\d*).*Safari/.test(ua)&&parseFloat(RegExp.$1)<13.1)o=true;if(o)document.getElementById('browser-old-nudge').classList.remove('hidden')})();
+    </script>
+</body>
+</html>

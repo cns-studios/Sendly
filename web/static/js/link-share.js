@@ -65,6 +65,7 @@
     const shareUrlModal = document.getElementById('share-url-modal');
     const shareUrlText = document.getElementById('shareUrlText');
     const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
+    const shareUrlNativeBtn = document.getElementById('shareUrlNativeBtn');
     const shareUrlDiscardBtn = document.getElementById('shareUrlDiscardBtn');
     let notificationTimer = null;
     const tosOverlay = document.getElementById('tos-overlay');
@@ -136,12 +137,14 @@
             authUserKeyRaw = result.userKeyRaw;
             const payload = result.payload;
             if (payload.needs_enrollment) {
+                authUserKeyRaw = null;
                 showErrorBanner(t('toast_device_approve'));
                 return false;
             }
             return true;
         } catch (error) {
             console.error('Device ready failed:', error);
+            authUserKeyRaw = null;
             return false;
         }
     }
@@ -184,6 +187,16 @@
         });
 
         shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
+
+        shareUrlNativeBtn?.addEventListener('click', async () => {
+            const url = shareUrlText?.textContent;
+            if (!url || !navigator.share) return;
+            try {
+                await navigator.share({ url, title: t('link_share_title') });
+            } catch (error) {
+                // user cancelled the native share sheet or it failed silently; nothing to do
+            }
+        });
     }
 
     function announceRecipientStatus(message) {
@@ -606,9 +619,11 @@
         const badge = dropZone.querySelector('.drop-zone-badge');
         const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
         const eta = dropZone.querySelector('#drop-zone-eta');
+        const pct = dropZone.querySelector('.drop-zone-pct');
         dropZone.classList.remove('uploading', 'success', 'error', 'warning');
         if (state !== 'idle') dropZone.classList.add(state);
         if (progressFill && (state === 'idle' || state === 'uploading')) progressFill.style.width = '0';
+        if (pct) pct.textContent = state === 'uploading' ? '0%' : '';
         if (eta && state !== 'uploading') eta.textContent = '';
 
         if (state === 'uploading') {
@@ -677,7 +692,9 @@
         const pct = Math.floor((uploadedChunks / totalChunks) * 100);
         const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
         const eta = dropZone.querySelector('#drop-zone-eta');
+        const pctLabel = dropZone.querySelector('.drop-zone-pct');
         if (progressFill) progressFill.style.width = `${pct}%`;
+        if (pctLabel) pctLabel.textContent = `${pct}%`;
         if (eta && uploadStartedAt && uploadedChunks > 0 && pct < 100) {
             const elapsed = (Date.now() - uploadStartedAt) / 1000;
             const progress = uploadedChunks / totalChunks;
@@ -941,6 +958,10 @@
         shareUrlText.textContent = url;
         shareUrlCopyBtn.textContent = t('link_share_copy');
         shareUrlCopyBtn.classList.remove('copied');
+        if (shareUrlNativeBtn) {
+            const canNativeShare = !!navigator.share && window.matchMedia('(max-width: 768px)').matches;
+            shareUrlNativeBtn.classList.toggle('hidden', !canNativeShare);
+        }
         shareUrlModal.classList.remove('hidden');
         shareUrlModal.offsetHeight;
         shareUrlModal.classList.add('visible');

@@ -489,8 +489,15 @@ const SecureCrypto = (function() {
             throw new Error(payload.error || 'Device registration failed');
         }
         let payload = await response.json().catch(() => ({}));
-        if (!payload.needs_enrollment && !userKeyRaw && payload.user_key_envelope?.wrapped_uk_b64) {
-            userKeyRaw = await unwrapUserKeyForDevice(fromBase64(payload.user_key_envelope.wrapped_uk_b64), identity.privateKeyJWK);
+        // The server's envelope is authoritative: a locally stored key can be
+        // stale (e.g. generated on a page that never got it registered), and
+        // wrapping uploads with it would make them unreadable everywhere else.
+        if (!payload.needs_enrollment && payload.user_key_envelope?.wrapped_uk_b64) {
+            try {
+                userKeyRaw = await unwrapUserKeyForDevice(fromBase64(payload.user_key_envelope.wrapped_uk_b64), identity.privateKeyJWK);
+            } catch (error) {
+                console.error('Failed to unwrap server user key envelope:', error);
+            }
         }
         if (!payload.needs_enrollment && userKeyRaw) saveUserKeyRaw(userId, userKeyRaw);
 

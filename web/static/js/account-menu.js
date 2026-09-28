@@ -72,37 +72,27 @@
         if (isOpen && !trigger.contains(e.target) && !menu.contains(e.target)) closeMenu();
     });
 
-    // "Uploaded files" opens the uploads popup in place when the current
-    // page provides it (the index page registers SendlyOpenUploadedFiles);
-    // elsewhere the link navigates to /#uploaded-files, which opens it on load.
-    var uploadedFiles = menu.querySelector('[data-menu-action="uploaded-files"]');
-    if (uploadedFiles) {
-        uploadedFiles.addEventListener('click', function (e) {
-            if (typeof window.SendlyOpenUploadedFiles !== 'function') return;
-            e.preventDefault();
-            closeMenu();
-            window.SendlyOpenUploadedFiles();
-        });
-    }
-
     // ── Transfers badge ──
     // Pending (unanswered) transfers show as a red counter on the Transfers
     // item and a dot on the avatar. The count arrives live over the existing
     // per-user device socket (transfers_updated events) and is re-broadcast
     // as a 'sendly:transfers-updated' window event for the transfers page;
     // sent_transfers_updated events become 'sendly:sent-transfers-updated'.
-    var badge = document.getElementById('account-menu-transfers-badge');
-    var dot = document.getElementById('account-menu-dot');
+    // The mobile menu mirrors both (see the mobile_menu partials).
+    var badges = ['account-menu-transfers-badge', 'mobile-menu-transfers-badge']
+        .map(function (id) { return document.getElementById(id); }).filter(Boolean);
+    var dots = ['account-menu-dot', 'mobile-menu-dot']
+        .map(function (id) { return document.getElementById(id); }).filter(Boolean);
     var baseLabel = trigger.getAttribute('aria-label') || '';
     var labelTemplate = (window.CONFIG && window.CONFIG.t && window.CONFIG.t.menu_transfers_pending_label) || '{count} new transfers';
 
     function setTransferCount(count) {
         count = Math.max(0, count | 0);
-        if (badge) {
+        badges.forEach(function (badge) {
             badge.textContent = count > 99 ? '99+' : String(count);
             badge.hidden = count === 0;
-        }
-        if (dot) dot.hidden = count === 0;
+        });
+        dots.forEach(function (dot) { dot.hidden = count === 0; });
         trigger.setAttribute('aria-label', count ? baseLabel + ', ' + labelTemplate.replace('{count}', count) : baseLabel);
         window.dispatchEvent(new CustomEvent('sendly:transfers-updated', { detail: { count: count } }));
     }

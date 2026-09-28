@@ -31,6 +31,7 @@
 
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Preconnect to external resources -->
@@ -71,8 +72,11 @@
                 </nav>
             </div>
             {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
         </header>
     </div>
+
+    {{template "mobile_menu" .}}
 
     <div class="main-content">
         <div class="link-content-wrapper transfers-wrapper">
