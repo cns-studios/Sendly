@@ -163,6 +163,7 @@ func main() {
 	router.GET("/help", pageHandler.HelpPage)
 	router.GET("/shared/:id", pageHandler.SharedFile)
 	router.GET("/transfers", pageHandler.Transfers)
+	router.GET("/uploaded", pageHandler.Uploaded)
 
 	auth := router.Group("/auth")
 	{

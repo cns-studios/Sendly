@@ -60,6 +60,7 @@
 
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
 
 
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -91,15 +92,18 @@
             <div class="header-left">
                 <a href="/" class="logo-text">{{.t.header_logo}}</a>
                 <nav class="quicklinks">
-                    <a href="/pricing">{{.t.header_pricing}}</a>
+                    <a href="/limits">{{.t.header_pricing}}</a>
                     <a href="/data-encryption">{{.t.header_security}}</a>
                     <a href="/help">{{.t.header_faq}}</a>
                     <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
                 </nav>
             </div>
             {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
         </header>
     </div>
+
+    {{template "mobile_menu" .}}
 
     <div class="main-content">
         <div class="shared-content-wrapper">

@@ -71,6 +71,7 @@
 
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
 
 
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -104,8 +105,11 @@
                 </nav>
             </div>
             {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
         </header>
     </div>
+
+    {{template "mobile_menu" .}}
 
         <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
             <article class="legal-document">

@@ -255,6 +255,7 @@
             authUserKeyRaw = result.userKeyRaw;
             const payload = result.payload;
             if (payload.needs_enrollment) {
+                authUserKeyRaw = null;
                 showErrorBanner(t('toast_device_quickshare_approve'));
                 return false;
             }

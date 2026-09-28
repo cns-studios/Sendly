@@ -18,7 +18,7 @@
 </button>
 
 <div class="account-menu" id="account-menu" role="menu" aria-labelledby="account-menu-trigger">
-    <a href="/#uploaded-files" role="menuitem" class="account-menu-item" data-menu-action="uploaded-files">
+    <a href="/uploaded" role="menuitem" class="account-menu-item">
         <i data-lucide="files" aria-hidden="true"></i>
         <span>{{.t.menu_uploaded_files}}</span>
     </a>
@@ -41,4 +41,61 @@
 {{else}}
 <a href="{{.authLoginURL}}" class="login-btn">{{.t.header_login}}</a>
 {{end}}
+{{end}}
+
+{{/* Mobile header button and slide-in menu. The button goes in the header
+     next to the account menu, the menu right after the header wrapper;
+     behaviour lives in /static/js/mobile-menu.js. */}}
+{{define "mobile_menu_button"}}
+<button type="button" class="mobile-menu-btn" id="mobile-menu-open" aria-controls="mobile-menu" aria-expanded="false" aria-label="{{.t.header_menu_label}}">
+    {{if .authenticated}}
+    <img src="{{.userAvatar}}" alt="" class="mobile-menu-btn-avatar" width="32" height="32" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
+    <span class="account-menu-dot" id="mobile-menu-dot" hidden></span>
+    {{else}}
+    <i data-lucide="menu" aria-hidden="true"></i>
+    {{end}}
+</button>
+{{end}}
+
+{{define "mobile_menu"}}
+<div class="mobile-menu" id="mobile-menu" role="dialog" aria-modal="true" aria-label="{{.t.header_menu_label}}">
+    <div class="mobile-menu-top">
+        <a href="/" class="mobile-menu-logo">{{.t.header_logo}}</a>
+        <button type="button" class="mobile-menu-btn" data-mobile-menu-close aria-label="{{.t.recent_files_close}}"><i data-lucide="x" aria-hidden="true"></i></button>
+    </div>
+    {{if .authenticated}}
+    <a href="{{.accountURL}}" class="mobile-menu-user">
+        <img src="{{.userAvatar}}" alt="" class="mobile-menu-user-avatar" width="44" height="44" onerror="this.onerror=null;this.replaceWith(buildInitialsAvatar('{{.username}}'));">
+        <span class="mobile-menu-user-text">
+            <span class="mobile-menu-user-name">{{.username}}</span>
+            <span class="mobile-menu-user-sub">{{.t.header_your_account}}</span>
+        </span>
+        <i data-lucide="chevron-right" aria-hidden="true"></i>
+    </a>
+    {{end}}
+    <nav class="mobile-menu-nav">
+        <a href="/limits">{{.t.header_pricing}}</a>
+        <a href="/data-encryption">{{.t.header_security}}</a>
+        <a href="/help">{{.t.header_faq}}</a>
+    </nav>
+    <div class="mobile-menu-list">
+        {{if .authenticated}}
+        <a href="/uploaded" class="mobile-menu-row"><i data-lucide="history" aria-hidden="true"></i><span>{{.t.header_recent_files}}</span></a>
+        <a href="/transfers" class="mobile-menu-row"><i data-lucide="inbox" aria-hidden="true"></i><span>{{.t.menu_transfers}}</span><span class="account-menu-badge mobile-menu-badge" id="mobile-menu-transfers-badge" hidden></span></a>
+        {{end}}
+        <a href="?lang={{.otherLocale}}" class="mobile-menu-row"><i data-lucide="languages" aria-hidden="true"></i><span>{{.otherLocaleLabel}}</span></a>
+        {{if .authenticated}}
+        <a href="/auth/logout" class="mobile-menu-row"><i data-lucide="log-out" aria-hidden="true"></i><span>{{.t.header_logout}}</span></a>
+        {{end}}
+    </div>
+    <div class="mobile-menu-bottom">
+        {{if not .authenticated}}
+        <a href="{{.authLoginURL}}" class="mobile-menu-login">{{.t.header_login}}</a>
+        {{end}}
+        <div class="mobile-menu-legal">
+            <a href="/tos">{{.t.footer_tos}}</a>
+            <a href="/privacy">{{.t.footer_privacy}}</a>
+        </div>
+    </div>
+</div>
 {{end}}

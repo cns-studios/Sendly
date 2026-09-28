@@ -71,6 +71,7 @@
 
     <link rel="stylesheet" href="/static/css/style.css">
     <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Preconnect to external resources -->
@@ -111,8 +112,9 @@
             <h2 id="share-url-title" class="share-url-title">{{.t.link_share_title}}</h2>
             <p id="shareUrlText" class="share-url-text"></p>
             <div class="share-url-actions">
-                <button id="shareUrlDiscardBtn" type="button" class="btn btn-secondary btn-large">{{.t.link_share_discard}}</button>
-                <button id="shareUrlCopyBtn" type="button" class="btn btn-accent btn-large">{{.t.link_share_copy}}</button>
+                <button id="shareUrlDiscardBtn" type="button" class="btn-share-discard">{{.t.link_share_discard}}</button>
+                <button id="shareUrlNativeBtn" type="button" class="btn-share-native hidden">{{.t.link_share_native}}</button>
+                <button id="shareUrlCopyBtn" type="button" class="btn-share-copy">{{.t.link_share_copy}}</button>
             </div>
         </div>
     </div>
@@ -142,8 +144,11 @@
                 </nav>
             </div>
             {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
         </header>
     </div>
+
+    {{template "mobile_menu" .}}
 
     <div class="main-content">
         <div class="link-content-wrapper">
@@ -164,6 +169,7 @@
                             <div class="drop-zone-progress-shimmer"></div>
                         </div>
                         <div id="drop-zone-eta" class="drop-zone-eta" aria-live="polite"></div>
+                        <span class="drop-zone-pct" aria-hidden="true"></span>
                     </div>
                     <div class="drop-zone-badge" aria-live="polite"></div>
                     <div class="drop-zone-mobile">

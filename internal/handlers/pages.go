@@ -434,6 +434,49 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 	})
 }
 
+func (h *PageHandler) Uploaded(c *gin.Context) {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		target := "/"
+		if h.cfg.CNSAuthURL != "" {
+			target = "/auth/login"
+		}
+		c.Redirect(http.StatusFound, target)
+		return
+	}
+	setCSRFTokenCookie(c)
+	accountURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/account"
+	}
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	configData := map[string]interface{}{
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": true,
+		"cnsUserId":     user.ID,
+		"cnsUsername":   user.Username,
+		"cnsUserAvatar": user.Avatar,
+		"tosVersion":    h.cfg.TOSVersion,
+		"t":             translations,
+	}
+	configJSON, err := json.Marshal(configData)
+	if err != nil {
+		configJSON = []byte("{}")
+	}
+	h.render(c, "uploaded.html", gin.H{
+		"title":         translations["title_uploaded"],
+		"description":   translations["desc_uploaded"],
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": true,
+		"username":      user.Username,
+		"userAvatar":    user.Avatar,
+		"accountURL":    accountURL,
+		"noindex":       true,
+		"configJSON":    template.JS(string(configJSON)),
+	})
+}
+
 func formatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {
