@@ -460,5 +460,8 @@
   "app_cannot_upload_empty": "Leere Datei oder Verzeichnis kann nicht hochgeladen werden.",
   "app_file_too_large": "Datei zu groß. Maximum: {size}",
   "app_0_files": "0 Dateien",
-  "app_0_pct": "0%"
+  "app_0_pct": "0%",
+
+  "identity_migration_progress": "Verschlüsselung wird aktualisiert … {done} von {total} Dateien",
+  "identity_migration_done": "Deine Verschlüsselung ist aktualisiert."
 }

@@ -127,6 +127,9 @@ func main() {
 	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService, tracker)
 	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, uploadService, tracker)
 	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db)
+	identityRescueHandler := handlers.NewIdentityRescueHandler(db)
+	// Temporary: moves accounts from before identity keys onto them.
+	identityMigrationHandler := handlers.NewIdentityMigrationHandler(db)
 	recentUploadsHandler.SetAndroidHub(androidHandler.Hub())
 	androidHandler.SetDeviceHub(recentUploadsHandler.Hub())
 	tunnelHandler := handlers.NewTunnelHandler(cfg, db, fs)
@@ -236,6 +239,19 @@ func main() {
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
 				devices.POST("/enrollments/:id/reject", strictRateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
+			}
+
+			me.GET("/identity-rescue/locked", standardRateLimiter.Handler(), identityRescueHandler.Locked)
+			me.POST("/identity-rescue", standardRateLimiter.Handler(), identityRescueHandler.Rescue)
+
+			migration := me.Group("/identity-migration")
+			{
+				migration.GET("/legacy-key", strictRateLimiter.Handler(), identityMigrationHandler.LegacyKey)
+				migration.POST("/start", strictRateLimiter.Handler(), identityMigrationHandler.Start)
+				migration.GET("/escrow", strictRateLimiter.Handler(), identityMigrationHandler.Escrow)
+				migration.POST("/adopt", strictRateLimiter.Handler(), identityMigrationHandler.Adopt)
+				migration.GET("/files", standardRateLimiter.Handler(), identityMigrationHandler.Files)
+				migration.POST("/files", standardRateLimiter.Handler(), identityMigrationHandler.StoreFiles)
 			}
 		}
 	}

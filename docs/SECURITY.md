@@ -40,7 +40,9 @@ End-to-end encrypted: the server stores only encrypted file blobs and wrapped ke
 - Each signed-in account has one identity keypair (RSA-OAEP-2048), versioned. Its private key exists only in the browser; the server keeps one copy per trusted device, wrapped for that device's own key (`user_identity_key_device_envelopes`).
 - A device is trusted when it holds a copy of the account's active identity key. Copies are only created by the account's first device, by a trusted device approving a new one (verification code), or by recovery.
 - A signed-in user's access to a file is their copy of its key wrapped with their identity public key (`file_access_key_envelopes`): `owner` for their uploads, `share` for accepted transfers. Senders wrap for the recipient's identity public key.
-- Recovery creates a new identity key version and revokes every device; anything wrapped for an older version stays unreadable to the new key until a device still holding that version re-wraps it.
+- Recovery creates a new identity key version and revokes every device; anything wrapped for an older version stays unreadable to the new key until a device still holding that version re-wraps it (rescue).
+- Rescue trust point: the rescuing device was revoked, so it can't verify the active identity public key and wraps for the one the server reports. The server only accepts rescue envelopes for keys that are still locked, so a bad upload can't break a readable key, but a compromised server could collect the keys of locked files from a returning old device. Accepted as a trade-off, like transfers, where the sender wraps for the recipient public key the server reports.
+- Identity migration (temporary): the identity key of an account from before identity keys is stored encrypted with its legacy user key (`legacy_identity_escrow`), so only devices already holding that user key can open it.
 - Guest share links carry the file key in the URL fragment, which never reaches the server. Quick share guests use throwaway RSA keys held in the page.
 
 ## Abuse Prevention

@@ -460,5 +460,8 @@
   "app_cannot_upload_empty": "Cannot upload empty file or directory.",
   "app_file_too_large": "File too large. Maximum: {size}",
   "app_0_files": "0 files",
-  "app_0_pct": "0%"
+  "app_0_pct": "0%",
+
+  "identity_migration_progress": "Upgrading your encryption… {done} of {total} files",
+  "identity_migration_done": "Your encryption is upgraded."
 }

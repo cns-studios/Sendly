@@ -76,7 +76,8 @@ Files are encrypted in the browser/client; the server never sees plaintext or fi
 - A signed-in user's access to a file is its DEK wrapped with their identity public key in `file_access_key_envelopes` (`access_kind` = `owner` or `share`). Signed-in uploads must include the owner envelope.
 - The identity key is created by a brand-new account's first device, handed to new devices by a trusted device approving them (enrollments), and replaced by the next version on recovery. Files wrapped for an older version show as "locked".
 - Quick share: everyone in a session decrypts with the host's session password, wrapped per approved participant's throwaway key; guests' uploads keep their key in `file_key_envelopes`.
-- The legacy AES user key (`user_key_envelopes`) is only read to migrate accounts from before identity keys (`storage/legacy_user_key.go`, `getLegacyUserKeyRaw` in `crypto.js`).
+- The legacy AES user key (`user_key_envelopes`) is only read to migrate accounts from before identity keys. That migration is temporary and isolated (`handlers/identity_migration.go`, `storage/legacy_user_key.go`, `models/legacy_migration.go`, `static/js/identity-migration.js`); see "Removing the identity migration" in `docs/OPERATIONS.md`.
+- Rescue (`handlers/identity_rescue.go`, `rescueLockedFileKeysInBackground` in `crypto.js`): a browser holding an older identity key version re-wraps keys locked to it for the active version after a recovery.
 
 ## Upload lifecycle
 
