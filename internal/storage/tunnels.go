@@ -502,18 +502,21 @@ func (p *Postgres) GetTunnelParticipants(ctx context.Context, tunnelID string) (
 	var participants []models.TunnelParticipant
 	query := `
 		SELECT
-			id,
-			tunnel_id,
-			cns_user_id,
-			device_id,
-			joined_at,
-			COALESCE(public_key_jwk, 'null'::jsonb) AS public_key_jwk,
-			COALESCE(key_algorithm, '') AS key_algorithm,
-			COALESCE(key_version, 0) AS key_version,
-			approved_at
-		FROM tunnel_participants
-		WHERE tunnel_id = $1
-		ORDER BY joined_at ASC
+			tp.id,
+			tp.tunnel_id,
+			tp.cns_user_id,
+			tp.device_id,
+			tp.joined_at,
+			COALESCE(tp.public_key_jwk, 'null'::jsonb) AS public_key_jwk,
+			COALESCE(tp.key_algorithm, '') AS key_algorithm,
+			COALESCE(tp.key_version, 0) AS key_version,
+			tp.approved_at,
+			COALESCE(u.username, '') AS username,
+			COALESCE(u.avatar_url, '') AS avatar_url
+		FROM tunnel_participants tp
+		LEFT JOIN users u ON u.cns_user_id = tp.cns_user_id
+		WHERE tp.tunnel_id = $1
+		ORDER BY tp.joined_at ASC
 	`
 	err := p.db.SelectContext(ctx, &participants, query, tunnelID)
 	if err != nil {

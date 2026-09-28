@@ -668,8 +668,47 @@ body.page-index {
     color: #000000;
 }
 
+.person-circle {
+    overflow: hidden;
+}
+
+.person-guest-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.person-name {
+    max-width: 96px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.person.is-self .person-circle {
+    outline: 3px solid #007AFF;
+    outline-offset: 3px;
+}
+
+/* Avatars fill the circle whatever size it has on this screen. */
+.person-circle > img,
+.person-circle > span:not(.person-guest-icon) {
+    width: 100% !important;
+    height: 100% !important;
+}
+
 .person.pending .person-circle {
-    opacity: 0.45;
+    background-color: #E5E5EA;
+    box-shadow: none;
+}
+
+.person.pending .person-circle > * {
+    filter: grayscale(1);
+    opacity: 0.4;
+}
+
+.person.pending .person-name {
+    color: #8E8E93;
 }
 
 /* Quick share: host approves joiners, comparing key fingerprints */
@@ -695,16 +734,53 @@ body.page-index {
 
 .approval-request {
     display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background-color: #F2F2F2;
+}
+
+.approval-request-who {
+    display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 14px;
-    border-radius: 12px;
-    background-color: #F2F2F2;
+    min-width: 0;
+}
+
+.approval-avatar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: #D9D9D9;
+    overflow: hidden;
+}
+
+.approval-avatar .person-guest-icon svg {
+    width: 18px;
+    height: 18px;
 }
 
 .approval-request-name {
     font-family: 'Arimo', sans-serif;
     font-size: 16px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.approval-request-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.approval-request-actions button {
     flex: 1;
 }
 
@@ -717,7 +793,7 @@ body.page-index {
 .approval-request button {
     border: none;
     border-radius: 999px;
-    padding: 6px 14px;
+    padding: 9px 14px;
     font-family: 'Arimo', sans-serif;
     font-size: 14px;
     cursor: pointer;
@@ -5911,33 +5987,17 @@ body.page-transfers .sk-line.medium { width: 45%; }
 /* ── Quick share: joiner status, declined screen, host approvals ── */
 .qs-status {
     display: flex;
-    gap: 14px;
-    align-items: flex-start;
     margin-top: 28px;
     padding: 16px 18px;
     max-width: 440px;
     border-radius: 16px;
-    background: #F2F2F7;
+    background: #FFFFFF;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
     animation: qs-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .qs-status.hidden { display: none; }
-
-.qs-status-indicator {
-    flex-shrink: 0;
-    width: 12px;
-    height: 12px;
-    margin-top: 5px;
-    border-radius: 50%;
-    background: #FF9F0A;
-    color: rgba(255, 159, 10, 0.5);
-    animation: qs-pulse 1.6s ease-out infinite;
-}
-
-.qs-status.is-approved .qs-status-indicator {
-    background: #34C759;
-    color: rgba(52, 199, 89, 0.5);
-}
 
 .qs-status-title {
     margin: 0;
@@ -5960,7 +6020,7 @@ body.page-transfers .sk-line.medium { width: 45%; }
     margin-top: 12px;
     padding: 8px 14px;
     border-radius: 10px;
-    background: #FFFFFF;
+    background: #F2F2F7;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 24px;
     font-weight: 700;
@@ -5969,12 +6029,6 @@ body.page-transfers .sk-line.medium { width: 45%; }
 }
 
 .qs-status-code.hidden { display: none; }
-
-@keyframes qs-pulse {
-    0% { box-shadow: 0 0 0 0 currentColor; }
-    70% { box-shadow: 0 0 0 10px transparent; }
-    100% { box-shadow: 0 0 0 0 transparent; }
-}
 
 @keyframes qs-rise {
     from { opacity: 0; transform: translateY(8px); }
@@ -5985,6 +6039,34 @@ body.page-quickshare .declined-view {
     display: none;
     flex-direction: column;
     align-items: flex-start;
+}
+
+/* Wide screens: approvals / the joiner's status sit in the empty space on
+   the right; narrower screens stack them below the people. */
+@media (min-width: 1100px) {
+    body.page-quickshare .create-view.active,
+    body.page-quickshare .queue-view.active {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+        column-gap: 72px;
+        align-items: start;
+    }
+
+    body.page-quickshare .qs-side {
+        position: sticky;
+        top: 120px;
+        padding-top: 6px;
+    }
+
+    body.page-quickshare .qs-side .approval-requests,
+    body.page-quickshare .qs-side .qs-status {
+        margin-top: 0;
+        max-width: none;
+    }
+
+    body.page-quickshare .qs-side .approval-heading-row .people-heading {
+        font-size: 20px;
+    }
 }
 
 body.page-quickshare .declined-view.active {
@@ -6006,7 +6088,7 @@ body.page-quickshare .declined-view.active {
 .declined-icon svg {
     width: 30px;
     height: 30px;
-    color: #FF3B30;
+    color: #000;
 }
 
 .declined-view .declined-home {
@@ -6030,8 +6112,8 @@ body.page-quickshare .declined-view.active {
     height: 24px;
     padding: 0 8px;
     border-radius: 999px;
-    background: #FF9F0A;
-    color: #fff;
+    background: #E5E5EA;
+    color: #000;
     font-family: 'Arimo', sans-serif;
     font-size: 13px;
     font-weight: 700;
@@ -6067,22 +6149,24 @@ body.page-quickshare .declined-view.active {
 }
 
 @media (max-width: 768px) {
+    body.page-quickshare .people-row {
+        flex-wrap: wrap;
+        gap: 16px 18px;
+    }
+
+    body.page-quickshare .person-circle {
+        width: 60px;
+        height: 60px;
+    }
+
+    body.page-quickshare .person-name {
+        max-width: 72px;
+        font-size: 14px;
+    }
+
     .qs-status {
         max-width: none;
         width: 100%;
         box-sizing: border-box;
-    }
-
-    .approval-request {
-        flex-wrap: wrap;
-    }
-
-    .approval-request-name {
-        flex-basis: 100%;
-    }
-
-    .approval-request button {
-        flex: 1;
-        padding: 10px 14px;
     }
 }

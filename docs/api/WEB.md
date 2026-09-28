@@ -353,7 +353,7 @@ Host only. Store the session key wrapped for an approved participant's device. R
 The participant's own envelope (`:device_id` must be the caller's device).
 
 ### `GET /api/me/tunnels/:id`
-Get tunnel metadata and tunnel file list.
+Get tunnel metadata, participants and the tunnel file list. Signed-in participants carry `username` and `avatar_url` from the users cache.
 
 ### `GET /api/me/tunnels/:id/files`
 Get only tunnel files.

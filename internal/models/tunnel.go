@@ -49,6 +49,10 @@ type TunnelParticipant struct {
 	ApprovedAt sql.NullTime   `db:"approved_at" json:"-"`
 	// Approved mirrors ApprovedAt for API consumers.
 	Approved bool `db:"-" json:"approved"`
+	// Username and AvatarURL come from the users cache for signed-in
+	// participants, so the session can show who is in it.
+	Username  string `db:"username"   json:"username,omitempty"`
+	AvatarURL string `db:"avatar_url" json:"avatar_url,omitempty"`
 }
 
 // TunnelJoin describes a join attempt. PresentedTokenHash is the hash of the

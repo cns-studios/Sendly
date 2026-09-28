@@ -278,7 +278,7 @@
 
     function getParticipantName(participant) {
         const userID = extractUserID(participant);
-        if (userID) return t('user_default');
+        if (userID) return participant.username || t('user_default');
 
         const deviceID = extractDeviceID(participant);
         if (deviceID) {
@@ -290,6 +290,19 @@
         }
 
         return t('guest_default');
+    }
+
+    const GUEST_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+    // A signed-in participant's avatar; guests get the plain person icon.
+    function participantAvatar(participant, size) {
+        if (extractUserID(participant) && participant.username && window.buildUserAvatar) {
+            return window.buildUserAvatar(participant.username, participant.avatar_url || '', size);
+        }
+        const icon = document.createElement('span');
+        icon.className = 'person-guest-icon';
+        icon.innerHTML = GUEST_ICON;
+        return icon;
     }
 
     // Short fingerprint of a participant's public key. The host compares it
@@ -390,12 +403,20 @@
                 pending.forEach((participant) => {
                     const row = document.createElement('div');
                     row.className = 'approval-request';
+                    const who = document.createElement('div');
+                    who.className = 'approval-request-who';
+                    const avatar = document.createElement('span');
+                    avatar.className = 'approval-avatar';
+                    avatar.appendChild(participantAvatar(participant, 36));
                     const name = document.createElement('span');
                     name.className = 'approval-request-name';
                     name.textContent = getParticipantName(participant);
                     const fingerprint = document.createElement('code');
                     fingerprint.className = 'approval-fingerprint';
                     fingerprint.textContent = keyFingerprint(participantPublicKey(participant)) || '\u2013';
+                    who.append(avatar, name, fingerprint);
+                    const actions = document.createElement('div');
+                    actions.className = 'approval-request-actions';
                     const approveBtn = document.createElement('button');
                     approveBtn.className = 'approve-btn';
                     approveBtn.textContent = t('quickshare_approve');
@@ -404,7 +425,8 @@
                     declineBtn.className = 'decline-btn';
                     declineBtn.textContent = t('quickshare_decline');
                     declineBtn.addEventListener('click', () => respondToParticipant(participant.id, 'reject'));
-                    row.append(name, fingerprint, approveBtn, declineBtn);
+                    actions.append(approveBtn, declineBtn);
+                    row.append(who, actions);
                     list.appendChild(row);
                 });
             });
@@ -423,7 +445,6 @@
         approvalStatus.classList.toggle('hidden', !visible);
         if (!visible) return;
         const approved = !!self.approved;
-        approvalStatus.classList.toggle('is-approved', approved);
         qsStatusTitle.textContent = t(approved ? 'quickshare_status_in_title' : 'quickshare_status_wait_title');
         qsStatusText.textContent = t(approved ? 'quickshare_status_in_text' : 'quickshare_status_wait_text');
         qsStatusCode.classList.toggle('hidden', approved);
@@ -491,21 +512,27 @@
             empty.style.padding = '1rem 0';
             container.appendChild(empty);
         } else {
+            const self = findSelfParticipant();
             const rank = (p) => (isHostParticipant(p) ? 0 : p.approved ? 1 : 2);
             [...allParticipants].sort((a, b) => rank(a) - rank(b)).forEach(p => {
+                // You are marked by a blue ring, people still waiting are greyed out.
+                const isSelf = p === self || (!!myCurrentDeviceID && extractDeviceID(p) === myCurrentDeviceID);
+                const isPending = !p.approved && !isHostParticipant(p);
+                const name = getParticipantName(p);
                 const person = document.createElement('div');
                 person.className = 'person';
-                const isSelf = extractDeviceID(p) === myCurrentDeviceID;
-                const isPending = !p.approved && !isHostParticipant(p);
-                if (isPending) person.classList.add('pending');
-                person.innerHTML = `
-                    <div class="person-circle">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                        </svg>
-                    </div>
-                    <span class="person-name">${escapeHtml(getParticipantName(p))}${isSelf ? escapeHtml(t('label_you')) : ''}${isPending ? escapeHtml(t('quickshare_pending_suffix')) : ''}</span>
-                `;
+                person.classList.toggle('is-self', isSelf);
+                person.classList.toggle('pending', isPending);
+                const label = `${name}${isSelf ? t('label_you') : ''}${isPending ? t('quickshare_pending_suffix') : ''}`;
+                person.setAttribute('aria-label', label);
+                person.title = label;
+                const circle = document.createElement('div');
+                circle.className = 'person-circle';
+                circle.appendChild(participantAvatar(p, 70));
+                const nameEl = document.createElement('span');
+                nameEl.className = 'person-name';
+                nameEl.textContent = name;
+                person.append(circle, nameEl);
                 container.appendChild(person);
             });
         }
