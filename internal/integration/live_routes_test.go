@@ -173,8 +173,6 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 
 	finalizeBody, _ := json.Marshal(models.UploadFinalizeRequest{
 		SessionID: initResp.SessionID, Duration: "90d", DeviceID: deviceID,
-		WrappedDEKB64: base64.StdEncoding.EncodeToString(identityWrappedDEK),
-		DEKWrapAlg:    "RSA-OAEP-2048-v1", DEKWrapVersion: 1,
 		IdentityWrappedDEKB64: base64.StdEncoding.EncodeToString(identityWrappedDEK),
 		IdentityDEKWrapAlg:    "RSA-OAEP-2048-v1", IdentityDEKWrapVersion: 1,
 		IdentityKeyVersion: identityVersion,
@@ -197,7 +195,7 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(finalized.FileID)) {
 		t.Fatalf("recent uploads status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rec = request(router, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access?device_id="+deviceID, nil, "")
+	rec = request(router, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access", nil, "")
 	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte("file_access_key_envelope")) {
 		t.Fatalf("file access status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -205,10 +203,10 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &accessResp); err != nil {
 		t.Fatal(err)
 	}
-	if accessResp.IdentityFileAccessEnvelope == nil {
-		t.Fatal("identity access envelope missing from response")
+	if accessResp.AccessKind != "owner" || accessResp.IdentityKeyVersion != identityVersion {
+		t.Fatalf("unexpected access grant: kind=%q version=%d", accessResp.AccessKind, accessResp.IdentityKeyVersion)
 	}
-	returnedDEK, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, recoveredIdentityPrivate, mustBase64(accessResp.IdentityFileAccessEnvelope.WrappedDEKB64), nil)
+	returnedDEK, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, recoveredIdentityPrivate, mustBase64(accessResp.FileAccessKeyEnvelope.WrappedDEKB64), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,21 +215,21 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 		t.Fatalf("identity-wrapped DEK failed to decrypt uploaded file: err=%v plaintext=%q", err, decrypted)
 	}
 
-	register := func(deviceID, wrapped string) []byte {
+	// The account has an identity key, so any further device, web or
+	// Android, has to be approved by a device holding it.
+	register := func(deviceID string) []byte {
 		body, _ := json.Marshal(models.DeviceRegisterRequest{
 			DeviceID: deviceID, DeviceLabel: deviceID,
 			PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"test","e":"AQAB"}`),
 			KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
-			WrappedUserKeyB64: base64.StdEncoding.EncodeToString([]byte(wrapped)),
-			UKWrapAlg:         "RSA-OAEP-2048-v1", UKWrapMeta: json.RawMessage(`{"type":"test"}`),
 		})
 		return body
 	}
-	rec = request(router, http.MethodPost, "/api/me/devices/register", register(fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID+3)%1000000000000), "owner-uk"), "application/json")
-	if rec.Code != http.StatusOK {
+	rec = request(router, http.MethodPost, "/api/me/devices/register", register(fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID+3)%1000000000000)), "application/json")
+	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"needs_enrollment":true`)) {
 		t.Fatalf("web registration status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rec = request(router, http.MethodPost, "/android/me/devices/register", register(fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID+4)%1000000000000), "android-uk"), "application/json")
+	rec = request(router, http.MethodPost, "/android/me/devices/register", register(fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID+4)%1000000000000)), "application/json")
 	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"needs_enrollment":true`)) {
 		t.Fatalf("android registration parity status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -276,7 +274,6 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	router.POST("/api/me/tunnels/start", tunnelHandler.Start)
 	router.POST("/api/me/tunnels/join", tunnelHandler.Join)
 	router.POST("/api/me/tunnels/:id/confirm", tunnelHandler.Confirm)
-	router.GET("/api/me/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 	router.POST("/api/upload/init", uploadHandler.Init)
 	router.POST("/api/upload/chunk", uploadHandler.Chunk)
 	router.POST("/api/upload/complete", uploadHandler.Complete)
@@ -462,7 +459,12 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 		t.Fatal("guest access remained available after tunnel deletion")
 	}
 }
-func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
+
+// Signed-in quick share participants keep only their own identity-wrapped
+// copy of an upload's key; everyone in the session decrypts with the host's
+// session password. Any approved signed-in participant may upload, not just
+// the host and the first joiner.
+func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
 		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres and Redis")
 	}
@@ -500,90 +502,74 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	router.POST("/api/me/tunnels/start", tunnelHandler.Start)
 	router.POST("/api/me/tunnels/join", tunnelHandler.Join)
 	router.POST("/api/me/tunnels/:id/confirm", tunnelHandler.Confirm)
-	router.GET("/api/me/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 	router.POST("/api/me/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
 	router.POST("/api/upload/init", uploadHandler.Init)
 	router.POST("/api/upload/chunk", uploadHandler.Chunk)
 	router.POST("/api/upload/complete", uploadHandler.Complete)
 	router.GET("/api/upload/status/:session_id", uploadHandler.AssemblyStatus)
 	router.POST("/api/upload/finalize", uploadHandler.Finalize)
-	router.GET("/api/me/files/:id/access", func(c *gin.Context) {
-		handlers.NewRecentUploadsHandler(cfg, db).FileAccess(c)
-	})
+	router.GET("/api/me/files/:id/access", handlers.NewRecentUploadsHandler(cfg, db).FileAccess)
 
-	initiatorDevice := "00000000-0000-4000-8000-000000000021"
-	peerDevice := "00000000-0000-4000-8000-000000000022"
-	peerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	base := int(time.Now().UnixNano() % 1000000000)
+	host, first, second := base, base+1, base+2
+	device := func(userID int) string { return fmt.Sprintf("00000000-0000-4000-8000-%012d", userID) }
+
+	uploaderIdentity, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.CreateOrUpdateUserDevice(context.Background(), &models.UserDevice{
-		ID: peerDevice, CNSUserID: 991004, DeviceLabel: "live peer",
-		PublicKeyJWK: rsaPublicJWK(&peerKey.PublicKey), KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+	if err := db.CreateUserIdentityKey(context.Background(), &models.UserIdentityKey{
+		CNSUserID: int64(second), KeyVersion: 1, PublicKeyJWK: rsaPublicJWK(&uploaderIdentity.PublicKey),
+		KeyAlgorithm: "RSA-OAEP-2048", Status: "active", CreatedAt: time.Now(),
+		ActivatedAt: sql.NullTime{Time: time.Now(), Valid: true},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	startBody, _ := json.Marshal(models.TunnelStartRequest{Duration: "10m", DeviceID: initiatorDevice})
-	rec := requestAs(router, 991003, http.MethodPost, "/api/me/tunnels/start", startBody, "application/json")
+
+	startBody, _ := json.Marshal(models.TunnelStartRequest{Duration: "10m", DeviceID: device(host)})
+	rec := requestAs(router, host, http.MethodPost, "/api/me/tunnels/start", startBody, "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("start status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var started models.TunnelStartResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &started)
-	joinBody, _ := json.Marshal(models.TunnelJoinRequest{
-		Code: started.Tunnel.Code, DeviceID: peerDevice,
-		PublicKeyJWK: rsaPublicJWK(&peerKey.PublicKey),
-		KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
-	})
-	rec = requestAs(router, 991004, http.MethodPost, "/api/me/tunnels/join", joinBody, "application/json")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("join status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: initiatorDevice})
-	rec = requestAs(router, 991003, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("initiator confirm status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	confirmBody, _ = json.Marshal(models.TunnelConfirmRequest{DeviceID: peerDevice})
-	rec = requestAs(router, 991004, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("peer confirm status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	// No file key may be wrapped for the signed-in peer before the host
-	// approves it.
-	peerKeyResp := requestAs(router, 991003, http.MethodGet,
-		"/api/me/tunnels/"+started.Tunnel.ID+"/peer-wrap-key", nil, "")
-	if peerKeyResp.Code != http.StatusConflict {
-		t.Fatalf("peer key before approval status=%d body=%s", peerKeyResp.Code, peerKeyResp.Body.String())
+	for _, joiner := range []int{first, second} {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		if err != nil {
+			t.Fatal(err)
+		}
+		joinBody, _ := json.Marshal(models.TunnelJoinRequest{
+			Code: started.Tunnel.Code, DeviceID: device(joiner),
+			PublicKeyJWK: rsaPublicJWK(&key.PublicKey), KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
+		})
+		if rec := requestAs(router, joiner, http.MethodPost, "/api/me/tunnels/join", joinBody, "application/json"); rec.Code != http.StatusOK {
+			t.Fatalf("join status=%d body=%s", rec.Code, rec.Body.String())
+		}
 	}
 	participants, err := db.GetTunnelParticipants(context.Background(), started.Tunnel.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, participant := range participants {
-		if participant.CNSUserID.Int64 == 991004 {
-			rec = requestAs(router, 991003, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/participants/"+participant.ID+"/approve", nil, "")
-			if rec.Code != http.StatusOK {
-				t.Fatalf("approve peer status=%d body=%s", rec.Code, rec.Body.String())
-			}
+		if participant.CNSUserID.Int64 == int64(host) {
+			continue
+		}
+		rec := requestAs(router, host, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/participants/"+participant.ID+"/approve", nil, "")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("approve status=%d body=%s", rec.Code, rec.Body.String())
 		}
 	}
-	peerKeyResp = requestAs(router, 991003, http.MethodGet,
-		"/api/me/tunnels/"+started.Tunnel.ID+"/peer-wrap-key", nil, "")
-	if peerKeyResp.Code != http.StatusOK {
-		t.Fatalf("peer key status=%d body=%s", peerKeyResp.Code, peerKeyResp.Body.String())
-	}
-	var peerKeyPayload models.TunnelPeerWrapKeyResponse
-	if err := json.Unmarshal(peerKeyResp.Body.Bytes(), &peerKeyPayload); err != nil {
-		t.Fatal(err)
-	}
-	peerWrapped, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &peerKey.PublicKey, []byte("peer-dek"), nil)
-	if err != nil {
-		t.Fatal(err)
+	for _, confirmer := range []int{host, first} {
+		confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: device(confirmer)})
+		if rec := requestAs(router, confirmer, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json"); rec.Code != http.StatusOK {
+			t.Fatalf("confirm status=%d body=%s", rec.Code, rec.Body.String())
+		}
 	}
 
-	initBody, _ := json.Marshal(models.UploadInitRequest{FileName: "cross-account.txt", FileSize: 5, TotalChunks: 1, ChunkSize: 5, TunnelID: started.Tunnel.ID})
-	rec = requestAs(router, 991003, http.MethodPost, "/api/upload/init", initBody, "application/json")
+	// The second joiner is not the tunnel's peer, but as an approved
+	// participant it may upload.
+	initBody, _ := json.Marshal(models.UploadInitRequest{FileName: "session.txt", FileSize: 5, TotalChunks: 1, ChunkSize: 5, TunnelID: started.Tunnel.ID})
+	rec = requestAs(router, second, http.MethodPost, "/api/upload/init", initBody, "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("init status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -593,47 +579,59 @@ func TestLiveCrossAccountTunnelUploadAndRecipientAccess(t *testing.T) {
 	form := multipart.NewWriter(&chunk)
 	_ = form.WriteField("session_id", initResp.SessionID)
 	_ = form.WriteField("chunk_index", "0")
-	part, _ := form.CreateFormFile("chunk", "cross-account.txt")
-	_, _ = part.Write([]byte("cross"))
+	part, _ := form.CreateFormFile("chunk", "session.txt")
+	_, _ = part.Write([]byte("hello"))
 	_ = form.Close()
-	rec = requestAs(router, 991003, http.MethodPost, "/api/upload/chunk", chunk.Bytes(), form.FormDataContentType())
-	if rec.Code != http.StatusOK {
+	if rec := requestAs(router, second, http.MethodPost, "/api/upload/chunk", chunk.Bytes(), form.FormDataContentType()); rec.Code != http.StatusOK {
 		t.Fatalf("chunk status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	completeBody, _ := json.Marshal(models.UploadCompleteRequest{SessionID: initResp.SessionID, Confirmed: true})
-	rec = requestAs(router, 991003, http.MethodPost, "/api/upload/complete", completeBody, "application/json")
-	if rec.Code != http.StatusOK {
+	if rec := requestAs(router, second, http.MethodPost, "/api/upload/complete", completeBody, "application/json"); rec.Code != http.StatusOK {
 		t.Fatalf("complete status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	waitForAssembly(t, router, initResp.SessionID)
+
+	withoutIdentity, _ := json.Marshal(models.UploadFinalizeRequest{SessionID: initResp.SessionID, TunnelID: started.Tunnel.ID})
+	rec = requestAs(router, second, http.MethodPost, "/api/upload/finalize", withoutIdentity, "application/json")
+	if rec.Code != http.StatusBadRequest || !bytes.Contains(rec.Body.Bytes(), []byte(models.ErrIdentityEnvelopeRequired.Code)) {
+		t.Fatalf("finalize without identity envelope status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	ownerWrapped, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, &uploaderIdentity.PublicKey, []byte("session-password"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	finalizeBody, _ := json.Marshal(models.UploadFinalizeRequest{
 		SessionID: initResp.SessionID, TunnelID: started.Tunnel.ID,
-		WrappedDEKB64: base64.StdEncoding.EncodeToString([]byte("owner-dek")),
-		DEKWrapAlg:    "RSA-OAEP-2048-v1", DEKWrapVersion: 1,
-		PeerWrappedDEKB64: base64.StdEncoding.EncodeToString(peerWrapped),
-		PeerDEKWrapAlg:    "RSA-OAEP-2048-v1", PeerDEKWrapVersion: 1,
+		IdentityWrappedDEKB64: base64.StdEncoding.EncodeToString(ownerWrapped),
+		IdentityDEKWrapAlg:    "RSA-OAEP-2048-v1", IdentityDEKWrapVersion: 1, IdentityKeyVersion: 1,
 	})
-	rec = requestAs(router, 991003, http.MethodPost, "/api/upload/finalize", finalizeBody, "application/json")
+	rec = requestAs(router, second, http.MethodPost, "/api/upload/finalize", finalizeBody, "application/json")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("finalize status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var finalized models.UploadFinalizeResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &finalized)
-	rec = requestAs(router, 991004, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access?device_id="+peerDevice, nil, "")
+
+	rec = requestAs(router, second, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access", nil, "")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("recipient access status=%d body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("uploader access status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var access models.FileAccessResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &access); err != nil {
 		t.Fatal(err)
 	}
-	storedPeerWrapped, err := base64.StdEncoding.DecodeString(access.FileKeyEnvelope.WrappedDEKB64)
-	if err != nil {
-		t.Fatal(err)
+	decrypted, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, uploaderIdentity, mustBase64(access.FileAccessKeyEnvelope.WrappedDEKB64), nil)
+	if err != nil || string(decrypted) != "session-password" || access.AccessKind != "owner" {
+		t.Fatalf("owner envelope did not round-trip: kind=%q err=%v", access.AccessKind, err)
 	}
-	decrypted, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, peerKey, storedPeerWrapped, nil)
-	if err != nil || string(decrypted) != "peer-dek" {
-		t.Fatalf("peer envelope did not round-trip: %v", err)
+	if _, _, err := db.GetTunnelFileWithEnvelope(context.Background(), started.Tunnel.ID, finalized.FileID); err != models.ErrFileNotFound {
+		t.Fatalf("a signed-in upload must not keep a guest envelope: %v", err)
+	}
+	for _, other := range []int{host, first} {
+		if rec := requestAs(router, other, http.MethodGet, "/api/me/files/"+finalized.FileID+"/access", nil, ""); rec.Code != http.StatusNotFound {
+			t.Fatalf("user %d got a key for someone else's tunnel upload: status=%d body=%s", other, rec.Code, rec.Body.String())
+		}
 	}
 }
 

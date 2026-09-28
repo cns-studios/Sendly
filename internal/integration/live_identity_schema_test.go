@@ -82,7 +82,7 @@ func TestLiveIdentitySchemaStorageRoundTrip(t *testing.T) {
 		ID: fileID, NumericCode: fmt.Sprintf("%012d", suffix%1000000000000), OriginalName: "schema.txt",
 		SizeBytes: 1, UploaderIP: "127.0.0.1",
 		ExpiresAt: now.Add(24 * time.Hour), CreatedAt: now,
-	}, nil, nil, nil); err != nil {
+	}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.CreateFileAccessKeyEnvelope(ctx, &models.FileAccessKeyEnvelope{

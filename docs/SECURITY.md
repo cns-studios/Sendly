@@ -28,15 +28,20 @@ Access checks include:
 - Trusted device checks for envelope-sensitive operations.
 - Tunnel ownership and active-state checks.
 - Quick share (tunnel) membership: every tunnel endpoint requires the caller to be the host (initiating CNS user, or `X-Host-Token` for a guest host) or a participant (CNS user, or `X-Device-ID` + `X-Participant-Token` for an anonymous joiner). Device IDs alone never authorize anything.
-- Quick share host approval: joiners start unapproved. Session key envelopes, peer file-key wrapping, file lists, file access and uploads are only available to participants the host approved. The host compares a key fingerprint shown next to each joiner with the one on the joiner's screen before approving.
+- Quick share host approval: joiners start unapproved. Session key envelopes, file lists, file access and uploads are only available to participants the host approved. The host compares a key fingerprint shown next to each joiner with the one on the joiner's screen before approving.
 - A participant's public key can only be replaced by that participant, and existing session key envelopes are never overwritten.
 - Device IDs stay bound to the account that registered them (`DEVICE_ID_CONFLICT` otherwise).
 
 ## Data Protection Model
 
-- File blobs are stored as encrypted payloads.
-- File key envelopes (`wrapped_dek`) are persisted separately.
-- User key envelopes (`wrapped_user_key`) tie trust material to specific devices.
+End-to-end encrypted: the server stores only encrypted file blobs and wrapped keys, never a file key, session password or private key in the clear.
+
+- File blobs are encrypted in the browser with a per-upload key (or, in quick share, the session password).
+- Each signed-in account has one identity keypair (RSA-OAEP-2048), versioned. Its private key exists only in the browser; the server keeps one copy per trusted device, wrapped for that device's own key (`user_identity_key_device_envelopes`).
+- A device is trusted when it holds a copy of the account's active identity key. Copies are only created by the account's first device, by a trusted device approving a new one (verification code), or by recovery.
+- A signed-in user's access to a file is their copy of its key wrapped with their identity public key (`file_access_key_envelopes`): `owner` for their uploads, `share` for accepted transfers. Senders wrap for the recipient's identity public key.
+- Recovery creates a new identity key version and revokes every device; anything wrapped for an older version stays unreadable to the new key until a device still holding that version re-wraps it.
+- Guest share links carry the file key in the URL fragment, which never reaches the server. Quick share guests use throwaway RSA keys held in the page.
 
 ## Abuse Prevention
 

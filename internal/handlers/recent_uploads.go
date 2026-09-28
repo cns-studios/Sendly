@@ -98,6 +98,10 @@ func (h *RecentUploadsHandler) RecentUploads(c *gin.Context) {
 	})
 }
 
+// FileAccess hands a signed-in user their identity-wrapped copy of a file
+// key: their own upload's ('owner') or one sent to them in a transfer they
+// accepted ('share'). The key can only be opened with the identity key
+// version it was wrapped for.
 func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
@@ -106,70 +110,36 @@ func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 	}
 
 	fileID := c.Param("id")
-	deviceID := c.Query("device_id")
-	if fileID == "" || deviceID == "" {
-		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "file id and device_id are required", Code: "INVALID_REQUEST"})
+	if fileID == "" {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "file id is required", Code: "INVALID_REQUEST"})
 		return
 	}
 
-	file, fileEnvelope, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID)
-	identityOnly := false
-	if err != nil {
-		file, fileEnvelope, err = h.db.GetTunnelRecipientFileWithEnvelope(c.Request.Context(), int64(user.ID), deviceID, fileID)
-		if err != nil {
-			if grant, grantErr := h.db.GetFileAccessKeyEnvelope(c.Request.Context(), fileID, int64(user.ID)); grantErr == nil && grant.AccessKind == "share" {
-				file, err = h.db.GetFileByID(c.Request.Context(), fileID)
-				if err == nil {
-					fileEnvelope = &models.FileKeyEnvelope{}
-					identityOnly = true
-				}
-			}
-			if err != nil || file == nil {
-				status := http.StatusInternalServerError
-				if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
-					status = http.StatusNotFound
-				}
-				c.JSON(status, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
-				return
-			}
-		}
-	}
-
-	resp := models.FileAccessResponse{
-		File: *file.ToMetadata(),
-		FileKeyEnvelope: models.FileKeyEnvelopeResponse{
-			WrappedDEKB64:   base64.StdEncoding.EncodeToString(fileEnvelope.WrappedDEK),
-			DEKWrapAlg:      fileEnvelope.DEKWrapAlg,
-			DEKWrapVersion:  fileEnvelope.DEKWrapVersion,
-			DEKWrapNonceB64: base64.StdEncoding.EncodeToString(fileEnvelope.DEKWrapNonce),
-		},
-	}
-	if identityEnvelope, identityErr := h.db.GetFileAccessKeyEnvelope(c.Request.Context(), fileID, int64(user.ID)); identityErr == nil {
-		resp.IdentityFileAccessEnvelope = &models.FileKeyEnvelopeResponse{
-			WrappedDEKB64:   base64.StdEncoding.EncodeToString(identityEnvelope.WrappedDEK),
-			DEKWrapAlg:      identityEnvelope.DEKWrapAlg,
-			DEKWrapVersion:  identityEnvelope.DEKWrapVersion,
-			DEKWrapNonceB64: base64.StdEncoding.EncodeToString(identityEnvelope.DEKWrapNonce),
-		}
-	}
-
-	isDirectDeviceWrap := identityOnly || strings.HasPrefix(strings.ToUpper(strings.TrimSpace(fileEnvelope.DEKWrapAlg)), "RSA-OAEP")
-	if !isDirectDeviceWrap {
-		userEnvelope, userErr := h.db.GetUserKeyEnvelopeForDevice(c.Request.Context(), int64(user.ID), deviceID)
-		if userErr != nil {
-			c.JSON(http.StatusForbidden, models.ErrorResponse{Error: "No key envelope for this device", Code: "DEVICE_NOT_AUTHORIZED"})
+	file, err := h.db.GetFileByID(c.Request.Context(), fileID)
+	if err == nil {
+		var envelope *models.FileAccessKeyEnvelope
+		envelope, err = h.db.GetFileAccessKeyEnvelope(c.Request.Context(), fileID, int64(user.ID))
+		if err == nil {
+			c.JSON(http.StatusOK, models.FileAccessResponse{
+				File: *file.ToMetadata(),
+				FileAccessKeyEnvelope: models.FileKeyEnvelopeResponse{
+					WrappedDEKB64:   base64.StdEncoding.EncodeToString(envelope.WrappedDEK),
+					DEKWrapAlg:      envelope.DEKWrapAlg,
+					DEKWrapVersion:  envelope.DEKWrapVersion,
+					DEKWrapNonceB64: base64.StdEncoding.EncodeToString(envelope.DEKWrapNonce),
+				},
+				IdentityKeyVersion: envelope.RecipientKeyVersion,
+				AccessKind:         envelope.AccessKind,
+			})
 			return
 		}
-
-		resp.UserKeyEnvelope = models.UserKeyEnvelopeResponse{
-			WrappedUKB64: base64.StdEncoding.EncodeToString(userEnvelope.WrappedUserKey),
-			UKWrapAlg:    userEnvelope.UKWrapAlg,
-			UKWrapMeta:   userEnvelope.UKWrapMeta,
-			KeyVersion:   userEnvelope.KeyVersion,
-		}
 	}
 
-	c.JSON(http.StatusOK, resp)
+	status := http.StatusInternalServerError
+	if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted || err == models.ErrFileAccessNotFound {
+		status = http.StatusNotFound
+	}
+	c.JSON(status, models.ErrorResponse{Error: "Unable to access this file", Code: "ACCESS_DENIED"})
 }
 
 func (h *RecentUploadsHandler) RegisterDevice(c *gin.Context) {
@@ -203,10 +173,6 @@ func (h *RecentUploadsHandler) ApproveEnrollment(c *gin.Context) {
 func (h *RecentUploadsHandler) RejectEnrollment(c *gin.Context) {
 	sharedRejectEnrollment(c, h.db)
 	return
-}
-
-func (h *RecentUploadsHandler) DistributeIdentityKey(c *gin.Context) {
-	sharedDistributeIdentityKey(c, h.db)
 }
 
 func generateVerificationCode(length int) string {

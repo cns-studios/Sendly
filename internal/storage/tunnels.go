@@ -517,21 +517,6 @@ func (p *Postgres) DeleteTunnel(ctx context.Context, tunnelID string) error {
 	return err
 }
 
-func (p *Postgres) TunnelBelongsToUser(ctx context.Context, tunnelID string, userID int64) (bool, error) {
-	var count int
-	query := `
-		SELECT COUNT(*)
-		FROM tunnels
-		WHERE id = $1
-		  AND (
-			initiator_cns_user_id = $2
-			OR peer_cns_user_id = $2
-		  )
-	`
-	err := p.db.GetContext(ctx, &count, query, tunnelID, userID)
-	return count > 0, err
-}
-
 func (p *Postgres) TunnelCodeExists(ctx context.Context, code string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM tunnels WHERE code = $1`

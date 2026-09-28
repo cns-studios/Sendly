@@ -62,10 +62,16 @@ func TestLiveDeviceIDCannotMoveBetweenAccounts(t *testing.T) {
 	if err := db.CreateOrUpdateUserDevice(ctx, device(other, "attacker")); err != models.ErrDeviceIDConflict {
 		t.Fatalf("expected ErrDeviceIDConflict for another account, got %v", err)
 	}
-	err = db.ResetTrustedDeviceState(ctx, device(other, "attacker"), &models.UserKeyEnvelope{
-		CNSUserID: other, DeviceID: deviceID, WrappedUserKey: []byte("wrapped"),
-		UKWrapAlg: "RSA-OAEP-2048-v1", UKWrapMeta: json.RawMessage(`{}`), KeyVersion: 1,
-	})
+	now := time.Now()
+	err = db.RecoverIdentityKey(ctx, device(other, "attacker"),
+		&models.UserIdentityKey{
+			CNSUserID: other, PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"attacker-identity","e":"AQAB"}`),
+			KeyAlgorithm: "RSA-OAEP-2048", Status: "active", CreatedAt: now,
+		},
+		&models.UserIdentityKeyDeviceEnvelope{
+			CNSUserID: other, DeviceID: deviceID, WrappedPrivateKey: []byte("wrapped"),
+			WrapAlg: "RSA-OAEP-2048+AES-GCM-256-v1", CreatedAt: now,
+		})
 	if err != models.ErrDeviceIDConflict {
 		t.Fatalf("expected ErrDeviceIDConflict on recovery, got %v", err)
 	}

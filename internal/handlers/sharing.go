@@ -111,7 +111,7 @@ func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Recipient must be another user", Code: "INVALID_RECIPIENT"})
 		return
 	}
-	if _, _, err := h.db.GetOwnedFileWithEnvelope(c.Request.Context(), int64(user.ID), fileID); err != nil {
+	if _, err := h.db.GetOwnedFile(c.Request.Context(), int64(user.ID), fileID); err != nil {
 		status := http.StatusForbidden
 		if err == models.ErrFileNotFound || err == models.ErrFileExpired || err == models.ErrFileDeleted {
 			if _, fileErr := h.db.GetFileByID(c.Request.Context(), fileID); fileErr != nil {

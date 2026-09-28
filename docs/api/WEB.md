@@ -28,7 +28,6 @@ Current middleware classes applied on `/api`:
   - `POST /api/me/devices/enrollments`
   - `POST /api/me/devices/enrollments/:id/approve`
   - `POST /api/me/devices/enrollments/:id/reject`
-  - `POST /api/me/devices/identity-key/envelopes`
 - Download limiter:
   - `GET /api/file/:id/download`
 
@@ -158,18 +157,20 @@ Request JSON (regular upload):
 }
 ```
 
-Request JSON (tunnel upload):
+Request JSON (tunnel upload): `tunnel_id` instead of `duration`.
+
+Signed-in uploads must add the uploader's own copy of the file key, wrapped with their active identity public key (`400 IDENTITY_ENVELOPE_REQUIRED` without it, `400 IDENTITY_KEY_STALE` for another version):
 
 ```json
 {
-  "session_id": "...",
-  "tunnel_id": "...",
-  "wrapped_dek_b64": "...",
-  "dek_wrap_alg": "...",
-  "dek_wrap_nonce_b64": "...",
-  "dek_wrap_version": 1
+  "identity_wrapped_dek_b64": "...",
+  "identity_dek_wrap_alg": "RSA-OAEP-2048-v1",
+  "identity_dek_wrap_version": 1,
+  "identity_key_version": 1
 }
 ```
+
+A guest's quick share upload may instead carry its copy wrapped for its throwaway participant key (`wrapped_dek_b64`, `dek_wrap_alg`, `dek_wrap_nonce_b64`, `dek_wrap_version`); these fields are ignored for signed-in uploads.
 
 Response JSON:
 
@@ -256,8 +257,19 @@ Response JSON:
 }
 ```
 
-### `GET /api/me/files/:id/access?device_id=<device_id>`
-Return wrapped file key envelope plus wrapped user key envelope for a specific device.
+### `GET /api/me/files/:id/access`
+Return the caller's copy of a file key, wrapped with their identity public key: their own upload's (`access_kind: "owner"`) or one sent to them in an accepted transfer (`"share"`).
+
+```json
+{
+  "file": {},
+  "file_access_key_envelope": { "wrapped_dek_b64": "...", "dek_wrap_alg": "RSA-OAEP-2048-v1", "dek_wrap_version": 1 },
+  "identity_key_version": 1,
+  "access_kind": "owner"
+}
+```
+
+The key opens only with the identity key version it was wrapped for; a device holding a newer version (after recovery) treats the file as locked. `404 ACCESS_DENIED` if the file is gone or the caller has no copy.
 
 ## Transfers
 
@@ -291,7 +303,9 @@ Caller authentication for all tunnel endpoints below:
 - Host: the initiating CNS user, or for a guest-started tunnel the `host_token` returned by `start`, sent as `X-Host-Token`.
 - Participant: a signed-in caller by CNS user; an anonymous joiner by `X-Device-ID` plus the `participant_token` returned by `join`, sent as `X-Participant-Token`.
 
-Non-members get `403 TUNNEL_FORBIDDEN`. Joiners must be approved by the host; until then they only see the lobby (tunnel, participants), and file lists, file access, uploads and key envelopes return `403 PARTICIPANT_NOT_APPROVED` (`409` from `peer-wrap-key` / cross-account finalize).
+Non-members get `403 TUNNEL_FORBIDDEN`. Joiners must be approved by the host; until then they only see the lobby (tunnel, participants), and file lists, file access, uploads and key envelopes return `403 PARTICIPANT_NOT_APPROVED`.
+
+Keys: the host's browser generates a session password and wraps it for each approved participant's throwaway public key (`POST /api/me/tunnels/:id/envelopes`); every file in the session is encrypted with it. A signed-in uploader also stores its own copy, wrapped with its identity key (`identity_*` fields on finalize); a guest uploader's copy is wrapped for its throwaway key (`wrapped_dek_*`).
 
 ### `POST /api/me/tunnels/start`
 Request JSON:
@@ -359,19 +373,19 @@ Leave the tunnel (removes only the caller). When the last participant leaves, th
 ## Devices and Enrollment
 
 ### `POST /api/me/devices/register`
-Register device or bootstrap trust. A `device_id` registered to another account returns `409 DEVICE_ID_CONFLICT`.
+Register this device and learn whether it holds the account's identity key, the account's only root secret. A `device_id` registered to another account returns `409 DEVICE_ID_CONFLICT`.
 
-A device without an identity key sends a freshly generated one (`identity_public_key_jwk` plus its self-wrapped private key). The first device to do so creates the account's identity key. After that, a device's copy is only stored if its public key matches the account's key; otherwise the device gets no `identity_key_envelope` and waits for a sibling device to wrap the real key for it (see below).
+Request JSON: `device_id`, `device_label`, `public_key_jwk`, `key_algorithm`, `key_version`, and, only when creating an identity key, `identity_public_key_jwk`, `identity_key_algorithm`, `wrapped_identity_private_key_b64` (the new private key wrapped for this device's public key), `identity_key_wrap_alg`, `identity_key_wrap_meta`.
 
-Response fields besides `device_id`, `needs_enrollment` and the envelopes:
+Response JSON: `device_id`, and either
 
-- `identity_public_key`: `{ "key_version", "key_algorithm", "public_key_jwk" }` of the account's active identity key. Clients keep a local identity private key only if it belongs to this public key.
-- `devices_missing_identity_key`: `[{ "device_id", "public_key_jwk" }]`, the account's other trusted devices without a copy of the identity key. Only sent to a device that holds one.
-
-Set `discard_identity_key_envelope: true` to drop this device's stored copy when it doesn't belong to `identity_public_key`; the device is then listed as missing the key again.
+- `identity_key_envelope` (`{ "wrapped_private_key_b64", "wrap_alg", "wrap_meta", "identity_key_version" }`, this device's copy) and `identity_public_key` (`{ "key_version", "key_algorithm", "public_key_jwk" }`, the account's active key): the device is trusted; or
+- `needs_enrollment: true`: the account has an identity key this device doesn't hold; another device has to approve it; or
+- `needs_identity_setup: true`: a brand-new account; register again with a new identity keypair, which becomes version 1; or
+- `needs_identity_migration: true`: the account predates identity keys; a device holding its legacy user key has to migrate it.
 
 ### `POST /api/me/devices/recover`
-Recovery flow that resets trusted device state and provisions a new trusted envelope.
+For an account with no device left to approve this one. Same request as `register`, and a new identity keypair is required (`400 IDENTITY_KEY_REQUIRED` otherwise). It becomes the account's next identity key version; the previous version is retired, every other device is revoked, and their pending approval requests expire. Files and transfers wrapped for an older version stay locked until a device still holding that version re-wraps them.
 
 ### `GET /api/me/devices/ws`
 WebSocket for enrollment-related events.
@@ -421,7 +435,7 @@ Response JSON:
 List pending enrollments + request device metadata.
 
 ### `POST /api/me/devices/enrollments/:id/approve`
-Approve enrollment and provide wrapped user key.
+Approve enrollment by handing over the identity key: the approving (trusted) device wraps the identity private key for the requesting device's public key.
 
 Request JSON:
 
@@ -429,11 +443,14 @@ Request JSON:
 {
   "approver_device_id": "...",
   "verification_code": "123456",
-  "wrapped_user_key_b64": "...",
-  "uk_wrap_alg": "...",
-  "uk_wrap_meta": {}
+  "wrapped_identity_private_key_b64": "...",
+  "identity_key_wrap_alg": "RSA-OAEP-2048+AES-GCM-256-v1",
+  "identity_key_wrap_meta": {},
+  "identity_key_version": 1
 }
 ```
+
+`409 IDENTITY_KEY_STALE` if `identity_key_version` isn't the account's active version; `403 APPROVER_NOT_TRUSTED` if the approver doesn't hold it.
 
 ### `POST /api/me/devices/enrollments/:id/reject`
 Reject enrollment.
@@ -445,28 +462,6 @@ Request JSON:
   "approver_device_id": "..."
 }
 ```
-
-### `POST /api/me/devices/identity-key/envelopes`
-Store copies of the identity private key that a trusted device holding it wrapped for the devices listed in its `devices_missing_identity_key`. Only devices without a copy are filled; an existing copy is never replaced. Returns `403 IDENTITY_KEY_NOT_HELD` if the sending device has no copy itself.
-
-Request JSON:
-
-```json
-{
-  "device_id": "sending-device-id",
-  "envelopes": [
-    {
-      "device_id": "target-device-id",
-      "identity_key_version": 1,
-      "wrapped_private_key_b64": "...",
-      "wrap_alg": "RSA-OAEP-2048+AES-GCM-256-v1",
-      "wrap_meta": {}
-    }
-  ]
-}
-```
-
-Response JSON: `{ "stored": 1 }`
 
 ## Notes
 

@@ -123,14 +123,6 @@ type TunnelGuestEnvelope struct {
 	DEKWrapVersion  int    `json:"dek_wrap_version"`
 }
 
-type TunnelPeerWrapKeyResponse struct {
-	PeerCNSUserID int64           `json:"peer_cns_user_id"`
-	PeerDeviceID  string          `json:"peer_device_id"`
-	PublicKeyJWK  json.RawMessage `json:"public_key_jwk"`
-	KeyAlgorithm  string          `json:"key_algorithm"`
-	KeyVersion    int             `json:"key_version"`
-}
-
 type TunnelEndRequest struct {
 	DeviceID string `json:"device_id"`
 }

@@ -49,32 +49,37 @@ func TestLiveDeviceRecovery(t *testing.T) {
 	ctx, db := liveDB(t)
 	userID := time.Now().UnixNano()
 	service := &DeviceIdentity{DB: db}
-	request := func(id, wrapped string) models.DeviceRegisterRequest {
+	request := func(id, identityN string) models.DeviceRegisterRequest {
 		return models.DeviceRegisterRequest{
 			DeviceID: id, DeviceLabel: id,
 			PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"test","e":"AQAB"}`),
 			KeyAlgorithm: "RSA-OAEP-2048", KeyVersion: 1,
-			WrappedUserKeyB64: wrapped, UKWrapAlg: "RSA-OAEP-2048-v1",
-			UKWrapMeta: json.RawMessage(`{"type":"test"}`),
+			IdentityPublicKeyJWK:         json.RawMessage(fmt.Sprintf(`{"kty":"RSA","n":%q,"e":"AQAB"}`, identityN)),
+			WrappedIdentityPrivateKeyB64: base64.StdEncoding.EncodeToString([]byte("wrapped-" + identityN)),
+			IdentityKeyWrapAlg:           "RSA-OAEP-2048+AES-GCM-256-v1",
 		}
 	}
 
 	// Device IDs belong to one account, so derive them from this run's user.
 	oldDeviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID*2)%1000000000000)
 	newDeviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID*2+1)%1000000000000)
-	if _, err := service.Register(ctx, userID, request(oldDeviceID, "b2xk"), false); err != nil {
-		t.Fatal(err)
+	if result, err := service.Register(ctx, userID, request(oldDeviceID, "first"), false); err != nil || result.IdentityKeyEnvelope == nil {
+		t.Fatalf("first device did not create the identity key: result=%+v err=%v", result, err)
 	}
 	// The new device first asks to be approved, then recovers the account
 	// instead; its own request must not be left behind for approval.
-	if result, err := service.Register(ctx, userID, request(newDeviceID, "bmV3"), false); err != nil || !result.NeedsEnrollment {
+	if result, err := service.Register(ctx, userID, request(newDeviceID, "second"), false); err != nil || !result.NeedsEnrollment {
 		t.Fatalf("expected the new device to need enrollment: result=%+v err=%v", result, err)
 	}
 	if _, err := service.CreateEnrollment(ctx, userID, newDeviceID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Register(ctx, userID, request(newDeviceID, "bmV3"), true); err != nil {
+	result, err := service.Register(ctx, userID, request(newDeviceID, "recovered"), true)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if result.ActiveIdentityKey.KeyVersion != 2 {
+		t.Fatalf("recovery should create identity key version 2, got %d", result.ActiveIdentityKey.KeyVersion)
 	}
 	if pending, err := service.ListPending(ctx, userID); err != nil || len(pending) != 0 {
 		t.Fatalf("recovery left pending approval requests: pending=%+v err=%v", pending, err)
@@ -86,11 +91,12 @@ func TestLiveDeviceRecovery(t *testing.T) {
 	if trusted, err := service.IsTrusted(ctx, userID, newDeviceID); err != nil || !trusted {
 		t.Fatalf("new device is not trusted: trusted=%v err=%v", trusted, err)
 	}
-	if _, err := db.GetUserKeyEnvelopeForDevice(ctx, userID, oldDeviceID); err == nil {
-		t.Fatal("old device envelope was not removed")
+	old, err := db.GetUserIdentityKey(ctx, userID, 1)
+	if err != nil || old.Status != "retired" {
+		t.Fatalf("identity key version 1 should be retired: key=%+v err=%v", old, err)
 	}
-	if _, err := db.GetUserKeyEnvelopeForDevice(ctx, userID, newDeviceID); err != nil {
-		t.Fatalf("new device envelope missing: %v", err)
+	if again, err := service.Register(ctx, userID, request(oldDeviceID, "first"), false); err != nil || !again.NeedsEnrollment {
+		t.Fatalf("revoked device must be approved again: result=%+v err=%v", again, err)
 	}
 }
 
@@ -104,28 +110,30 @@ func TestLiveIdentityKeypairRegistrationEnrollmentAndRecovery(t *testing.T) {
 	identityPrivate := []byte(`{"kty":"RSA","n":"identity-private-key-material","d":"test"}`)
 	identityPublic := json.RawMessage(`{"kty":"RSA","n":"identity-public-key","e":"AQAB"}`)
 
-	registration := func(device models.UserDevice, wrappedUser, wrappedIdentity []byte) models.DeviceRegisterRequest {
-		return models.DeviceRegisterRequest{
+	registration := func(device models.UserDevice, wrappedIdentity []byte) models.DeviceRegisterRequest {
+		req := models.DeviceRegisterRequest{
 			DeviceID: device.ID, DeviceLabel: device.DeviceLabel,
 			PublicKeyJWK: device.PublicKeyJWK, KeyAlgorithm: device.KeyAlgorithm, KeyVersion: 1,
-			WrappedUserKeyB64: base64.StdEncoding.EncodeToString(wrappedUser),
-			UKWrapAlg:         "RSA-OAEP-2048-v1", UKWrapMeta: json.RawMessage(`{"type":"test"}`),
-			IdentityPublicKeyJWK: identityPublic, IdentityKeyAlgorithm: "RSA-OAEP-2048",
-			IdentityKeyVersion: 1, WrappedIdentityPrivateKeyB64: base64.StdEncoding.EncodeToString(wrappedIdentity),
-			IdentityKeyWrapAlg:  "RSA-OAEP-2048+AES-GCM-256-v1",
-			IdentityKeyWrapMeta: json.RawMessage(`{"type":"test"}`),
 		}
+		if wrappedIdentity != nil {
+			req.IdentityPublicKeyJWK = identityPublic
+			req.IdentityKeyAlgorithm = "RSA-OAEP-2048"
+			req.WrappedIdentityPrivateKeyB64 = base64.StdEncoding.EncodeToString(wrappedIdentity)
+			req.IdentityKeyWrapAlg = "RSA-OAEP-2048+AES-GCM-256-v1"
+			req.IdentityKeyWrapMeta = json.RawMessage(`{"type":"test"}`)
+		}
+		return req
 	}
 
+	if result, err := service.Register(ctx, userID, registration(deviceA, nil), false); err != nil || !result.NeedsIdentitySetup {
+		t.Fatalf("a brand-new account should ask for an identity key: result=%+v err=%v", result, err)
+	}
 	wrappedA, err := liveWrapIdentityKey(privateA, identityPrivate)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Register(ctx, userID, registration(deviceA, []byte("old-user-key"), wrappedA), false); err != nil {
+	if _, err := service.Register(ctx, userID, registration(deviceA, wrappedA), false); err != nil {
 		t.Fatal(err)
-	}
-	if _, err := db.GetUserKeyEnvelopeForDevice(ctx, userID, deviceA.ID); err != nil {
-		t.Fatalf("legacy user-key envelope missing: %v", err)
 	}
 	if _, err := db.GetUserIdentityKey(ctx, userID, 1); err != nil {
 		t.Fatalf("identity key missing: %v", err)
@@ -134,7 +142,7 @@ func TestLiveIdentityKeypairRegistrationEnrollmentAndRecovery(t *testing.T) {
 		t.Fatalf("device A identity envelope missing: %v", err)
 	}
 
-	result, err := service.Register(ctx, userID, registration(deviceB, []byte("new-user-key"), nil), false)
+	result, err := service.Register(ctx, userID, registration(deviceB, nil), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,8 +159,6 @@ func TestLiveIdentityKeypairRegistrationEnrollmentAndRecovery(t *testing.T) {
 	}
 	approval := models.ApproveEnrollmentRequest{
 		ApproverDeviceID: deviceA.ID, VerificationCode: enrollment.VerificationCode,
-		WrappedUserKeyB64: base64.StdEncoding.EncodeToString([]byte("new-user-key")),
-		UKWrapAlg:         "RSA-OAEP-2048-v1", UKWrapMeta: json.RawMessage(`{"type":"approval"}`),
 		WrappedIdentityPrivateKeyB64: base64.StdEncoding.EncodeToString(wrappedB),
 		IdentityKeyWrapAlg:           "RSA-OAEP-2048+AES-GCM-256-v1",
 		IdentityKeyWrapMeta:          json.RawMessage(`{"type":"approval"}`), IdentityKeyVersion: 1,
@@ -182,22 +188,19 @@ func TestLiveIdentityKeypairRegistrationEnrollmentAndRecovery(t *testing.T) {
 	if string(recoveredA) != string(recoveredIdentity) {
 		t.Fatal("device A and B identity private keys differ")
 	}
-	if _, err := db.GetUserKeyEnvelopeForDevice(ctx, userID, deviceB.ID); err != nil {
-		t.Fatalf("legacy device B envelope missing: %v", err)
-	}
 
 	wrappedC, err := liveWrapIdentityKey(privateC, identityPrivate)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Register(ctx, userID, registration(deviceC, []byte("recovery-user-key"), wrappedC), true); err != nil {
+	if _, err := service.Register(ctx, userID, registration(deviceC, wrappedC), true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.GetUserIdentityKeyDeviceEnvelope(ctx, userID, deviceA.ID, 1); err == nil {
 		t.Fatal("device A identity envelope survived recovery")
 	}
-	if _, err := db.GetUserIdentityKeyDeviceEnvelope(ctx, userID, deviceC.ID, 1); err != nil {
-		t.Fatalf("device C identity envelope missing after recovery: %v", err)
+	if _, err := db.GetUserIdentityKeyDeviceEnvelope(ctx, userID, deviceC.ID, 2); err != nil {
+		t.Fatalf("device C identity envelope for version 2 missing after recovery: %v", err)
 	}
 }
 

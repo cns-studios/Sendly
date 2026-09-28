@@ -172,21 +172,18 @@ Headers:
 ### `GET /android/me/recent-uploads`
 Alias to owned file list.
 
-### `GET /android/me/files/:id/access?device_id=<device_id>`
-Return secure envelope material for file access.
+### `GET /android/me/files/:id/access`
+Return the caller's identity-wrapped copy of a file key; same response as `GET /api/me/files/:id/access` (WEB.md).
 
 ## Devices
 
 ### `POST /android/me/devices/register`
 Register device and attempt trust resolution.
 
-Possible outcomes:
-
-- `needs_enrollment: false` with `user_key_envelope`
-- `needs_enrollment: true` if trusted device approval required
+Same request and outcomes as `POST /api/me/devices/register` (WEB.md): the device's copy of the identity key, or `needs_enrollment` / `needs_identity_setup` / `needs_identity_migration`.
 
 ### `POST /android/me/devices/recover`
-Recovery flow requiring wrapped user key; resets trusted state.
+Same as `POST /api/me/devices/recover` (WEB.md): requires a new identity keypair, which becomes the next identity key version; every other device is revoked.
 
 ### `GET /android/me/devices`
 List connected active devices for the account.
@@ -241,19 +238,7 @@ Response JSON:
 List pending enrollments and request device metadata.
 
 ### `POST /android/me/devices/enrollments/:id/approve`
-Approve enrollment and provide wrapped user key.
-
-Request JSON:
-
-```json
-{
-  "approver_device_id": "...",
-  "verification_code": "123456",
-  "wrapped_user_key_b64": "...",
-  "uk_wrap_alg": "...",
-  "uk_wrap_meta": {}
-}
-```
+Approve enrollment by handing over the identity key; same request as `POST /api/me/devices/enrollments/:id/approve` (WEB.md).
 
 ### `POST /android/me/devices/enrollments/:id/reject`
 Reject enrollment.

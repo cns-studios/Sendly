@@ -216,7 +216,6 @@ func main() {
 			me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
 			me.GET("/tunnels/:id", tunnelHandler.Get)
 			me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
-			me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 			me.GET("/tunnels/:id/files", tunnelHandler.Files)
 			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 			me.DELETE("/tunnels/:id", tunnelHandler.End)
@@ -237,7 +236,6 @@ func main() {
 				devices.GET("/enrollments/pending", recentUploadsHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), recentUploadsHandler.ApproveEnrollment)
 				devices.POST("/enrollments/:id/reject", strictRateLimiter.Handler(), recentUploadsHandler.RejectEnrollment)
-				devices.POST("/identity-key/envelopes", strictRateLimiter.Handler(), recentUploadsHandler.DistributeIdentityKey)
 			}
 		}
 	}
@@ -312,7 +310,6 @@ func main() {
 	router.OPTIONS("/desktop/me/tunnels/start", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/join", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id", desktopCORS)
-	router.OPTIONS("/desktop/me/tunnels/:id/peer-wrap-key", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/files", desktopCORS)
 	router.OPTIONS("/desktop/me/tunnels/:id/confirm", desktopCORS)
 	router.OPTIONS("/desktop/me/files/:id/access", desktopCORS)
@@ -373,7 +370,6 @@ func main() {
 				me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
 				me.GET("/tunnels/:id", tunnelHandler.Get)
 				me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
-				me.GET("/tunnels/:id/peer-wrap-key", tunnelHandler.PeerWrapKey)
 				me.GET("/tunnels/:id/files", tunnelHandler.Files)
 				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
 				me.DELETE("/tunnels/:id", tunnelHandler.End)

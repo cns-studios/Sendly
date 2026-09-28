@@ -85,8 +85,6 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		SizeBytes: int64(len(append(nonce, ciphertext...))), UploaderIP: "127.0.0.1",
 		OwnerCNSUserID: sqlNullInt(ownerID), OwnerCNSUserName: sqlNullString("owner"),
 		ExpiresAt: now.Add(24 * time.Hour), CreatedAt: now,
-	}, &models.FileKeyEnvelope{
-		FileID: fileID, WrappedDEK: []byte("legacy"), DEKWrapAlg: "AES-GCM-UK-v1", DEKWrapVersion: 1,
 	}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -243,10 +241,10 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	if err := json.Unmarshal(access.Body.Bytes(), &accessPayload); err != nil {
 		t.Fatal(err)
 	}
-	if accessPayload.IdentityFileAccessEnvelope == nil {
-		t.Fatal("shared access response omitted identity envelope")
+	if accessPayload.AccessKind != "share" {
+		t.Fatalf("expected a share grant, got %q", accessPayload.AccessKind)
 	}
-	recoveredDEK, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, recipientKey, mustBase64(accessPayload.IdentityFileAccessEnvelope.WrappedDEKB64), nil)
+	recoveredDEK, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, recipientKey, mustBase64(accessPayload.FileAccessKeyEnvelope.WrappedDEKB64), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
