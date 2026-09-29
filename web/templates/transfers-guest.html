@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="{{.locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <meta name="description" content="{{.description}}">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="{{.canonicalURL}}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Sendly">
+    <meta property="og:title" content="{{.title}}">
+    <meta property="og:description" content="{{.description}}">
+    <meta property="og:image" content="{{.ogImage}}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Sendly - Upload and Share Files Securely">
+    <meta property="og:url" content="{{.canonicalURL}}">
+    <meta property="og:locale" content="{{.ogLocale}}">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta property="og:locale:alternate" content="de_DE">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{.title}}">
+    <meta name="twitter:description" content="{{.description}}">
+    <meta name="twitter:image" content="{{.ogImage}}">
+    <meta name="twitter:image:alt" content="Sendly - Upload and Share Files Securely">
+
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Preconnect to external resources -->
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+
+    <!-- Mobile & PWA Meta -->
+    <meta name="theme-color" content="#00AE71">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Sendly">
+    <link rel="apple-touch-icon" href="/static/images/bun.png">
+
+    <!-- DNS Prefetch for external domains -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/static/manifest.json">
+
+<link rel="icon" type="image/png" href="/static/favicon.png">
+</head>
+<body class="page-link page-transfers-guest">
+
+    <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
+                <nav class="quicklinks">
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
+                </nav>
+            </div>
+            {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
+        </header>
+    </div>
+
+    {{template "mobile_menu" .}}
+
+    <div class="main-content">
+        <div class="tg-layout">
+            <div class="tg-copy">
+                <h1 class="tg-title tg-s" style="--i:0">{{.t.transfers_guest_title}} <span>{{.t.transfers_guest_title_highlight}}</span></h1>
+                <p class="tg-desc tg-s" style="--i:1">{{.t.transfers_guest_desc}}</p>
+                <a href="{{.authLoginURL}}" class="tg-cta tg-s" style="--i:2" id="tg-cta">
+                    <span>{{.t.transfers_guest_cta}}</span>
+                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                </a>
+            </div>
+
+            <div class="tg-demo" id="tg-demo" role="img" aria-label="{{.t.transfers_guest_demo_label}}">
+                <div class="tg-stage" aria-hidden="true">
+                    <div class="tg-glow tg-glow-a"></div>
+                    <div class="tg-glow tg-glow-b"></div>
+                    <svg class="tg-star" viewBox="0 0 1745 1745"><path fill="#fff" d="M805.544 48.6921C826.576 -16.2307 918.427 -16.2307 939.458 48.6921V48.6921C957.199 103.455 1029.6 114.921 1063.39 68.3213V68.3213C1103.46 13.0752 1190.81 41.4586 1190.75 109.703V109.703C1190.7 167.267 1256.01 200.546 1302.56 166.669V166.669C1357.73 126.508 1432.04 180.496 1410.89 245.382V245.382C1393.06 300.113 1444.89 351.946 1499.62 334.109V334.109C1564.51 312.963 1618.5 387.272 1578.33 442.448V442.448C1544.46 488.988 1577.74 554.301 1635.3 554.25V554.25C1703.54 554.19 1731.93 641.546 1676.68 681.61V681.61C1630.08 715.405 1641.55 787.804 1696.31 805.544V805.544C1761.23 826.576 1761.23 918.427 1696.31 939.458V939.458C1641.55 957.199 1630.08 1029.6 1676.68 1063.39V1063.39C1731.93 1103.46 1703.54 1190.81 1635.3 1190.75V1190.75C1577.74 1190.7 1544.46 1256.01 1578.33 1302.56V1302.56C1618.5 1357.73 1564.51 1432.04 1499.62 1410.89V1410.89C1444.89 1393.06 1393.06 1444.89 1410.89 1499.62V1499.62C1432.04 1564.51 1357.73 1618.5 1302.56 1578.33V1578.33C1256.01 1544.46 1190.7 1577.74 1190.75 1635.3V1635.3C1190.81 1703.54 1103.46 1731.93 1063.39 1676.68V1676.68C1029.6 1630.08 957.199 1641.55 939.458 1696.31V1696.31C918.427 1761.23 826.576 1761.23 805.544 1696.31V1696.31C787.804 1641.55 715.405 1630.08 681.61 1676.68V1676.68C641.546 1731.93 554.19 1703.54 554.25 1635.3V1635.3C554.301 1577.74 488.988 1544.46 442.448 1578.33V1578.33C387.272 1618.5 312.963 1564.51 334.109 1499.62V1499.62C351.946 1444.89 300.113 1393.06 245.382 1410.89V1410.89C180.496 1432.04 126.508 1357.73 166.669 1302.56V1302.56C200.546 1256.01 167.267 1190.7 109.703 1190.75V1190.75C41.4586 1190.81 13.0752 1103.46 68.3213 1063.39V1063.39C114.921 1029.6 103.455 957.199 48.6921 939.458V939.458C-16.2307 918.427 -16.2307 826.576 48.6921 805.544V805.544C103.455 787.804 114.921 715.405 68.3213 681.61V681.61C13.0752 641.546 41.4587 554.19 109.703 554.25V554.25C167.267 554.301 200.546 488.988 166.669 442.448V442.448C126.508 387.272 180.496 312.963 245.382 334.109V334.109C300.113 351.946 351.946 300.113 334.109 245.382V245.382C312.963 180.496 387.272 126.508 442.448 166.669V166.669C488.988 200.546 554.301 167.267 554.25 109.703V109.703C554.19 41.4586 641.546 13.0752 681.61 68.3213V68.3213C715.405 114.921 787.804 103.455 805.544 48.6921V48.6921Z"/></svg>
+
+                    <div class="tg-bar">
+                        <span class="tg-bar-title">{{.t.menu_transfers}}</span>
+                        <span class="tg-bar-count">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+                            <span class="tg-num"><b class="tg-n2">2</b><b class="tg-n1">1</b><b class="tg-n0">0</b></span>
+                        </span>
+                    </div>
+
+                    <div class="tg-deck">
+                        <div class="tg-mini tg-c1">
+                            <div class="tg-row">
+                                <div class="tg-fileicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tg-dir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg></span></div>
+                                <div class="tg-meta"><div class="tg-name">Invoice-Q3.pdf</div><div class="tg-sub">3.4 MB<b>•</b>PDF</div></div>
+                                <div class="tg-stack"><span class="tg-pill">{{.t.transfers_guest_demo_time_left}}</span></div>
+                            </div>
+                            <div class="tg-foot-row">
+                                <div class="tg-who"><span class="tg-av" style="background:linear-gradient(135deg,#FFE3B8,#FF9F0A)">L</span><span><span class="tg-who-lbl">{{.t.transfers_from}} </span><strong>@leon</strong></span></div>
+                                <div class="tg-btns"><span class="tg-btn tg-decline">{{.t.transfers_decline}}<svg class="tg-cursor" viewBox="0 0 24 24" fill="#fff" stroke="#0b0b0f" stroke-width="1.6" stroke-linejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg></span><span class="tg-btn tg-accept"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{.t.transfers_accept}}</span></div>
+                            </div>
+                        </div>
+                        <div class="tg-mini tg-c2">
+                            <div class="tg-row">
+                                <div class="tg-fileicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tg-dir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 7 7 17"/><path d="M17 17H7V7"/></svg></span></div>
+                                <div class="tg-meta"><div class="tg-name">Holiday-Photos.zip</div><div class="tg-sub">248 MB<b>•</b>ZIP</div></div>
+                                <div class="tg-stack"><span class="tg-pill tg-a">{{.t.transfers_guest_demo_time_left}}</span><span class="tg-pill tg-b">{{.t.transfers_status_accepted}}</span></div>
+                            </div>
+                            <div class="tg-foot-row">
+                                <div class="tg-who"><span class="tg-av" style="background:linear-gradient(135deg,#79FFA1,#00827B)">M</span><span><span class="tg-who-lbl">{{.t.transfers_from}} </span><strong>@mike</strong></span></div>
+                                <div class="tg-stack">
+                                    <div class="tg-btns tg-a"><span class="tg-btn tg-decline">{{.t.transfers_decline}}</span><span class="tg-btn tg-accept"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{.t.transfers_accept}}<svg class="tg-cursor" viewBox="0 0 24 24" fill="#fff" stroke="#0b0b0f" stroke-width="1.6" stroke-linejoin="round"><path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/></svg></span></div>
+                                    <div class="tg-btns tg-b"><span class="tg-btn tg-dl"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>{{.t.transfers_download}}</span></div>
+                                    <span class="tg-sparks"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tg-mini tg-c3">
+                            <div class="tg-row">
+                                <div class="tg-fileicon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span class="tg-dir is-sent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></span></div>
+                                <div class="tg-meta"><div class="tg-name">Design-Files.fig</div><div class="tg-sub">92 MB<b>•</b>FIG</div></div>
+                                <div class="tg-stack"><span class="tg-pill is-blue tg-ps">{{.t.transfers_guest_demo_sending}}</span><span class="tg-pill is-blue tg-pa">{{.t.transfers_guest_demo_awaiting}}</span><span class="tg-pill tg-pb">{{.t.transfers_status_accepted}}</span></div>
+                            </div>
+                            <div class="tg-foot-row">
+                                <div class="tg-who"><span class="tg-av" style="background:linear-gradient(135deg,#BFDBFF,#007AFF)">T</span><span><span class="tg-who-lbl">{{.t.transfers_to}} </span><strong>@tom</strong></span></div>
+                            </div>
+                            <div class="tg-prog"><i></i></div>
+                        </div>
+                    </div>
+
+                    <span class="tg-chip">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        {{.t.transfers_guest_demo_encrypted}}
+                    </span>
+                </div>
+                <div class="tg-steps" aria-hidden="true">
+                    <div class="tg-tracks"><i class="tg-t1"></i><i class="tg-t2"></i><i class="tg-t3"></i></div>
+                    <div class="tg-captions">
+                        <p class="tg-cap1">{{.t.transfers_guest_step_decline}}</p>
+                        <p class="tg-cap2">{{.t.transfers_guest_step_accept}}</p>
+                        <p class="tg-cap3">{{.t.transfers_guest_step_sent}}</p>
+                    </div>
+                </div>
+            </div>
+
+            <ul class="tg-points">
+                <li class="tg-s" style="--i:3">
+                    <i data-lucide="link-2-off" aria-hidden="true"></i>
+                    <div><strong>{{.t.transfers_guest_point_leak}}</strong><p>{{.t.transfers_guest_point_leak_desc}}</p></div>
+                </li>
+                <li class="tg-s" style="--i:4">
+                    <i data-lucide="messages-square" aria-hidden="true"></i>
+                    <div><strong>{{.t.transfers_guest_point_tidy}}</strong><p>{{.t.transfers_guest_point_tidy_desc}}</p></div>
+                </li>
+                <li class="tg-s" style="--i:5">
+                    <i data-lucide="route" aria-hidden="true"></i>
+                    <div><strong>{{.t.transfers_guest_point_track}}</strong><p>{{.t.transfers_guest_point_track_desc}}</p></div>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="tg-sticky" id="tg-sticky">
+        <a href="{{.authLoginURL}}" class="tg-cta">
+            <span>{{.t.transfers_guest_cta}}</span>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+    </div>
+
+    <footer class="footer">
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
+    </footer>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            if (window.lucide && lucide.createIcons) lucide.createIcons();
+        });
+    </script>
+    <script src="/static/js/transfers-guest.js"></script>
+</body>
+</html>

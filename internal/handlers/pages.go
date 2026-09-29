@@ -506,16 +506,23 @@ func userIDOrZero(user *middleware.CNSUser) int {
 	return user.ID
 }
 
-// Transfers renders the received-transfers page. It is only meaningful for a
-// signed-in user, so anonymous visitors are sent to log in first.
+// Transfers renders the transfers page for a signed-in user. Anonymous visitors
+// get a landing page that demos the feature and asks them to sign up.
 func (h *PageHandler) Transfers(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
-		if h.cfg.CNSAuthURL != "" {
-			c.Redirect(http.StatusFound, "/auth/login")
-		} else {
+		if h.cfg.CNSAuthURL == "" {
 			c.Redirect(http.StatusFound, "/")
+			return
 		}
+		translations := h.tr.Get(middleware.GetLocale(c))
+		h.render(c, "transfers-guest.html", gin.H{
+			"title":         translations["title_transfers_guest"],
+			"description":   translations["desc_transfers_guest"],
+			"baseURL":       h.cfg.BaseURL,
+			"authenticated": false,
+			"authLoginURL":  "/auth/login",
+		})
 		return
 	}
 	setCSRFTokenCookie(c)
