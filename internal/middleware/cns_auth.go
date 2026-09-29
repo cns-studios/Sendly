@@ -205,6 +205,7 @@ func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken st
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

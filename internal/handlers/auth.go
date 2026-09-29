@@ -360,6 +360,7 @@ func doTokenRequest(ctx context.Context, tokenURL, contentType string, body io.R
 	}
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
