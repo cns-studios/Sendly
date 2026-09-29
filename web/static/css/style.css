@@ -6769,24 +6769,110 @@ body.page-transfers-guest .tg-chip svg {
     50% { transform: translateY(-8px) rotate(1.5deg); }
 }
 
-/* People floating above the deck */
-body.page-transfers-guest .tg-float {
+/* "Send to" bar: types @tom, attaches a file and sends it just before the sent card comes forward */
+body.page-transfers-guest .tg-compose {
     position: absolute;
-    z-index: 2;
-    border-radius: 50%;
-    border: 3px solid rgba(255, 255, 255, 0.9);
-    color: #123;
-    font-weight: 700;
+    top: 88px;
+    left: 28px;
+    right: 28px;
+    z-index: 4;
+    height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 7px 0 18px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 12px 30px rgba(0, 50, 40, 0.22);
+}
+
+body.page-transfers-guest .tg-to {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    height: 100%;
+    font-size: 15px;
+}
+
+body.page-transfers-guest .tg-ph {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    translate: 0 -50%;
+    color: #9A9AA0;
+    white-space: nowrap;
+}
+
+body.page-transfers-guest .tg-typed {
+    display: inline-flex;
+    font-weight: 600;
+    color: #1a1a1f;
+}
+
+body.page-transfers-guest .tg-typed b {
+    font-weight: inherit;
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+}
+
+body.page-transfers-guest .tg-caret {
+    width: 2px;
+    height: 20px;
+    margin-left: 1px;
+    border-radius: 1px;
+    background: #00AE71;
+    animation: tg-blink 1s steps(1) infinite;
+}
+
+@keyframes tg-blink {
+    50% { opacity: 0; }
+}
+
+body.page-transfers-guest .tg-attach {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 44%;
+    padding: 7px 11px 7px 9px;
+    border-radius: 10px;
+    background: #F0F4FF;
+    color: #0060D1;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    opacity: 0;
+}
+
+body.page-transfers-guest .tg-attach svg {
+    width: 15px;
+    height: 15px;
+    flex-shrink: 0;
+}
+
+body.page-transfers-guest .tg-attach span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+body.page-transfers-guest .tg-send {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 12px;
+    background: #00827B;
+    color: #fff;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 10px 24px rgba(0, 50, 40, 0.25);
-    animation: tg-bob 5s ease-in-out infinite;
 }
 
-body.page-transfers-guest .tg-f1 { width: 48px; height: 48px; font-size: 17px; left: 13%; top: 118px; animation-delay: -1s; }
-body.page-transfers-guest .tg-f2 { width: 38px; height: 38px; font-size: 14px; left: 44%; top: 92px; animation-delay: -3.2s; animation-duration: 6s; }
-body.page-transfers-guest .tg-f3 { width: 42px; height: 42px; font-size: 15px; right: 16%; top: 146px; animation-delay: -2.1s; animation-duration: 5.5s; }
+body.page-transfers-guest .tg-send svg {
+    width: 18px;
+    height: 18px;
+}
 
 /* Step captions under the stage, synced with the card loop */
 body.page-transfers-guest .tg-steps {
@@ -6840,7 +6926,11 @@ body.page-transfers-guest .tg-mini *,
 body.page-transfers-guest .tg-bar-count,
 body.page-transfers-guest .tg-num b,
 body.page-transfers-guest .tg-tracks i::after,
-body.page-transfers-guest .tg-captions p {
+body.page-transfers-guest .tg-captions p,
+body.page-transfers-guest .tg-compose > *:not(.tg-to),
+body.page-transfers-guest .tg-ph,
+body.page-transfers-guest .tg-typed,
+body.page-transfers-guest .tg-typed b {
     animation-duration: 13s;
     animation-iteration-count: infinite;
     animation-delay: 0.9s;
@@ -6853,7 +6943,11 @@ body.page-transfers-guest .tg-demo.is-playing .tg-mini *,
 body.page-transfers-guest .tg-demo.is-playing .tg-bar-count,
 body.page-transfers-guest .tg-demo.is-playing .tg-num b,
 body.page-transfers-guest .tg-demo.is-playing .tg-tracks i::after,
-body.page-transfers-guest .tg-demo.is-playing .tg-captions p {
+body.page-transfers-guest .tg-demo.is-playing .tg-captions p,
+body.page-transfers-guest .tg-demo.is-playing .tg-compose > *:not(.tg-to),
+body.page-transfers-guest .tg-demo.is-playing .tg-ph,
+body.page-transfers-guest .tg-demo.is-playing .tg-typed,
+body.page-transfers-guest .tg-demo.is-playing .tg-typed b {
     animation-play-state: running;
 }
 
@@ -6880,6 +6974,14 @@ body.page-transfers-guest .tg-t3::after { animation-name: tg-track3; }
 body.page-transfers-guest .tg-cap1 { animation-name: tg-cap1; }
 body.page-transfers-guest .tg-cap2 { animation-name: tg-cap2; }
 body.page-transfers-guest .tg-cap3 { animation-name: tg-cap3; }
+body.page-transfers-guest .tg-ph { animation-name: tg-ph; }
+body.page-transfers-guest .tg-typed { animation-name: tg-typed; }
+body.page-transfers-guest .tg-typed b:nth-child(1) { animation-name: tg-key1; }
+body.page-transfers-guest .tg-typed b:nth-child(2) { animation-name: tg-key2; }
+body.page-transfers-guest .tg-typed b:nth-child(3) { animation-name: tg-key3; }
+body.page-transfers-guest .tg-typed b:nth-child(4) { animation-name: tg-key4; }
+body.page-transfers-guest .tg-attach { animation-name: tg-attach; }
+body.page-transfers-guest .tg-send { animation-name: tg-send; }
 body.page-transfers-guest .tg-n2 { animation-name: tg-n2; }
 body.page-transfers-guest .tg-n1 { animation-name: tg-n1; opacity: 0; }
 body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
@@ -6979,6 +7081,62 @@ body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
     0%, 55.4% { opacity: 0; transform: translateY(6px); }
     57%, 96.5% { opacity: 1; transform: none; }
     98%, 100% { opacity: 0; transform: translateY(-6px); }
+}
+
+/* Send bar: type 43–47%, attach 48.5%, press send 53%, clear once the sent card is in front */
+@keyframes tg-ph {
+    0%, 42.5% { opacity: 1; }
+    43%, 57% { opacity: 0; }
+    59%, 100% { opacity: 1; }
+}
+
+@keyframes tg-typed {
+    0%, 55.5% { opacity: 1; transform: none; }
+    57%, 99% { opacity: 0; transform: translateY(-6px); }
+    100% { opacity: 1; transform: none; }
+}
+
+@keyframes tg-key1 { 0%, 43.4% { opacity: 0; width: 0; } 43.5%, 99% { opacity: 1; width: auto; } 100% { opacity: 0; width: 0; } }
+@keyframes tg-key2 { 0%, 44.4% { opacity: 0; width: 0; } 44.5%, 99% { opacity: 1; width: auto; } 100% { opacity: 0; width: 0; } }
+@keyframes tg-key3 { 0%, 45.4% { opacity: 0; width: 0; } 45.5%, 99% { opacity: 1; width: auto; } 100% { opacity: 0; width: 0; } }
+@keyframes tg-key4 { 0%, 46.4% { opacity: 0; width: 0; } 46.5%, 99% { opacity: 1; width: auto; } 100% { opacity: 0; width: 0; } }
+
+@keyframes tg-attach {
+    0%, 48% {
+        opacity: 0;
+        transform: scale(0.6);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.06);
+    }
+    51.5%, 55.5% {
+        opacity: 1;
+        transform: none;
+    }
+    57%, 100% {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+}
+
+@keyframes tg-send {
+    0%, 52.4% {
+        transform: none;
+        background: #00827B;
+    }
+    53.2% {
+        transform: scale(0.86);
+        background: #006B65;
+    }
+    54.4% {
+        transform: scale(1.06);
+        background: #00AE71;
+    }
+    56%, 100% {
+        transform: none;
+        background: #00827B;
+    }
 }
 
 /* Pending counter: 2 → 1 (declined) → 0 (accepted) → back to 2 when the loop restarts */
@@ -7347,6 +7505,25 @@ body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
     }
 }
 
+/* Big screens: give the demo more room */
+@media (min-width: 1600px) {
+    body.page-transfers-guest .tg-layout {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 620px);
+    }
+
+    body.page-transfers-guest .tg-stage {
+        height: 600px;
+    }
+
+    body.page-transfers-guest .tg-compose {
+        top: 96px;
+    }
+
+    body.page-transfers-guest .tg-deck {
+        bottom: 196px;
+    }
+}
+
 /* Sticky CTA (mobile only, shown once the main button scrolls away) */
 body.page-transfers-guest .tg-sticky {
     display: none;
@@ -7449,9 +7626,24 @@ body.page-transfers-guest .tg-sticky {
         font-size: 13.5px;
     }
 
-    body.page-transfers-guest .tg-f1 { width: 36px; height: 36px; font-size: 13px; top: 76px; }
-    body.page-transfers-guest .tg-f2 { width: 30px; height: 30px; font-size: 12px; top: 70px; }
-    body.page-transfers-guest .tg-f3 { width: 32px; height: 32px; font-size: 12px; top: 96px; }
+    body.page-transfers-guest .tg-compose {
+        top: 66px;
+        left: 14px;
+        right: 14px;
+        height: 46px;
+        padding: 0 5px 0 14px;
+        border-radius: 14px;
+    }
+
+    body.page-transfers-guest .tg-to {
+        font-size: 14px;
+    }
+
+    body.page-transfers-guest .tg-send {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+    }
 
     body.page-transfers-guest .tg-steps {
         margin: 18px 4px 0;
@@ -7519,7 +7711,11 @@ body.page-transfers-guest .tg-sticky {
     body.page-transfers-guest .tg-s,
     body.page-transfers-guest .tg-stage,
     body.page-transfers-guest .tg-glow,
-    body.page-transfers-guest .tg-float,
+    body.page-transfers-guest .tg-caret,
+    body.page-transfers-guest .tg-compose > *,
+    body.page-transfers-guest .tg-ph,
+    body.page-transfers-guest .tg-typed,
+    body.page-transfers-guest .tg-typed b,
     body.page-transfers-guest .tg-star,
     body.page-transfers-guest .tg-chip,
     body.page-transfers-guest .tg-cta::after,
