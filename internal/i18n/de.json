@@ -89,6 +89,7 @@
   "transfers_guest_step_sent": "Selbst gesendet? Sieh sofort, wann angenommen wurde.",
   "transfers_guest_demo_label": "Animation: Eine Datei wird abgelehnt, eine andere angenommen und geladen, und eine gesendete Datei wird angenommen",
   "transfers_guest_demo_encrypted": "Ende-zu-Ende verschlüsselt",
+  "transfers_guest_demo_send_to": "An Sendly-Nutzernamen senden",
   "transfers_guest_demo_time_left": "noch 23 Std.",
   "transfers_guest_demo_sending": "Wird gesendet…",
   "transfers_guest_demo_awaiting": "Ausstehend",

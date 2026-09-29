@@ -89,6 +89,7 @@
   "transfers_guest_step_sent": "Sending one yourself? See the moment they accept.",
   "transfers_guest_demo_label": "Animation: a file is declined, another accepted and downloaded, and a sent file gets accepted",
   "transfers_guest_demo_encrypted": "End-to-end encrypted",
+  "transfers_guest_demo_send_to": "Send to a Sendly username",
   "transfers_guest_demo_time_left": "23h left",
   "transfers_guest_demo_sending": "Sending…",
   "transfers_guest_demo_awaiting": "Awaiting",
