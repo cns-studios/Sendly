@@ -42,6 +42,9 @@ func (h *PageHandler) Sitemap(c *gin.Context) {
 		{Loc: baseURL + "/tos", LastMod: "2026-09-25", ChangeFreq: "yearly", Priority: "0.5"},
 		{Loc: baseURL + "/privacy", LastMod: "2026-09-25", ChangeFreq: "yearly", Priority: "0.5"},
 	}
+	if h.cfg.CNSAuthURL != "" {
+		urls = append(urls, sitemapURL{Loc: baseURL + "/transfers", LastMod: now, ChangeFreq: "weekly", Priority: "0.8"})
+	}
 
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9", URLs: urls}
 	output, err := xml.MarshalIndent(set, "", "  ")
