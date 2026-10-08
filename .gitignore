@@ -6,3 +6,5 @@ PREV.html
 /.claude/worktrees/
 
 !legal/*.md
+!README.md
+!docs/*.md

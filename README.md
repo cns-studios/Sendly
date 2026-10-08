@@ -1,94 +1,49 @@
-# Sendly
+# [Sendly](https://sendly.cns-studios.com)
 
-Sendly is an encrypted file sharing backend with three client surfaces:
+**Share files privately.** Sendly is an end-to-end encrypted file sharing service: files are encrypted in your browser before they leave it, so the server only ever stores ciphertext it cannot read.
 
-- Browser API: `/api`
-- Desktop API: `/desktop`
-- Mobile API: `/android`
+Built by [CNS Studios](https://cns-studios.com). No account is needed to share a file.
 
-## Quick Start
+## Features
 
-Prerequisites:
+- **Share by link.** Upload a file and send the link. The decryption key lives in the URL fragment, which is never sent to the server. Recipients can also open a file with a short numeric code.
+- **Quick share.** Open a temporary room (10 minutes to 24 hours), let others join with a code or QR, approve each person by comparing key fingerprints, and swap files. No accounts required.
+- **Send to a person.** Signed-in users send a file straight to another user, who accepts or declines it. The file key is wrapped for the recipient's public key.
+- **Accounts and trusted devices.** Sign in with CNS Auth and reach your files from every device. New devices are approved by an existing one, and a recovery path exists if you lose them all.
+- **Large files.** Chunked uploads up to 750 MB for guests and 1.5 GB for accounts.
+- **Automatic expiry.** Files are deleted after 7 days (guests) or 90 days (accounts), with background cleanup and data retention.
+- **Abuse reporting.** Anyone can report a file; enough distinct reporters remove it automatically.
+- **English and German**, with no third-party scripts, fonts or trackers.
 
-- Go 1.18+
-- PostgreSQL 12+
-- Redis 6+
+## Security at a glance
 
-Run locally:
+- **End-to-end encryption.** Files are encrypted in the browser with WebCrypto. Keys, session passwords and private keys never reach the server in the clear.
+- **Zero-knowledge storage.** A full database and disk leak exposes ciphertext and wrapped keys only.
+- **Per-account identity keys.** Private keys exist only in your browsers and move between devices only through approval with a verification code.
+- **Hardened by default.** Strict Content Security Policy, CSRF protection, PKCE sign-in, layered rate limiting, host-approved quick share rooms and spoof-resistant client IP handling.
 
-```bash
-go mod download
-cp .env.example .env
-go run cmd/server/main.go
-```
+Details and trust assumptions: [docs/SECURITY.md](docs/SECURITY.md).
 
-## Configuration Snapshot
+## Documentation
 
-Important env variables:
+| Doc | What you will find |
+|---|---|
+| [Architecture](docs/ARCHITECTURE.md) | Features in depth, system design, upload flow, device and identity keys, data model, background jobs. |
+| [Security](docs/SECURITY.md) | Threat model, encryption design, authorization, abuse prevention, CSP, hardening checklist. |
+| [API](docs/API.md) | Every HTTP endpoint with requests, responses, limits and error codes. |
+| [Operations](docs/OPERATIONS.md) | Running Sendly, every configuration variable, health checks, cleanup, storage safety, troubleshooting. |
 
-```env
-PORT=8085
-BASE_URL=http://localhost:8085
+## Run it
 
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=sendly
-POSTGRES_PASSWORD=changeme
-POSTGRES_DB=sendly
-
-REDIS_HOST=localhost
-REDIS_PORT=6379
-
-DATA_DIR=./data
-CHUNK_DIR=
-
-MAX_FILE_SIZE=786432000
-AUTH_MAX_FILE_SIZE=1610612736
-AUTO_DELETE_REPORT_COUNT=3
-
-CNS_AUTH_URL=
-CNS_AUTH_CLIENT_ID=
-CNS_AUTH_DESKTOP_CLIENT_ID=
-CNS_AUTH_SERVICE_KEY=
-
-DISCORD_WEBHOOK_URL=
-MIGRATIONS_DIR=db/migrations
-
-RATE_LIMIT_MAX_PER_MINUTE=2
-RATE_LIMIT_WINDOW_SECONDS=60
-RATE_LIMIT_STRICT_MAX_PER_MINUTE=1
-RATE_LIMIT_STRICT_WINDOW_SECONDS=60
-RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE=10
-RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS=60
-```
-
-## Documentation Hub
-
-## API Docs (Detailed)
-
-- [Web API (`/api`)](docs/api/WEB.md)
-- [Desktop API (`/desktop`)](docs/api/DESKTOP.md)
-- [Mobile API (`/mobile` docs, runtime `/android`)](docs/api/MOBILE.md)
-
-## Backend Docs (Quick Explanations + Deep Links)
-
-- [Architecture](docs/ARCHITECTURE.md)
-  - Component map, request flow, background workers, and websocket channels.
-- [Configuration](docs/CONFIGURATION.md)
-  - Every env var, defaults, and behavior impact.
-- [Security](docs/SECURITY.md)
-  - Auth boundaries, authorization checks, abuse controls, and hardening notes.
-- [Operations](docs/OPERATIONS.md)
-  - Startup lifecycle, runtime checks, cleanup behavior, migration/rate-limit tuning.
-- [Data Model](docs/DATA_MODEL.md)
-  - Core entities across postgres, redis, and filesystem.
-
-## Migrations
-
-Migrations run automatically on startup from `MIGRATIONS_DIR`.
-
-Manual run:
+Needs Docker with Compose, or Go with PostgreSQL and Redis.
 
 ```bash
-make migrate
+cp .env.example .env   # adjust values
+make dev-full          # build and start the stack on http://localhost:8085
 ```
+
+The `Makefile` covers the rest (`make logs`, `make down`, `make prod-up`, `make migrate`); see [Operations](docs/OPERATIONS.md) for details.
+
+## License
+
+Licensed under the [AGPL-3.0](LICENSE).
