@@ -77,8 +77,9 @@ body.page-index {
 .header {
     background-color: #E4E3E3;
     border-radius: 900px;
-    width: 40%;
-    min-width: 500px;
+    width: max-content;
+    min-width: max(40%, 500px);
+    gap: 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -90,6 +91,12 @@ body.page-index {
     display: flex;
     align-items: center;
     gap: 32px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.header > :not(.header-left) {
+    flex-shrink: 0;
 }
 
 .logo-text {
@@ -1422,9 +1429,9 @@ body.page-shared .header-wrapper {
 }
 
 body.page-shared .header {
-    width: 626px;
-    min-width: unset;
-    max-width: 90%;
+    width: max-content;
+    min-width: min(626px, 90%);
+    max-width: none;
 }
 
 body.page-shared .logo-text {

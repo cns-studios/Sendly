@@ -3,5 +3,6 @@ PREV.html
 
 *.md
 
-# Claude Code worktrees
 /.claude/worktrees/
+
+!legal/*.md

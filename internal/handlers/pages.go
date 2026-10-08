@@ -187,6 +187,36 @@ func (h *PageHandler) Privacy(c *gin.Context) {
 	})
 }
 
+func (h *PageHandler) LegalNotice(c *gin.Context) {
+	setCSRFTokenCookie(c)
+	user := middleware.GetCNSUser(c)
+	authenticated := user != nil
+	username := ""
+	userAvatar := ""
+	accountURL := ""
+	if user != nil {
+		username = user.Username
+		userAvatar = user.Avatar
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
+	}
+	locale := middleware.GetLocale(c)
+	translations := h.tr.Get(locale)
+	h.render(c, "legal-notice.html", gin.H{
+		"title":         translations["title_legal_notice"],
+		"description":   translations["desc_legal_notice"],
+		"baseURL":       h.cfg.BaseURL,
+		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
+	})
+}
+
 func (h *PageHandler) LimitsPage(c *gin.Context) {
 	setCSRFTokenCookie(c)
 	user := middleware.GetCNSUser(c)

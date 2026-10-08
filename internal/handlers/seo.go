@@ -39,8 +39,9 @@ func (h *PageHandler) Sitemap(c *gin.Context) {
 		{Loc: baseURL + "/limits", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
 		{Loc: baseURL + "/data-encryption", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
 		{Loc: baseURL + "/help", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
-		{Loc: baseURL + "/tos", LastMod: "2026-09-25", ChangeFreq: "yearly", Priority: "0.5"},
-		{Loc: baseURL + "/privacy", LastMod: "2026-09-25", ChangeFreq: "yearly", Priority: "0.5"},
+		{Loc: baseURL + "/tos", LastMod: "2026-10-08", ChangeFreq: "yearly", Priority: "0.5"},
+		{Loc: baseURL + "/privacy", LastMod: "2026-10-08", ChangeFreq: "yearly", Priority: "0.5"},
+		{Loc: baseURL + "/legal-notice", LastMod: "2026-10-08", ChangeFreq: "yearly", Priority: "0.5"},
 	}
 	if h.cfg.CNSAuthURL != "" {
 		urls = append(urls, sitemapURL{Loc: baseURL + "/transfers", LastMod: now, ChangeFreq: "weekly", Priority: "0.8"})

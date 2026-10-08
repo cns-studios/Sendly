@@ -110,6 +110,7 @@
 
   "footer_tos": "Terms of Service",
   "footer_privacy": "Privacy Policy",
+  "footer_legal_notice": "Legal Notice",
   "footer_limits": "Limits",
   "footer_encryption": "Data Encryption",
   "footer_help": "Help",
@@ -120,6 +121,7 @@
   "title_shared": "Download File ➤ Sendly",
   "title_tos": "Terms of Service ➤ Sendly",
   "title_privacy": "Privacy Policy ➤ Sendly",
+  "title_legal_notice": "Legal Notice ➤ Sendly",
   "title_limits": "Limits ➤ Sendly",
   "title_encryption": "Data Encryption ➤ Sendly",
   "title_help": "Help ➤ Sendly",
@@ -130,6 +132,7 @@
   "desc_shared": "You got sent a file on Sendly. Download and decrypt it securely. Files are end-to-end encrypted and expire automatically.",
   "desc_tos": "Terms of Service for Sendly. Please read the conditions for using our file sharing service carefully.",
   "desc_privacy": "Privacy Policy for Sendly. Learn how your data is handled when you use our file sharing service.",
+  "desc_legal_notice": "Legal notice (Impressum) of Sendly: provider details, contact and Digital Services Act point of contact.",
   "desc_limits": "Current file size limits, retention periods and rate limits for Sendly, for guests and logged-in users.",
   "desc_encryption": "Sendly encrypts every file end-to-end before it leaves your device. Learn how data encryption and decryption work.",
   "desc_help": "Help and FAQ for Sendly. Answers to common questions about sharing files, links, quick shares and encryption.",

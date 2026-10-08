@@ -110,6 +110,7 @@
 
   "footer_tos": "Nutzungsbedingungen",
   "footer_privacy": "Datenschutz",
+  "footer_legal_notice": "Impressum",
   "footer_limits": "Grenzen",
   "footer_encryption": "Datenverschlüsselung",
   "footer_help": "Hilfe",
@@ -120,6 +121,7 @@
   "title_shared": "Datei herunterladen ➤ Sendly",
   "title_tos": "Nutzungsbedingungen ➤ Sendly",
   "title_privacy": "Datenschutz ➤ Sendly",
+  "title_legal_notice": "Impressum ➤ Sendly",
   "title_limits": "Grenzen ➤ Sendly",
   "title_encryption": "Datenverschlüsselung ➤ Sendly",
   "title_help": "Hilfe ➤ Sendly",
@@ -130,6 +132,7 @@
   "desc_shared": "Dir wurde eine Datei über Sendly gesendet. Lade sie sicher herunter und entschlüssele sie. Dateien sind Ende-zu-Ende verschlüsselt und laufen automatisch ab.",
   "desc_tos": "Nutzungsbedingungen für Sendly. Bitte lies die Bedingungen für die Nutzung unseres Datei-Sharing-Dienstes sorgfältig.",
   "desc_privacy": "Datenschutzerklärung für Sendly. Erfahre, wie deine Daten bei der Nutzung unseres Datei-Sharing-Dienstes behandelt werden.",
+  "desc_legal_notice": "Impressum von Sendly: Anbieterangaben, Kontakt und zentrale Kontaktstelle nach dem Digital Services Act.",
   "desc_limits": "Aktuelle Dateigrößen-Grenzen, Aufbewahrungsfristen und Ratenlimits für Sendly – für Gäste und angemeldete Nutzer.",
   "desc_encryption": "Sendly verschlüsselt jede Datei Ende-zu-Ende, bevor sie dein Gerät verlässt. Erfahre, wie Datenverschlüsselung und -entschlüsselung funktionieren.",
   "desc_help": "Hilfe und FAQ für Sendly. Antworten auf häufige Fragen zu Dateien, Links, Quick Shares und Verschlüsselung.",

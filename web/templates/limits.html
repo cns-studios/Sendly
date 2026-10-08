@@ -123,7 +123,7 @@
 
     {{template "mobile_menu" .}}
 
-        <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto;">
+        <main style="padding: 3rem 2rem; max-width: 900px; margin: 0 auto; flex: 1; width: 100%; box-sizing: border-box;">
             <article class="legal-document">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
                     <h1>{{.t.limits_title}}</h1>
@@ -188,6 +188,7 @@
     <footer class="footer">
         <a href="/tos">{{.t.footer_tos}}</a>
         <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/legal-notice">{{.t.footer_legal_notice}}</a>
         <a href="/limits">{{.t.footer_limits}}</a>
         <a href="/data-encryption">{{.t.footer_encryption}}</a>
         <a href="/help">{{.t.footer_help}}</a>
