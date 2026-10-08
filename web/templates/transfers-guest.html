@@ -30,12 +30,9 @@
     <meta name="twitter:image:alt" content="Sendly - Upload and Share Files Securely">
 
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/vendor/lucide-1.53.0.min.js"></script>
     <script src="/static/js/avatar.js"></script>
     <script src="/static/js/mobile-menu.js" defer></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Preconnect to external resources -->
-    <link rel="preconnect" href="https://unpkg.com" crossorigin>
 
     <!-- Mobile & PWA Meta -->
     <meta name="theme-color" content="#00AE71">
@@ -43,9 +40,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Sendly">
     <link rel="apple-touch-icon" href="/static/images/bun.png">
-
-    <!-- DNS Prefetch for external domains -->
-    <link rel="dns-prefetch" href="https://unpkg.com">
 
     <!-- Web App Manifest -->
     <link rel="manifest" href="/static/manifest.json">
@@ -184,11 +178,8 @@
         <a href="/data-encryption">{{.t.footer_encryption}}</a>
         <a href="/help">{{.t.footer_help}}</a>
     </footer>
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            if (window.lucide && lucide.createIcons) lucide.createIcons();
-        });
-    </script>
+<script src="/static/js/page-init.js"></script>
     <script src="/static/js/transfers-guest.js"></script>
+
 </body>
 </html>

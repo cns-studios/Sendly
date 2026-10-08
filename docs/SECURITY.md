@@ -64,6 +64,17 @@ End-to-end encrypted: the server stores only encrypted file blobs and wrapped ke
 - File ID and numeric code format validation for lookup/download endpoints.
 - Websocket upgrade paths gated by auth checks.
 
+## Content Security Policy and Self-Hosted Assets
+
+Every response carries a `Content-Security-Policy` header (`internal/middleware/security_headers.go`):
+`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https:; connect-src 'self' blob: <ws(s) origin of BASE_URL>; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`.
+
+- No third-party script, stylesheet or font is loaded. Lucide icons are vendored at `web/static/js/vendor/lucide-1.53.0.min.js` (ISC, license alongside) and the TASA Orbiter / Arimo fonts at `web/static/fonts/` (declared in `web/static/css/fonts.css`). To upgrade lucide, replace the file, bump the version in the filename and templates, and verify all `data-lucide` icon names still exist.
+- Inline scripts are not allowed. Page bootstrap lives in `web/static/js/page-init.js`; `window.CONFIG` is passed through a `<script type="application/json" id="page-config">` data block.
+- `style-src` keeps `'unsafe-inline'` because templates use inline `style` attributes; scripts are unaffected.
+- `img-src https:` exists because user avatars are served by the CNS identity provider.
+- `TestFrontendHasNoThirdPartyOrInlineCode` fails if templates or CSS reintroduce external resources, inline scripts or inline event handlers.
+
 ## Operational Hardening Recommendations
 
 - Serve behind HTTPS only in production.

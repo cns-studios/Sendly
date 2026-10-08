@@ -1,6 +1,5 @@
 /* ── Fonts ── */
-@import url('https://fonts.googleapis.com/css2?family=TASA+Orbiter:wght@800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Arimo:wght@400;500;600;700&display=swap');
+@import url('/static/css/fonts.css');
 
 /* ── Reset ── */
 * {
@@ -1401,8 +1400,6 @@ body.page-quickshare .footer {
 /* ═══════════════════════════════════════════
    FUNCTIONAL STYLES (modals, banners, forms)
    ═══════════════════════════════════════════ */
-
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono&family=Press+Start+2P&display=swap');
 
 :root {
     --accent: #007AFF;

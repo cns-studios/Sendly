@@ -70,11 +70,9 @@
     </script>
 
     <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/vendor/lucide-1.53.0.min.js"></script>
     <script src="/static/js/avatar.js"></script>
     <script src="/static/js/mobile-menu.js" defer></script>
-
-
-    <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Mobile & PWA Meta -->
     <meta name="theme-color" content="#00AE71">
@@ -82,9 +80,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Sendly">
     <link rel="apple-touch-icon" href="/static/images/bun.png">
-
-    <!-- DNS Prefetch for external domains -->
-    <link rel="dns-prefetch" href="https://unpkg.com">
 
     <!-- Web App Manifest -->
     <link rel="manifest" href="/static/manifest.json">
@@ -159,20 +154,8 @@
         <a href="/data-encryption">{{.t.footer_encryption}}</a>
         <a href="/help">{{.t.footer_help}}</a>
     </footer>
-    <script>
-        window.CONFIG = {{.configJSON}};
-    </script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            } else if (window.lucide && lucide.replace) {
-                lucide.replace();
-            }
-        });
+    <script type="application/json" id="page-config">{{.configJSON}}</script>
+    <script src="/static/js/page-init.js"></script>
 
-        (function(){var ua=navigator.userAgent,o=false;if(/MSIE|Trident/.test(ua))o=true;else if(!/Edg/.test(ua)&&/Chrome\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<80)o=true;else if(/Firefox\/(\d+)/.test(ua)&&parseInt(RegExp.$1)<74)o=true;else if(/Version\/(\d+\.?\d*).*Safari/.test(ua)&&parseFloat(RegExp.$1)<13.1)o=true;if(o)document.getElementById('browser-old-nudge').classList.remove('hidden')})();
-    </script>
 </body>
 </html>

@@ -1,0 +1,3 @@
+Self-hosted font files (latin and latin-ext subsets, woff2), obtained from Google Fonts.
+- TASA Orbiter: SIL Open Font License 1.1
+- Arimo: Apache License 2.0

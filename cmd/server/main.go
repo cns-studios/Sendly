@@ -104,6 +104,7 @@ func main() {
 	}
 	router.Use(gin.Recovery())
 	router.Use(gin.Logger())
+	router.Use(middleware.SecurityHeaders(cfg.BaseURL))
 
 	templates := template.Must(template.ParseGlob("web/templates/*.html"))
 	router.SetHTMLTemplate(templates)
