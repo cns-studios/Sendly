@@ -66,6 +66,12 @@ type Config struct {
 	UserCacheReconcileInterval time.Duration
 	UserCacheStaleAfter        time.Duration
 
+	// Retention periods; 0 disables the matching purge.
+	FileRecordRetention      time.Duration
+	UploadIPRetention        time.Duration
+	ReportRetention          time.Duration
+	TunnelRejectionRetention time.Duration
+
 	RateLimitMaxPerMinute          int64
 	RateLimitWindowSeconds         int64
 	StrictRateLimitMaxPerMinute    int64
@@ -111,6 +117,10 @@ func Load() (*Config, error) {
 		UserCacheTTL:                   time.Duration(getEnvInt("USER_CACHE_TTL_HOURS", 24)) * time.Hour,
 		UserCacheReconcileInterval:     time.Duration(getEnvInt("USER_CACHE_RECONCILE_INTERVAL_MINUTES", 60)) * time.Minute,
 		UserCacheStaleAfter:            time.Duration(getEnvInt("USER_CACHE_STALE_AFTER_DAYS", 30)) * 24 * time.Hour,
+		FileRecordRetention:            getEnvDays("FILE_RECORD_RETENTION_DAYS", 30),
+		UploadIPRetention:              getEnvDays("UPLOAD_IP_RETENTION_DAYS", 30),
+		ReportRetention:                getEnvDays("REPORT_RETENTION_DAYS", 90),
+		TunnelRejectionRetention:       getEnvDays("TUNNEL_REJECTION_RETENTION_DAYS", 30),
 		RateLimitMaxPerMinute:          getEnvInt64("RATE_LIMIT_MAX_PER_MINUTE", 30),
 		RateLimitWindowSeconds:         getEnvInt64("RATE_LIMIT_WINDOW_SECONDS", 60),
 		StrictRateLimitMaxPerMinute:    getEnvInt64("RATE_LIMIT_STRICT_MAX_PER_MINUTE", 15),
@@ -250,4 +260,14 @@ func getEnvInt64(key string, defaultValue int64) int64 {
 		return parsed
 	}
 	return defaultValue
+}
+
+// getEnvDays reads a retention period in days. Negative or invalid values
+// fall back to the default so a typo can't silently disable a purge.
+func getEnvDays(key string, defaultDays int) time.Duration {
+	days := getEnvInt(key, defaultDays)
+	if days < 0 {
+		days = defaultDays
+	}
+	return time.Duration(days) * 24 * time.Hour
 }

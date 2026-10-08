@@ -227,7 +227,7 @@ func (p *Postgres) IncrementReportCount(ctx context.Context, fileID string) (int
 }
 
 func (p *Postgres) MarkFileDeleted(ctx context.Context, fileID string) error {
-	query := `UPDATE files SET is_deleted = TRUE WHERE id = $1`
+	query := `UPDATE files SET is_deleted = TRUE, deleted_at = COALESCE(deleted_at, NOW()) WHERE id = $1`
 	_, err := p.db.ExecContext(ctx, query, fileID)
 	return err
 }
@@ -294,7 +294,7 @@ func (p *Postgres) GetExpiredFiles(ctx context.Context) ([]models.File, error) {
 }
 
 func (p *Postgres) DeleteExpiredFiles(ctx context.Context) (int64, error) {
-	query := `UPDATE files SET is_deleted = TRUE WHERE expires_at < $1 AND is_deleted = FALSE`
+	query := `UPDATE files SET is_deleted = TRUE, deleted_at = $1 WHERE expires_at < $1 AND is_deleted = FALSE`
 	result, err := p.db.ExecContext(ctx, query, time.Now())
 	if err != nil {
 		return 0, err

@@ -102,6 +102,15 @@ Download limiter:
 - `RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE` (default `10`)
 - `RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS` (default `60`)
 
+## Data Retention
+
+Run in the cleanup cycle (every 5 minutes). `0` disables a purge; negative or invalid values fall back to the default.
+
+- `FILE_RECORD_RETENTION_DAYS` (default `30`): hard-deletes soft-deleted `files` rows and their key envelopes and transfers after this many days.
+- `UPLOAD_IP_RETENTION_DAYS` (default `30`): deletes `uploads_by_ip` rows not updated for this many days.
+- `REPORT_RETENTION_DAYS` (default `90`): deletes reports older than this whose file is deleted, expired or gone. Reports on live files are kept.
+- `TUNNEL_REJECTION_RETENTION_DAYS` (default `30`): deletes rejections older than this for tunnels that have ended or expired.
+
 ## Recommended Baselines
 
 Development baseline:

@@ -21,6 +21,7 @@ type File struct {
 	CreatedAt        time.Time      `db:"created_at" json:"created_at"`
 	ReportCount      int            `db:"report_count" json:"-"`
 	IsDeleted        bool           `db:"is_deleted" json:"-"`
+	DeletedAt        sql.NullTime   `db:"deleted_at" json:"-"`
 }
 
 type OwnedFileListItem struct {

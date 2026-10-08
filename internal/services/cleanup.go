@@ -93,6 +93,8 @@ func (c *Cleanup) performCleanup() {
 		log.Printf("Cleaned up %d orphaned chunk directories", orphanedCount)
 	}
 
+	RunRetention(ctx, c.cfg, c.db, time.Now())
+
 	orphanedFiles, err := c.cleanupOrphanedFiles(ctx)
 	if err != nil {
 		log.Printf("Error cleaning up orphaned files: %v", err)
