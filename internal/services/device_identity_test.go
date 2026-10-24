@@ -35,7 +35,40 @@ func envelopeKey(userID int64, deviceID string, version int) string {
 }
 
 func (m *memoryDeviceStore) CreateOrUpdateUserDevice(_ context.Context, d *models.UserDevice) error {
-	m.devices[d.ID] = *d
+	stored := *d
+	if existing, ok := m.devices[d.ID]; ok && existing.Kind != "" {
+		stored.Kind = existing.Kind
+	}
+	if stored.Kind == "" {
+		stored.Kind = models.DeviceKindStandard
+	}
+	m.devices[d.ID] = stored
+	return nil
+}
+func (m *memoryDeviceStore) GetDeviceKind(_ context.Context, _ int64, id string) (string, error) {
+	return m.devices[id].Kind, nil
+}
+func (m *memoryDeviceStore) CancelEnrollment(_ context.Context, _ int64, id, requestDeviceID string) error {
+	e, ok := m.enrollments[id]
+	if !ok || e.RequestDeviceID != requestDeviceID || e.Status != models.EnrollmentStatusPending {
+		return models.ErrEnrollmentNotPending
+	}
+	e.Status = models.EnrollmentStatusCancelled
+	m.enrollments[id] = e
+	return nil
+}
+func (m *memoryDeviceStore) RemoveApproverDevice(_ context.Context, userID int64, id string) error {
+	d, ok := m.devices[id]
+	if !ok || d.Kind != models.DeviceKindApprover || d.RevokedAt.Valid {
+		return models.ErrDeviceNotFound
+	}
+	d.RevokedAt.Valid = true
+	m.devices[id] = d
+	for key, env := range m.identityEnvelopes {
+		if env.CNSUserID == userID && env.DeviceID == id {
+			delete(m.identityEnvelopes, key)
+		}
+	}
 	return nil
 }
 func (m *memoryDeviceStore) GetActiveDevicesByUser(_ context.Context, _ int64) ([]models.UserDevice, error) {
@@ -344,4 +377,100 @@ func TestConcurrentFirstDevices(t *testing.T) {
 	if err != nil || !result.NeedsEnrollment {
 		t.Fatalf("expected the second device to need approval: %#v %v", result, err)
 	}
+}
+
+// The CNS Accounts app registers as an approver: it gets the identity key only
+// through an approval, can never create or recover it, can withdraw its own
+// enrollment and remove itself, and can't remove other devices.
+func TestApproverDevice(t *testing.T) {
+	ctx := context.Background()
+	store := newMemoryDeviceStore()
+	service := &DeviceIdentity{DB: store}
+	if _, err := service.Register(ctx, 1, identityRequest("browser", "key-1"), false); err != nil {
+		t.Fatal(err)
+	}
+	approverReq := func(withIdentity bool) models.DeviceRegisterRequest {
+		req := deviceRequest("phone")
+		if withIdentity {
+			req = identityRequest("phone", "phone-key")
+		}
+		req.DeviceKind = models.DeviceKindApprover
+		return req
+	}
+
+	t.Run("approver-cannot-create-or-recover-the-identity-key", func(t *testing.T) {
+		if _, err := service.Register(ctx, 1, approverReq(true), false); err != models.ErrApproverDeviceRestricted {
+			t.Fatalf("approver sent an identity key: %v", err)
+		}
+		if _, err := service.Register(ctx, 1, approverReq(false), true); err != models.ErrApproverDeviceRestricted {
+			t.Fatalf("approver recovery: %v", err)
+		}
+	})
+	t.Run("approver-registers-and-waits-for-approval", func(t *testing.T) {
+		result, err := service.Register(ctx, 1, approverReq(false), false)
+		if err != nil || !result.NeedsEnrollment {
+			t.Fatalf("expected enrollment: %#v %v", result, err)
+		}
+		if store.devices["phone"].Kind != models.DeviceKindApprover {
+			t.Fatal("kind not stored")
+		}
+	})
+	t.Run("kind-cannot-be-dropped-on-re-registration", func(t *testing.T) {
+		plain := identityRequest("phone", "phone-key")
+		if _, err := service.Register(ctx, 1, plain, true); err != models.ErrApproverDeviceRestricted {
+			t.Fatalf("re-registered approver could recover the identity key: %v", err)
+		}
+		if store.identityKeys["1:1"].Status != "active" {
+			t.Fatal("identity key was replaced")
+		}
+	})
+	t.Run("approver-withdraws-its-own-enrollment-only", func(t *testing.T) {
+		item, err := service.CreateEnrollment(ctx, 1, "phone")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := service.CancelEnrollment(ctx, 1, item.ID, "browser"); err != models.ErrEnrollmentNotPending {
+			t.Fatalf("another device cancelled the enrollment: %v", err)
+		}
+		if err := service.CancelEnrollment(ctx, 1, item.ID, "phone"); err != nil {
+			t.Fatalf("cancel failed: %v", err)
+		}
+		if store.enrollments[item.ID].Status != models.EnrollmentStatusCancelled {
+			t.Fatal("enrollment not cancelled")
+		}
+		if err := service.CancelEnrollment(ctx, 1, item.ID, "phone"); err != models.ErrEnrollmentNotPending {
+			t.Fatalf("cancelled twice: %v", err)
+		}
+	})
+	t.Run("approved-approver-is-trusted-and-can-remove-itself", func(t *testing.T) {
+		item, err := service.CreateEnrollment(ctx, 1, "phone")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := service.Approve(ctx, 1, item.ID, approval("browser", item.VerificationCode, 1)); err != nil {
+			t.Fatal(err)
+		}
+		if trusted, _ := service.IsTrusted(ctx, 1, "phone"); !trusted {
+			t.Fatal("approved approver not trusted")
+		}
+		if err := service.RemoveApprover(ctx, 1, "browser"); err != models.ErrDeviceNotFound {
+			t.Fatalf("a standard device was removed through the approver path: %v", err)
+		}
+		if err := service.RemoveApprover(ctx, 1, "phone"); err != nil {
+			t.Fatalf("remove failed: %v", err)
+		}
+		if trusted, _ := service.IsTrusted(ctx, 1, "phone"); trusted {
+			t.Fatal("removed approver still trusted")
+		}
+		if trusted, _ := service.IsTrusted(ctx, 1, "browser"); !trusted {
+			t.Fatal("removing the approver affected another device")
+		}
+	})
+	t.Run("unknown-kind-is-rejected", func(t *testing.T) {
+		req := deviceRequest("other")
+		req.DeviceKind = "admin"
+		if _, err := service.Register(ctx, 1, req, false); err != models.ErrInvalidDeviceKind {
+			t.Fatalf("expected ErrInvalidDeviceKind, got %v", err)
+		}
+	})
 }

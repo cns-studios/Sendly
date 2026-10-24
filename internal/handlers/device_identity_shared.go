@@ -37,6 +37,9 @@ func handleSharedDeviceRegistration(c *gin.Context, db services.DeviceStore, rec
 			if appErr == models.ErrIdentityKeyRequired {
 				status = http.StatusBadRequest
 			}
+			if appErr == models.ErrApproverDeviceRestricted {
+				status = http.StatusForbidden
+			}
 			c.JSON(status, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
 			return
 		}
@@ -160,14 +163,57 @@ func sharedRejectEnrollment(c *gin.Context, db services.DeviceStore) bool {
 	return true
 }
 
+// sharedCancelEnrollment withdraws the caller's own pending enrollment.
+func sharedCancelEnrollment(c *gin.Context, db services.DeviceStore) bool {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return false
+	}
+	var req models.CancelEnrollmentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid request body", Code: "INVALID_REQUEST", Details: err.Error()})
+		return false
+	}
+	if err := (&services.DeviceIdentity{DB: db}).CancelEnrollment(c.Request.Context(), int64(user.ID), c.Param("id"), req.RequestDeviceID); err != nil {
+		writeDeviceServiceError(c, err, "ENROLLMENT_CANCEL_FAILED")
+		return false
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+	return true
+}
+
+// sharedRemoveApprover lets the CNS Accounts app remove its own (approver)
+// device. Other devices can't be removed this way.
+func sharedRemoveApprover(c *gin.Context, db services.DeviceStore) bool {
+	user := middleware.GetCNSUser(c)
+	if user == nil {
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return false
+	}
+	if err := (&services.DeviceIdentity{DB: db}).RemoveApprover(c.Request.Context(), int64(user.ID), c.Param("id")); err != nil {
+		if err == models.ErrDeviceNotFound {
+			c.JSON(http.StatusNotFound, models.ErrorResponse{Error: err.Error(), Code: "DEVICE_NOT_FOUND"})
+			return false
+		}
+		writeDeviceServiceError(c, err, "DEVICE_REMOVE_FAILED")
+		return false
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+	return true
+}
+
 func writeDeviceServiceError(c *gin.Context, err error, fallbackCode string) {
 	if appErr, ok := err.(*models.AppError); ok {
 		status := http.StatusBadRequest
 		if appErr == models.ErrDeviceNotAuthorized || appErr == models.ErrApproverNotTrusted {
 			status = http.StatusForbidden
 		}
-		if appErr == models.ErrIdentityKeyStale {
+		if appErr == models.ErrIdentityKeyStale || appErr == models.ErrEnrollmentNotPending {
 			status = http.StatusConflict
+		}
+		if appErr == models.ErrApproverDeviceRestricted {
+			status = http.StatusForbidden
 		}
 		c.JSON(status, models.ErrorResponse{Error: appErr.Message, Code: appErr.Code})
 		return

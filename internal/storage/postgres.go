@@ -370,9 +370,10 @@ func (p *Postgres) CreateOrUpdateUserDevice(ctx context.Context, device *models.
 			key_version,
 			created_at,
 			last_seen_at,
-			revoked_at
+			revoked_at,
+			kind
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW(), NULL, $7)
 		ON CONFLICT (id) DO UPDATE
 		SET device_label = EXCLUDED.device_label,
 			public_key_jwk = EXCLUDED.public_key_jwk,
@@ -389,11 +390,28 @@ func (p *Postgres) CreateOrUpdateUserDevice(ctx context.Context, device *models.
 		device.PublicKeyJWK,
 		device.KeyAlgorithm,
 		device.KeyVersion,
+		deviceKindOrStandard(device.Kind),
 	)
 	if err != nil {
 		return err
 	}
 	return requireDeviceUpsert(res)
+}
+
+func (p *Postgres) GetDeviceKind(ctx context.Context, userID int64, deviceID string) (string, error) {
+	var kind string
+	err := p.db.GetContext(ctx, &kind, `SELECT kind FROM user_devices WHERE cns_user_id = $1 AND id::text = $2`, userID, deviceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return kind, err
+}
+
+func deviceKindOrStandard(kind string) string {
+	if kind == "" {
+		return models.DeviceKindStandard
+	}
+	return kind
 }
 
 // requireDeviceUpsert turns an upsert that touched no row into
@@ -478,7 +496,7 @@ func (p *Postgres) RecoverIdentityKey(ctx context.Context, device *models.UserDe
 }
 func (p *Postgres) GetActiveDevicesByUser(ctx context.Context, userID int64) ([]models.UserDevice, error) {
 	query := `
-		SELECT id, cns_user_id, device_label, public_key_jwk, key_algorithm, key_version, created_at, last_seen_at, revoked_at
+		SELECT id, cns_user_id, device_label, public_key_jwk, key_algorithm, key_version, created_at, last_seen_at, revoked_at, kind
 		FROM user_devices
 		WHERE cns_user_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at ASC
@@ -1033,6 +1051,62 @@ func (p *Postgres) RejectEnrollment(ctx context.Context, userID int64, enrollmen
 		return models.ErrUploadNotPending
 	}
 	return nil
+}
+
+// CancelEnrollment withdraws a pending enrollment on behalf of the device that
+// requested it.
+func (p *Postgres) CancelEnrollment(ctx context.Context, userID int64, enrollmentID, requestDeviceID string) error {
+	res, err := p.db.ExecContext(ctx, `
+		UPDATE device_enrollments
+		SET status = $1
+		WHERE id = $2 AND cns_user_id = $3 AND request_device_id = $4 AND status = $5
+	`, models.EnrollmentStatusCancelled, enrollmentID, userID, requestDeviceID, models.EnrollmentStatusPending)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return models.ErrEnrollmentNotPending
+	}
+	return nil
+}
+
+// RemoveApproverDevice revokes an approver device (the CNS Accounts app) and
+// drops its copies of the identity key and its open enrollment. Other device
+// kinds can't be removed this way.
+func (p *Postgres) RemoveApproverDevice(ctx context.Context, userID int64, deviceID string) error {
+	tx, err := p.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `
+		UPDATE user_devices SET revoked_at = NOW()
+		WHERE id = $1 AND cns_user_id = $2 AND kind = $3 AND revoked_at IS NULL
+	`, deviceID, userID, models.DeviceKindApprover)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return models.ErrDeviceNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1 AND device_id = $2`, userID, deviceID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE device_enrollments SET status = $1
+		WHERE cns_user_id = $2 AND request_device_id = $3 AND status = $4
+	`, models.EnrollmentStatusCancelled, userID, deviceID, models.EnrollmentStatusPending); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (p *Postgres) TouchExpiredEnrollments(ctx context.Context, userID int64) error {

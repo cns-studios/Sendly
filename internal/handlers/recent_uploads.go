@@ -11,6 +11,7 @@ import (
 	"sendly/internal/config"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/services"
 	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -156,8 +157,13 @@ func (h *RecentUploadsHandler) handleDeviceRegistration(c *gin.Context, forceRec
 }
 
 func (h *RecentUploadsHandler) CreateEnrollment(c *gin.Context) {
-	sharedCreateEnrollment(c, h.db)
-	return
+	item := sharedCreateEnrollment(c, h.db)
+	if item == nil {
+		return
+	}
+	if user := middleware.GetCNSUser(c); user != nil {
+		services.NotifyCNSAccounts(h.cfg.CNSAuthURL, h.cfg.CNSAuthServiceKey, int64(user.ID), "sendly_enrollment", item.ID)
+	}
 }
 
 func (h *RecentUploadsHandler) ListPendingEnrollments(c *gin.Context) {
