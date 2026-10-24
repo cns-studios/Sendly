@@ -52,7 +52,17 @@ type UserDevice struct {
 	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
 	LastSeenAt   time.Time       `db:"last_seen_at" json:"last_seen_at"`
 	RevokedAt    sql.NullTime    `db:"revoked_at" json:"-"`
+	// Kind is DeviceKindStandard or DeviceKindApprover (the CNS Accounts app).
+	Kind string `db:"kind" json:"kind"`
 }
+
+const (
+	DeviceKindStandard = "standard"
+	// DeviceKindApprover is the CNS Accounts app: it only approves new
+	// devices. It can't set up or recover the identity key and may remove
+	// itself.
+	DeviceKindApprover = "approver"
+)
 
 type UserKeyEnvelope struct {
 	ID             string          `db:"id" json:"id"`
@@ -312,6 +322,8 @@ type DeviceRegisterRequest struct {
 	PublicKeyJWK json.RawMessage `json:"public_key_jwk" binding:"required"`
 	KeyAlgorithm string          `json:"key_algorithm" binding:"required"`
 	KeyVersion   int             `json:"key_version"`
+	// DeviceKind is set once, when the device is first registered.
+	DeviceKind string `json:"device_kind,omitempty"`
 
 	// A new identity keypair and this device's self-wrapped copy of its
 	// private key: sent to create a brand-new account's identity key (after
@@ -379,11 +391,18 @@ type RejectEnrollmentRequest struct {
 	ApproverDeviceID string `json:"approver_device_id" binding:"required"`
 }
 
+// CancelEnrollmentRequest withdraws a device's own pending enrollment.
+type CancelEnrollmentRequest struct {
+	RequestDeviceID string `json:"request_device_id" binding:"required"`
+}
+
 const (
 	EnrollmentStatusPending  = "pending"
 	EnrollmentStatusApproved = "approved"
 	EnrollmentStatusRejected = "rejected"
 	EnrollmentStatusExpired  = "expired"
+	// EnrollmentStatusCancelled: the requesting device withdrew its request.
+	EnrollmentStatusCancelled = "cancelled"
 )
 
 type UploadCancelRequest struct {
@@ -493,6 +512,8 @@ var (
 	ErrDeviceIDConflict         = &AppError{Code: "DEVICE_ID_CONFLICT", Message: "device id is registered to another account"}
 	ErrApproverNotTrusted       = &AppError{Code: "APPROVER_NOT_TRUSTED", Message: "approver device is not trusted"}
 	ErrEnrollmentNotPending     = &AppError{Code: "ENROLLMENT_NOT_PENDING", Message: "enrollment is no longer pending"}
+	ErrApproverDeviceRestricted = &AppError{Code: "APPROVER_DEVICE_RESTRICTED", Message: "an approver device can't set up or recover the identity key"}
+	ErrInvalidDeviceKind        = &AppError{Code: "INVALID_DEVICE_KIND", Message: "device_kind must be standard or approver"}
 	ErrVerificationCodeMismatch = &AppError{Code: "VERIFICATION_CODE_MISMATCH", Message: "verification code mismatch"}
 	ErrSessionNotFound          = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
 	ErrSessionExpired           = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}

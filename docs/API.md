@@ -306,7 +306,7 @@ Response contains `device_id` and exactly one of:
 For an account with no device left to approve. Same request as `register`, with a mandatory new identity keypair (`400 IDENTITY_KEY_REQUIRED`). It becomes the next identity key version, the old one is retired, every other device is revoked and pending enrollments expire. Files wrapped for older versions stay locked until [rescued](#identity-key-rescue).
 
 ### `GET /api/me/devices/ws`
-WebSocket for live account events. Payload: `{ "type", "enrollment", "request_device", "approver_device_id", "pending_count" }`. `type` is one of `device_enrollment_created`, `device_enrollment_approved`, `device_enrollment_rejected`, `transfers_updated` (`{ pending_count }`) or `sent_transfers_updated` (`{ file_id, status }`).
+WebSocket for live account events. Payload: `{ "type", "enrollment", "request_device", "approver_device_id", "pending_count" }`. `type` is one of `device_enrollment_created`, `device_enrollment_approved`, `device_enrollment_rejected`, `device_enrollment_cancelled`, `transfers_updated` (`{ pending_count }`) or `sent_transfers_updated` (`{ file_id, status }`).
 
 ### `POST /api/me/devices/enrollments`
 `{ "request_device_id": "..." }` → `{ "enrollment_id", "verification_code": "123456", "expires_at" }`. The code is shown on the new device and typed on the approving device.
@@ -330,6 +330,30 @@ The trusted approver hands over the identity key, wrapped for the requesting dev
 
 ### `POST /api/me/devices/enrollments/:id/reject`
 `{ "approver_device_id": "..." }`.
+
+### CNS Accounts app (approver device)
+
+The CNS Accounts Android app can join as an **approver**: a device whose only
+job is to approve or deny new devices (see
+[CNS_ACCOUNTS_APPROVER.md](CNS_ACCOUNTS_APPROVER.md)). It registers through the
+Android routes (`/android/me/devices/...`, same bodies as above) with
+`"device_kind": "approver"`. The kind is fixed at the first registration. An
+approver gets the identity key only through an approval: registering it with
+an identity keypair, or recovering with it, is `403 APPROVER_DEVICE_RESTRICTED`.
+Device lists include `kind` (`standard` | `approver`).
+
+New enrollments wake the app through CNS auth (`POST /api/service/push`, needs
+`CNS_AUTH_SERVICE_KEY` with the `push:send` scope); the push carries only the
+enrollment id.
+
+#### `POST /android/me/devices/enrollments/:id/cancel`
+Strict-limited. `{ "request_device_id": "..." }`: the requesting device withdraws
+its own pending enrollment (the app's Abort). `409 ENROLLMENT_NOT_PENDING` if it
+isn't pending or belongs to another device.
+
+#### `DELETE /android/me/devices/:id`
+Strict-limited. Removes an **approver** device of the account: it is revoked and
+its identity key copy deleted. Other device kinds answer `404 DEVICE_NOT_FOUND`.
 
 ## Identity key rescue
 

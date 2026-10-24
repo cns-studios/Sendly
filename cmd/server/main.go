@@ -294,6 +294,8 @@ func main() {
 				devices.GET("/enrollments/pending", androidHandler.ListPendingEnrollments)
 				devices.POST("/enrollments/:id/approve", strictRateLimiter.Handler(), androidHandler.ApproveEnrollment)
 				devices.POST("/enrollments/:id/reject", strictRateLimiter.Handler(), androidHandler.RejectEnrollment)
+				devices.POST("/enrollments/:id/cancel", strictRateLimiter.Handler(), androidHandler.CancelEnrollment)
+				devices.DELETE("/:id", strictRateLimiter.Handler(), androidHandler.RemoveApproverDevice)
 			}
 		}
 	}

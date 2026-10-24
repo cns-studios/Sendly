@@ -31,6 +31,11 @@ type DeviceStore interface {
 	GetEnrollmentByID(context.Context, int64, string) (*models.DeviceEnrollment, error)
 	ApproveEnrollment(context.Context, int64, string, string) error
 	RejectEnrollment(context.Context, int64, string) error
+	CancelEnrollment(context.Context, int64, string, string) error
+	RemoveApproverDevice(context.Context, int64, string) error
+	// GetDeviceKind returns the stored kind of a device of the user, revoked
+	// or not, or "" if the user has no such device.
+	GetDeviceKind(context.Context, int64, string) (string, error)
 
 	GetActiveUserIdentityKey(context.Context, int64) (*models.UserIdentityKey, error)
 	CreateIdentityKeyWithDeviceEnvelope(context.Context, *models.UserIdentityKey, *models.UserIdentityKeyDeviceEnvelope) error
@@ -66,9 +71,30 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 	if version <= 0 {
 		version = 1
 	}
+	kind := req.DeviceKind
+	if kind == "" {
+		kind = models.DeviceKindStandard
+	}
+	if kind != models.DeviceKindStandard && kind != models.DeviceKindApprover {
+		return nil, models.ErrInvalidDeviceKind
+	}
+	// The kind is fixed at first registration; a re-registration can't drop it.
+	stored, err := s.DB.GetDeviceKind(ctx, userID, req.DeviceID)
+	if err != nil {
+		return nil, err
+	}
+	if stored != "" {
+		kind = stored
+	}
 	device := &models.UserDevice{
 		ID: req.DeviceID, CNSUserID: userID, DeviceLabel: req.DeviceLabel,
-		PublicKeyJWK: key, KeyAlgorithm: req.KeyAlgorithm, KeyVersion: version,
+		PublicKeyJWK: key, KeyAlgorithm: req.KeyAlgorithm, KeyVersion: version, Kind: kind,
+	}
+
+	// The approver (CNS Accounts app) only ever receives the identity key
+	// through an approval; it must never mint or replace it.
+	if kind == models.DeviceKindApprover && (recover || req.WrappedIdentityPrivateKeyB64 != "" || len(req.IdentityPublicKeyJWK) > 0) {
+		return nil, models.ErrApproverDeviceRestricted
 	}
 
 	if recover {
@@ -302,6 +328,26 @@ func (s *DeviceIdentity) Reject(ctx context.Context, userID int64, enrollmentID 
 		return models.ErrApproverNotTrusted
 	}
 	return s.DB.RejectEnrollment(ctx, userID, enrollmentID)
+}
+
+// CancelEnrollment withdraws the caller's own pending enrollment (the CNS
+// Accounts app's Abort while it waits for approval).
+func (s *DeviceIdentity) CancelEnrollment(ctx context.Context, userID int64, enrollmentID, requestDeviceID string) error {
+	owned, err := s.ownsDevice(ctx, userID, requestDeviceID)
+	if err != nil {
+		return err
+	}
+	if !owned {
+		return models.ErrDeviceNotAuthorized
+	}
+	return s.DB.CancelEnrollment(ctx, userID, enrollmentID, requestDeviceID)
+}
+
+// RemoveApprover lets the CNS Accounts app disconnect itself from Sendly:
+// the approver device is revoked and its identity key copy deleted. Only
+// approver devices can be removed this way.
+func (s *DeviceIdentity) RemoveApprover(ctx context.Context, userID int64, deviceID string) error {
+	return s.DB.RemoveApproverDevice(ctx, userID, deviceID)
 }
 
 func (s *DeviceIdentity) ownsDevice(ctx context.Context, userID int64, deviceID string) (bool, error) {

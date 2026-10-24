@@ -497,8 +497,23 @@ func (h *AndroidHandler) CreateEnrollment(c *gin.Context) {
 	if item != nil {
 		if user := middleware.GetCNSUser(c); user != nil {
 			h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", item.ID, "")
+			services.NotifyCNSAccounts(h.cfg.CNSAuthURL, h.cfg.CNSAuthServiceKey, int64(user.ID), "sendly_enrollment", item.ID)
 		}
 	}
+}
+
+// CancelEnrollment: the requesting device withdraws its pending enrollment.
+func (h *AndroidHandler) CancelEnrollment(c *gin.Context) {
+	if sharedCancelEnrollment(c, h.db) {
+		if user := middleware.GetCNSUser(c); user != nil {
+			h.publishEnrollmentChange(context.Background(), int64(user.ID), "device_enrollment_cancelled", c.Param("id"), "")
+		}
+	}
+}
+
+// RemoveApproverDevice: the CNS Accounts app disconnects itself from Sendly.
+func (h *AndroidHandler) RemoveApproverDevice(c *gin.Context) {
+	sharedRemoveApprover(c, h.db)
 }
 
 func (h *AndroidHandler) ListPendingEnrollments(c *gin.Context) {
