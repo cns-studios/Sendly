@@ -166,6 +166,7 @@
   "device_approval_title": "Connect new device",
   "device_approval_desc": "A new device wants to view your files. If you did not ask for this, decline and change your CNS password.",
   "device_approval_recover": "Lost all devices? Wipe data and start fresh",
+  "device_approval_close": "Close for now",
   "device_approval_decline": "Decline",
   "device_approval_approve": "Approve",
 

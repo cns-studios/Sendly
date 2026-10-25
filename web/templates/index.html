@@ -107,7 +107,10 @@
     </div>
 
     <div id="device-approval-modal" class="tos-overlay hidden" aria-hidden="true">
-        <div class="tos-modal" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+        <div class="tos-modal tos-modal-closable" role="dialog" aria-modal="true" aria-labelledby="device-approval-title" aria-describedby="device-approval-message">
+            <button id="device-approval-close" type="button" class="tos-modal-close" aria-label="{{.t.device_approval_close}}" title="{{.t.device_approval_close}}">
+                <i data-lucide="x" style="width:18px;height:18px;"></i>
+            </button>
             <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
             <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
                 {{.t.device_approval_desc}}

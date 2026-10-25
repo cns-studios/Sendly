@@ -1747,6 +1747,32 @@ body.page-shared .page-shared-footer {
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.15);
 }
 
+.tos-modal-closable {
+    position: relative;
+}
+
+.tos-modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: #595959;
+    cursor: pointer;
+}
+
+.tos-modal-close:hover,
+.tos-modal-close:focus-visible {
+    background: rgba(0, 0, 0, 0.06);
+    color: #000;
+}
+
 .tos-modal h2 {
     margin: 0 0 16px 0;
     font-size: 24px;

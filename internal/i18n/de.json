@@ -166,6 +166,7 @@
   "device_approval_title": "Neues Gerät verbinden",
   "device_approval_desc": "Ein neues Gerät möchte auf deine Dateien zugreifen. Falls du dies nicht angefordert hast, lehne ab und ändere dein CNS-Passwort.",
   "device_approval_recover": "Alle Geräte verloren? Daten zurücksetzen und neu beginnen",
+  "device_approval_close": "Vorerst schließen",
   "device_approval_decline": "Ablehnen",
   "device_approval_approve": "Genehmigen",
 

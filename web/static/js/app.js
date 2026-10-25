@@ -106,6 +106,7 @@
     const deviceApprovalDecline = document.getElementById('device-approval-decline');
     const deviceApprovalApprove = document.getElementById('device-approval-approve');
     const deviceApprovalRecover = document.getElementById('device-approval-recover');
+    const deviceApprovalClose = document.getElementById('device-approval-close');
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -120,6 +121,11 @@
     let activePendingEnrollment = null;
     let pendingEnrollmentBusy = false;
     let pendingEnrollmentMode = 'idle';
+    // Closed by the user, so they can use the rest of the page (log out, say). The waiting
+    // modal stays closed until something that needs this device trusted opens it again; a
+    // closed request from another device stays closed until a new one arrives.
+    let waitingModalDismissed = false;
+    const dismissedApprovalIds = new Set();
     let pendingEnrollmentSocket = null;
     let pendingEnrollmentSocketRetryTimer = null;
     let pendingEnrollmentRefreshTimer = null;
@@ -229,7 +235,8 @@
         }
     }
 
-    async function ensureDeviceReady() {
+    async function ensureDeviceReady({ userAction = false } = {}) {
+        if (userAction) waitingModalDismissed = false;
         try {
         const payload = await registerCurrentDevice();
         awaitingLegacyApproval = !!payload?.needs_identity_migration && !authIdentityKey;
@@ -421,12 +428,12 @@
                 return;
             }
 
-            const approvalItems = currentDeviceId
+            const approvalItems = (currentDeviceId
                 ? pendingEnrollmentItems.filter((item) => {
                     const requestDeviceId = item?.request_device?.id || item?.enrollment?.request_device_id || '';
                     return requestDeviceId !== currentDeviceId;
                 })
-                : pendingEnrollmentItems;
+                : pendingEnrollmentItems).filter((item) => !dismissedApprovalIds.has(item?.enrollment?.id));
 
             if (approvalItems.length > 0) {
                 showApprovalEnrollment(approvalItems[0], approvalItems.length);
@@ -489,6 +496,8 @@
     function showWaitingEnrollment(item, count = 1) {
         pendingEnrollmentMode = 'waiting';
         activePendingEnrollment = item;
+        // Still waiting (and finishing once approved), just not in the user's way.
+        if (waitingModalDismissed) return;
         if (!deviceApprovalTitle || !deviceApprovalMessage || !deviceApprovalMeta || !deviceApprovalModal) {
             return;
         }
@@ -518,6 +527,19 @@
 
         deviceApprovalModal.classList.remove('hidden');
         deviceApprovalModal.setAttribute('aria-hidden', 'false');
+    }
+
+    function dismissDeviceApprovalModal() {
+        if (!deviceApprovalModal || deviceApprovalModal.classList.contains('hidden') || pendingEnrollmentBusy) return;
+        if (pendingEnrollmentMode === 'waiting') {
+            waitingModalDismissed = true;
+        } else if (activePendingEnrollment?.enrollment?.id) {
+            dismissedApprovalIds.add(activePendingEnrollment.enrollment.id);
+            pendingEnrollmentMode = 'idle';
+            activePendingEnrollment = null;
+        }
+        deviceApprovalModal.classList.add('hidden');
+        deviceApprovalModal.setAttribute('aria-hidden', 'true');
     }
 
     function hidePendingEnrollmentModal() {
@@ -1516,7 +1538,7 @@
             throw new Error('A tunnel is required to access this file.');
         }
         if (!authIdentityKey) {
-            const ready = await ensureDeviceReady();
+            const ready = await ensureDeviceReady({ userAction: true });
             if (!ready) {
                 throw new Error('Approve this device from a trusted device to access your files.');
             }
@@ -1670,6 +1692,13 @@
         deviceApprovalApprove?.addEventListener('click', handleApprovePendingEnrollment);
         deviceApprovalDecline?.addEventListener('click', handleDeclinePendingEnrollment);
         deviceApprovalRecover?.addEventListener('click', handleRecoverLostDevice);
+        deviceApprovalClose?.addEventListener('click', dismissDeviceApprovalModal);
+        deviceApprovalModal?.addEventListener('click', (event) => {
+            if (event.target === deviceApprovalModal) dismissDeviceApprovalModal();
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') dismissDeviceApprovalModal();
+        });
 
         const downloadCloseBtn = document.getElementById('download-activity-close');
         downloadCloseBtn?.addEventListener('click', () => showDownloadActivityOverlay(false));
@@ -1866,7 +1895,7 @@
 
             if (AUTHENTICATED) {
                 if (!authIdentityKey) {
-                    await ensureDeviceReady();
+                    await ensureDeviceReady({ userAction: true });
                 }
                 if (!authIdentityKey) {
                     throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
