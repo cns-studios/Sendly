@@ -83,7 +83,7 @@
 
     async function loadFileMetadata(fileID) {
         try {
-            const response = await fetch(`/api/file/${fileID}`);
+            const response = await SendlyNet.fetch(`/api/file/${fileID}`);
             if (!response.ok) {
                 const error = await response.json();
                 handleAPIError(error);
@@ -236,7 +236,7 @@
     async function streamEncryptedFile() {
         if (!downloadStartedAt) downloadStartedAt = Date.now();
         const firstEnd = DOWNLOAD_CHUNK_SIZE - 1;
-        const firstResponse = await fetch(`/api/file/${fileMetadata.id}/download`, {
+        const firstResponse = await SendlyNet.fetch(`/api/file/${fileMetadata.id}/download`, {
             headers: { Range: `bytes=0-${firstEnd}` }
         });
         if (!firstResponse.ok) {
@@ -302,7 +302,7 @@
         for (let attempt = 0; attempt < MAX_CHUNK_DOWNLOAD_RETRIES; attempt++) {
             if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (attempt - 1)));
             try {
-                const response = await fetch(`/api/file/${fileMetadata.id}/download`, {
+                const response = await SendlyNet.fetch(`/api/file/${fileMetadata.id}/download`, {
                     headers: { Range: `bytes=${start}-${end}` }
                 });
                 if (!response.ok && response.status !== 206) {

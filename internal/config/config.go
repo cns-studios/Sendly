@@ -22,9 +22,17 @@ type Config struct {
 	PostgresUser     string
 	PostgresPassword string
 	PostgresDB       string
+	// PostgresSSLMode is libpq's sslmode: disable, require, verify-ca or verify-full.
+	PostgresSSLMode string
 
-	RedisHost string
-	RedisPort string
+	// InstanceName identifies this replica, for example in upload assembly
+	// leases. Defaults to POD_NAME, then the hostname.
+	InstanceName string
+	// ShutdownTimeout bounds the graceful shutdown after SIGTERM: in-flight
+	// requests and upload assemblies get this long before they are cut off
+	// (assemblies are then resumed by another replica). Keep the pod's
+	// terminationGracePeriodSeconds above it plus any preStop delay.
+	ShutdownTimeout time.Duration
 
 	DataDir  string
 	ChunkDir string
@@ -93,8 +101,9 @@ func Load() (*Config, error) {
 		PostgresUser:                   getEnv("POSTGRES_USER", "sendly"),
 		PostgresPassword:               getEnv("POSTGRES_PASSWORD", "sendly"),
 		PostgresDB:                     getEnv("POSTGRES_DB", "sendly"),
-		RedisHost:                      getEnv("REDIS_HOST", "localhost"),
-		RedisPort:                      getEnv("REDIS_PORT", "6379"),
+		PostgresSSLMode:                getEnv("POSTGRES_SSLMODE", "disable"),
+		InstanceName:                   instanceName(),
+		ShutdownTimeout:                time.Duration(getEnvInt("SHUTDOWN_TIMEOUT_SECONDS", 25)) * time.Second,
 		DataDir:                        getEnv("DATA_DIR", "./data"),
 		ChunkDir:                       getEnv("CHUNK_DIR", ""),
 		AdoptDataDir:                   getEnvBool("SENDLY_ADOPT_DATA_DIR", false),
@@ -153,6 +162,14 @@ func (c *Config) validate() error {
 	if c.DataDir == "" {
 		return fmt.Errorf("DATA_DIR is required")
 	}
+	switch c.PostgresSSLMode {
+	case "disable", "require", "verify-ca", "verify-full":
+	default:
+		return fmt.Errorf("POSTGRES_SSLMODE must be disable, require, verify-ca or verify-full")
+	}
+	if c.ShutdownTimeout <= 0 {
+		return fmt.Errorf("SHUTDOWN_TIMEOUT_SECONDS must be positive")
+	}
 	for _, proxy := range c.TrustedProxies {
 		if _, _, err := net.ParseCIDR(proxy); err == nil {
 			continue
@@ -179,17 +196,30 @@ var cloudflareIPRanges = []string{
 
 func (c *Config) PostgresDSN() string {
 	return fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		c.PostgresHost,
-		c.PostgresPort,
-		c.PostgresUser,
-		c.PostgresPassword,
-		c.PostgresDB,
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s connect_timeout=5",
+		dsnValue(c.PostgresHost),
+		dsnValue(c.PostgresPort),
+		dsnValue(c.PostgresUser),
+		dsnValue(c.PostgresPassword),
+		dsnValue(c.PostgresDB),
+		dsnValue(c.PostgresSSLMode),
 	)
 }
 
-func (c *Config) RedisAddr() string {
-	return fmt.Sprintf("%s:%s", c.RedisHost, c.RedisPort)
+// dsnValue quotes a value for a key=value connection string, so that
+// generated passwords containing spaces, quotes or backslashes still work.
+func dsnValue(v string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(v) + "'"
+}
+
+func instanceName() string {
+	if name := os.Getenv("POD_NAME"); name != "" {
+		return name
+	}
+	if name, err := os.Hostname(); err == nil && name != "" {
+		return name
+	}
+	return fmt.Sprintf("sendly-%d", os.Getpid())
 }
 
 func (c *Config) Hostname() string {

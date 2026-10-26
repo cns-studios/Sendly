@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,10 @@ type HealthCheck struct {
 type HealthHandler struct {
 	checks []HealthCheck
 
+	// draining is set once shutdown begins: readiness then fails so the
+	// load balancer stops sending new requests while in-flight ones finish.
+	draining atomic.Bool
+
 	mu        sync.Mutex
 	checkedAt time.Time
 	healthy   bool
@@ -33,6 +38,23 @@ type HealthHandler struct {
 
 func NewHealthHandler(checks ...HealthCheck) *HealthHandler {
 	return &HealthHandler{checks: checks}
+}
+
+// SetDraining makes Ready fail from now on.
+func (h *HealthHandler) SetDraining() {
+	h.draining.Store(true)
+}
+
+// Ready reports whether this replica should receive traffic: its
+// dependencies answer and it is not shutting down. Kubernetes' readiness
+// probe uses it; unlike liveness, a failure only takes the pod out of the
+// Service, it doesn't restart it.
+func (h *HealthHandler) Ready(c *gin.Context) {
+	if h.draining.Load() {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "draining"})
+		return
+	}
+	h.Health(c)
 }
 
 // Live only reports that the process answers requests.

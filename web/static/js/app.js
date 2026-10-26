@@ -750,6 +750,11 @@
         }
 
         pendingEnrollmentSocket.onopen = () => {
+            // A reconnect (the server restarted or moved): events sent while
+            // the socket was down are gone, so reload the current state.
+            if (pendingEnrollmentSocketEverOpened) {
+                loadPendingEnrollments();
+            }
             pendingEnrollmentSocketEverOpened = true;
         };
         pendingEnrollmentSocket.onmessage = handlePendingEnrollmentSocketMessage;
@@ -1423,7 +1428,7 @@
         let succeeded = false;
         try {
             const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
-            const response = await fetch(`/api/file/${fileId}/download`);
+            const response = await SendlyNet.fetch(`/api/file/${fileId}/download`);
             if (!response.ok) {
                 throw new Error('Failed to download encrypted file');
             }
@@ -1949,7 +1954,7 @@
     async function waitForAssembly(sessionId, intervalMs = 1500, timeoutMs = 600000) {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
-            const res = await fetch(`/api/upload/status/${sessionId}`);
+            const res = await SendlyNet.fetch(`/api/upload/status/${sessionId}`);
             if (!res.ok) throw new Error('Failed to check assembly status');
             const { status } = await res.json();
             if (status === 'done') return;
@@ -2019,7 +2024,7 @@
                 formData.append('chunk_index', chunkIndex.toString());
                 formData.append('chunk', new Blob([chunkData]));
 
-                const response = await fetch('/api/upload/chunk', {
+                const response = await SendlyNet.fetch('/api/upload/chunk', {
                     method: 'POST',
                     headers: {
                         'X-CSRF-Token': getCookieValue('csrf_token')
@@ -2043,7 +2048,7 @@
     }
 
     async function initUpload(fileSize, totalChunks) {
-        const response = await fetch('/api/upload/init', {
+        const response = await SendlyNet.fetch('/api/upload/init', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2068,7 +2073,7 @@
     async function completeUpload() {
         updateProgress(95, t('status_everything_arrived'), t('status_finalizing'));
 
-        const response = await fetch('/api/upload/complete', {
+        const response = await SendlyNet.fetch('/api/upload/complete', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -2129,7 +2134,7 @@
                 finalizePayload.duration = selectedDuration();
             }
 
-            const response = await fetch('/api/upload/finalize', {
+            const response = await SendlyNet.fetch('/api/upload/finalize', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

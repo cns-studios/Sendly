@@ -1,4 +1,7 @@
--- Database initialization script for PostgreSQL
+-- Baseline schema, formerly init.sql (run only by the Postgres container on
+-- first start). As a migration it also reaches databases that are not created
+-- by that container, such as a CloudNativePG cluster. Every statement is
+-- idempotent, so databases created from init.sql apply it as a no-op.
 
 -- Create files table
 CREATE TABLE IF NOT EXISTS files (

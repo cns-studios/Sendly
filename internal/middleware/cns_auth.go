@@ -3,11 +3,15 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -174,7 +178,107 @@ func IsDeadTokenError(err error) bool {
 	return errors.As(err, &tre) && tre.deadToken()
 }
 
+// RefreshStore lets replicas share the outcome of a token refresh;
+// implemented by *storage.Postgres.
+type RefreshStore interface {
+	SharedRefresh(ctx context.Context, tokenID []byte, ttl time.Duration, refresh func() ([]byte, error)) ([]byte, bool, error)
+}
+
+var refreshStore RefreshStore
+
+// SetRefreshStore makes token refreshes coordinate through store, so that
+// concurrent requests presenting the same refresh token on different
+// replicas redeem it with CNS only once. Without a store, refreshes are only
+// coordinated within this process.
+func SetRefreshStore(store RefreshStore) {
+	refreshStore = store
+}
+
+// RefreshAccessToken redeems refreshToken with CNS. CNS rotates refresh
+// tokens and treats a second redemption as theft, revoking the session, so
+// callers presenting the same token within refreshResultCacheTTL get the
+// first caller's result instead of a second refresh.
 func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
+	if refreshStore == nil {
+		return refreshAccessTokenLocally(ctx, cfg, refreshToken)
+	}
+
+	tokenID := sha256.Sum256([]byte("sendly/refresh-id\x00" + refreshToken))
+	sealKey := sha256.Sum256([]byte("sendly/refresh-key\x00" + refreshToken))
+
+	var fresh *refreshTokenResult
+	sealed, cached, err := refreshStore.SharedRefresh(ctx, tokenID[:], refreshResultCacheTTL, func() ([]byte, error) {
+		result, err := requestTokenRefresh(ctx, cfg, refreshToken)
+		if err != nil {
+			return nil, err
+		}
+		fresh = result
+		plain, err := json.Marshal(result)
+		if err != nil {
+			return nil, err
+		}
+		return sealRefreshResult(sealKey, plain)
+	})
+	switch {
+	case fresh != nil:
+		// The token is redeemed: use the result even if storing it failed.
+		return fresh, nil
+	case err != nil:
+		var tre *tokenRefreshError
+		if errors.As(err, &tre) {
+			return nil, err
+		}
+		// The store is unreachable and nothing was redeemed yet.
+		log.Printf("Token refresh: shared store unavailable, refreshing locally: %v", err)
+		return refreshAccessTokenLocally(ctx, cfg, refreshToken)
+	}
+
+	plain, err := openRefreshResult(sealKey, sealed)
+	if err != nil {
+		return nil, fmt.Errorf("stored refresh result unreadable (cached=%v): %w", cached, err)
+	}
+	var result refreshTokenResult
+	if err := json.Unmarshal(plain, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+// sealRefreshResult encrypts a refresh result under a key derived from the
+// refresh token that produced it: the stored row is useless to anyone who
+// does not already hold that token.
+func sealRefreshResult(key [32]byte, plain []byte) ([]byte, error) {
+	aead, err := refreshResultAEAD(key)
+	if err != nil {
+		return nil, err
+	}
+	nonce := make([]byte, aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return aead.Seal(nonce, nonce, plain, nil), nil
+}
+
+func openRefreshResult(key [32]byte, sealed []byte) ([]byte, error) {
+	aead, err := refreshResultAEAD(key)
+	if err != nil {
+		return nil, err
+	}
+	if len(sealed) < aead.NonceSize() {
+		return nil, errors.New("sealed refresh result too short")
+	}
+	return aead.Open(nil, sealed[:aead.NonceSize()], sealed[aead.NonceSize():], nil)
+}
+
+func refreshResultAEAD(key [32]byte) (cipher.AEAD, error) {
+	block, err := aes.NewCipher(key[:])
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
+}
+
+func refreshAccessTokenLocally(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
 	tokenKey := sha256.Sum256([]byte(refreshToken))
 	refreshCoordinator.Lock()
 	defer refreshCoordinator.Unlock()
@@ -189,6 +293,18 @@ func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken st
 		return cached.result, nil
 	}
 
+	result, err := requestTokenRefresh(ctx, cfg, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	refreshCoordinator.results[tokenKey] = cachedRefreshResult{
+		result:    result,
+		expiresAt: time.Now().Add(refreshResultCacheTTL),
+	}
+	return result, nil
+}
+
+func requestTokenRefresh(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
 	tokenURL := cfg.CNSAuthURL + "/api/auth/token/refresh"
 
 	jsonPayload := map[string]string{
@@ -228,10 +344,6 @@ func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken st
 		return nil, fmt.Errorf("refresh response missing access_token")
 	}
 
-	refreshCoordinator.results[tokenKey] = cachedRefreshResult{
-		result:    &result,
-		expiresAt: time.Now().Add(refreshResultCacheTTL),
-	}
 	return &result, nil
 }
 

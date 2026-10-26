@@ -191,15 +191,27 @@ type Report struct {
 	TransferID sql.NullString `db:"transfer_id" json:"-"`
 }
 
+// Upload session states; see db/migrations/023-add-shared-runtime-state.sql.
+const (
+	UploadStateUploading  = "uploading"
+	UploadStateAssembling = "assembling"
+	UploadStateAssembled  = "assembled"
+	UploadStateFinalized  = "finalized"
+	UploadStateFailed     = "failed"
+)
+
 type UploadSession struct {
-	SessionID    string    `json:"session_id"`
-	FileID       string    `json:"file_id"`
-	OriginalName string    `json:"original_name"`
-	TotalSize    int64     `json:"total_size"`
-	TotalChunks  int       `json:"total_chunks"`
-	ChunkSize    int64     `json:"chunk_size"`
-	UploaderIP   string    `json:"uploader_ip"`
-	CreatedAt    time.Time `json:"created_at"`
+	SessionID    string         `db:"session_id" json:"session_id"`
+	FileID       string         `db:"file_id" json:"file_id"`
+	OriginalName string         `db:"original_name" json:"original_name"`
+	TotalSize    int64          `db:"total_size" json:"total_size"`
+	TotalChunks  int            `db:"total_chunks" json:"total_chunks"`
+	ChunkSize    int64          `db:"chunk_size" json:"chunk_size"`
+	UploaderIP   string         `db:"uploader_ip" json:"uploader_ip"`
+	State        string         `db:"state" json:"state"`
+	Error        sql.NullString `db:"error" json:"-"`
+	ExpiresAt    time.Time      `db:"expires_at" json:"expires_at"`
+	CreatedAt    time.Time      `db:"created_at" json:"created_at"`
 }
 
 type UploadInitRequest struct {
@@ -521,6 +533,8 @@ var (
 	ErrInvalidChunk             = &AppError{Code: "INVALID_CHUNK", Message: "invalid chunk index"}
 	ErrChunkAlreadyExists       = &AppError{Code: "CHUNK_EXISTS", Message: "chunk already uploaded"}
 	ErrUploadIncomplete         = &AppError{Code: "UPLOAD_INCOMPLETE", Message: "not all chunks have been uploaded"}
+	ErrUploadNotAccepting       = &AppError{Code: "UPLOAD_NOT_ACCEPTING_CHUNKS", Message: "upload was already completed"}
+	ErrAssemblyInProgress       = &AppError{Code: "ASSEMBLY_IN_PROGRESS", Message: "upload is still being assembled"}
 	ErrRateLimited              = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
 	ErrInvalidCode              = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
 	ErrUserNotFound             = &AppError{Code: "USER_NOT_FOUND", Message: "user not found in local cache"}

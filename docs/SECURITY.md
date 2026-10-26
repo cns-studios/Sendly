@@ -46,7 +46,7 @@ The identity key of an account from before identity keys is stored encrypted wit
 
 ## Abuse prevention
 
-- **Rate limiting:** standard, strict and download limiters, per user or per IP, backed by Redis ([OPERATIONS.md](OPERATIONS.md#rate-limiting)). Joining quick share, reporting and device enrollment use the strict limiter.
+- **Rate limiting:** standard, strict and download limiters, per user or per IP, shared by all replicas through PostgreSQL ([OPERATIONS.md](OPERATIONS.md#rate-limiting)). Joining quick share, reporting and device enrollment use the strict limiter.
 - **Reports:** deduplicated per signed-in user, or per IP for anonymous reports. Only distinct signed-in reporters count toward auto-delete (`AUTO_DELETE_REPORT_COUNT`). Transfer recipients can report only after accepting.
 - **Notices:** formal notices of illegal content go to `abuse@cns-studios.com` (ToS moderation section, DSA Art. 14).
 - **Client IPs** are read from forwarding headers only when the direct peer is a configured trusted proxy (`TRUSTED_PROXIES`), so clients cannot spoof their IP.
@@ -84,7 +84,7 @@ Sendly keeps as little as it can. Soft-deleted file records, per-IP upload count
 ## Hardening checklist
 
 - HTTPS only; `BASE_URL` set to the public origin; `GIN_MODE=release`.
-- Restrict network access to PostgreSQL and Redis; use strong credentials.
+- Restrict network access to PostgreSQL; use strong credentials.
 - Set `TRUSTED_PROXIES` correctly behind a proxy or Cloudflare.
 - Rotate `CNS_AUTH_SERVICE_KEY` periodically.
 - Centralize logs; watch repeated auth failures and rate-limit hits.

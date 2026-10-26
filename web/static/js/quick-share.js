@@ -699,7 +699,7 @@
                 return;
             }
 
-            const response = await fetch(`/api/file/${fileId}/download`, {
+            const response = await SendlyNet.fetch(`/api/file/${fileId}/download`, {
                 headers: buildHeaders()
             });
 
@@ -1159,7 +1159,7 @@
 
             const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-            const initRes = await fetch('/api/upload/init', {
+            const initRes = await SendlyNet.fetch('/api/upload/init', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({
@@ -1197,7 +1197,7 @@
                             formData.append('chunk_index', chunkIndex.toString());
                             formData.append('chunk', new Blob([chunkData]));
 
-                            const res = await fetch('/api/upload/chunk', {
+                            const res = await SendlyNet.fetch('/api/upload/chunk', {
                                 method: 'POST',
                                 headers: buildHeaders(),
                                 body: formData
@@ -1221,7 +1221,7 @@
                 { concurrency: PARALLEL_CHUNK_UPLOADS }
             );
 
-            await fetch('/api/upload/complete', {
+            await SendlyNet.fetch('/api/upload/complete', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({ session_id: sessionId, confirmed: true })
@@ -1229,7 +1229,7 @@
 
             const deadline = Date.now() + 600000;
             while (Date.now() < deadline) {
-                const statusRes = await fetch(`/api/upload/status/${sessionId}`, {
+                const statusRes = await SendlyNet.fetch(`/api/upload/status/${sessionId}`, {
                     headers: buildHeaders()
                 });
                 if (!statusRes.ok) throw new Error('Assembly status check failed');
@@ -1241,7 +1241,7 @@
                 await new Promise(r => setTimeout(r, 1500));
             }
 
-            const finalizeRes = await fetch('/api/upload/finalize', {
+            const finalizeRes = await SendlyNet.fetch('/api/upload/finalize', {
                 method: 'POST',
                 headers: buildHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify({

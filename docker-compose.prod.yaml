@@ -4,7 +4,6 @@ services:
       - /mnt/shareit:/data
 volumes:
   postgres_data:
-  redis_data:
   chunk_data:
 # Fixed name and subnet: Coolify deploys under a random project name, which
 # otherwise gives this network a new name (and gateway) on every deploy.

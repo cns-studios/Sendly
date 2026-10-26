@@ -1,27 +1,33 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
 
 	"sendly/internal/config"
 	"sendly/internal/models"
-	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
 
+// RateLimitStore keeps request counters that every replica shares;
+// implemented by *storage.Postgres.
+type RateLimitStore interface {
+	CheckRateLimit(ctx context.Context, key string, maxRequests int64, window time.Duration) (bool, error)
+}
+
 type RateLimiter struct {
-	redis     *storage.Redis
+	store     RateLimitStore
 	maxPerMin int64
 	window    time.Duration
 	keyPrefix string
 }
 
-func NewRateLimiter(redis *storage.Redis, maxPerMin int64, window time.Duration) *RateLimiter {
+func NewRateLimiter(store RateLimitStore, maxPerMin int64, window time.Duration) *RateLimiter {
 	return &RateLimiter{
-		redis:     redis,
+		store:     store,
 		maxPerMin: maxPerMin,
 		window:    window,
 		keyPrefix: "standard:",
@@ -36,7 +42,7 @@ func (rl *RateLimiter) Handler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
+		allowed, err := rl.store.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
 		if err != nil {
 
 			c.Next()
@@ -56,9 +62,9 @@ func (rl *RateLimiter) Handler() gin.HandlerFunc {
 	}
 }
 
-func NewStrictRateLimiter(redis *storage.Redis, maxPerMin int64, window time.Duration) *RateLimiter {
+func NewStrictRateLimiter(store RateLimitStore, maxPerMin int64, window time.Duration) *RateLimiter {
 	return &RateLimiter{
-		redis:     redis,
+		store:     store,
 		maxPerMin: maxPerMin,
 		window:    window,
 		keyPrefix: "strict:",
@@ -77,7 +83,7 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := rl.redis.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
+		allowed, err := rl.store.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
 				Error: "Service temporarily unavailable",
@@ -101,15 +107,15 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 }
 
 type DownloadRateLimiter struct {
-	redis     *storage.Redis
+	store     RateLimitStore
 	maxPerMin int64
 	window    time.Duration
 	keyPrefix string
 }
 
-func NewDownloadRateLimiter(redis *storage.Redis, maxPerMinute int64, window time.Duration) *DownloadRateLimiter {
+func NewDownloadRateLimiter(store RateLimitStore, maxPerMinute int64, window time.Duration) *DownloadRateLimiter {
 	return &DownloadRateLimiter{
-		redis:     redis,
+		store:     store,
 		maxPerMin: maxPerMinute,
 		window:    window,
 		keyPrefix: "download:",
@@ -124,7 +130,7 @@ func (drl *DownloadRateLimiter) Handler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := drl.redis.CheckRateLimit(c.Request.Context(), key, drl.maxPerMin, drl.window)
+		allowed, err := drl.store.CheckRateLimit(c.Request.Context(), key, drl.maxPerMin, drl.window)
 		if err != nil {
 			c.Next()
 			return
@@ -143,10 +149,10 @@ func (drl *DownloadRateLimiter) Handler() gin.HandlerFunc {
 	}
 }
 
-func NewRateLimiterSet(cfg *config.Config, redis *storage.Redis) (*RateLimiter, *RateLimiter, *DownloadRateLimiter) {
-	standard := NewRateLimiter(redis, cfg.RateLimitMaxPerMinute, time.Duration(cfg.RateLimitWindowSeconds)*time.Second)
-	strict := NewStrictRateLimiter(redis, cfg.StrictRateLimitMaxPerMinute, time.Duration(cfg.StrictRateLimitWindowSeconds)*time.Second)
-	download := NewDownloadRateLimiter(redis, cfg.DownloadRateLimitMaxPerMinute, time.Duration(cfg.DownloadRateLimitWindowSeconds)*time.Second)
+func NewRateLimiterSet(cfg *config.Config, store RateLimitStore) (*RateLimiter, *RateLimiter, *DownloadRateLimiter) {
+	standard := NewRateLimiter(store, cfg.RateLimitMaxPerMinute, time.Duration(cfg.RateLimitWindowSeconds)*time.Second)
+	strict := NewStrictRateLimiter(store, cfg.StrictRateLimitMaxPerMinute, time.Duration(cfg.StrictRateLimitWindowSeconds)*time.Second)
+	download := NewDownloadRateLimiter(store, cfg.DownloadRateLimitMaxPerMinute, time.Duration(cfg.DownloadRateLimitWindowSeconds)*time.Second)
 	return standard, strict, download
 }
 

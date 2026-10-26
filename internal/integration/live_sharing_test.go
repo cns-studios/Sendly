@@ -23,6 +23,7 @@ import (
 	"sendly/internal/handlers"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -30,7 +31,7 @@ import (
 
 func TestLiveUserSharingEndToEnd(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
-		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres and Redis")
+		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres")
 	}
 	root := t.TempDir()
 	t.Setenv("DATA_DIR", filepath.Join(root, "data"))
@@ -44,17 +45,12 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	rdb, err := storage.NewRedis(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rdb.Close()
 	if err := db.RunMigrations(context.Background(), cfg.MigrationsDir); err != nil {
 		t.Fatal(err)
 	}
-	recent := handlers.NewRecentUploadsHandler(cfg, db)
+	recent := handlers.NewRecentUploadsHandler(cfg, db, realtime.NewHub(nil))
 	cfg.RateLimitMaxPerMinute = 2
-	lookupLimiter := middleware.NewRateLimiter(rdb, cfg.RateLimitMaxPerMinute, time.Minute)
+	lookupLimiter := middleware.NewRateLimiter(db, cfg.RateLimitMaxPerMinute, time.Minute)
 	ownerID := time.Now().UnixNano() % 1000000000
 	recipientID := ownerID + 1
 	noKeyID := ownerID + 2

@@ -23,6 +23,7 @@ import (
 	"sendly/internal/handlers"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -64,7 +65,7 @@ func newIdentityTestEnv(t *testing.T) *identityTestEnv {
 	}
 	t.Cleanup(func() { raw.Close() })
 
-	recent := handlers.NewRecentUploadsHandler(cfg, db)
+	recent := handlers.NewRecentUploadsHandler(cfg, db, realtime.NewHub(nil))
 	migration := handlers.NewIdentityMigrationHandler(db)
 	rescue := handlers.NewIdentityRescueHandler(db)
 	router := gin.New()

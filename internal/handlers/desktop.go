@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 
 	"sendly/internal/config"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/services"
 	"sendly/internal/storage"
 
@@ -18,41 +18,26 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// desktopHub tells desktop clients about new files, on whichever replica
+// their socket is connected. Channels are "user:<id>" or "key:<api key id>".
 type desktopHub struct {
-	mu    sync.Mutex
-	conns map[string][]*websocket.Conn
+	rt *realtime.Hub
 }
 
-func newDesktopHub() *desktopHub {
-	return &desktopHub{conns: make(map[string][]*websocket.Conn)}
+func newDesktopHub(rt *realtime.Hub) *desktopHub {
+	return &desktopHub{rt: rt}
 }
 
-func (h *desktopHub) add(apiKeyID string, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.conns[apiKeyID] = append(h.conns[apiKeyID], conn)
+func (h *desktopHub) add(channelID string, conn *websocket.Conn) *realtime.Conn {
+	return h.rt.Add("desktop:"+channelID, conn)
 }
 
-func (h *desktopHub) notify(apiKeyID, fileName string, meta *models.DesktopFileMetadata, sourceDeviceID string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	conns := h.conns[apiKeyID]
-	msg := map[string]interface{}{
+func (h *desktopHub) notify(channelID, fileName string, meta *models.DesktopFileMetadata, sourceDeviceID string) {
+	h.rt.Publish(context.Background(), "desktop:"+channelID, map[string]interface{}{
 		"type":             "new_file",
 		"file":             meta,
 		"source_device_id": sourceDeviceID,
-	}
-
-	alive := conns[:0]
-	for _, conn := range conns {
-		if err := conn.WriteJSON(msg); err != nil {
-			conn.Close()
-		} else {
-			alive = append(alive, conn)
-		}
-	}
-	h.conns[apiKeyID] = alive
+	})
 }
 
 type DesktopHandler struct {
@@ -79,6 +64,7 @@ func NewDesktopHandler(
 	fs *storage.Filesystem,
 	uploadService *services.Upload,
 	tracker *services.Tracker,
+	rt *realtime.Hub,
 ) *DesktopHandler {
 	return &DesktopHandler{
 		cfg:           cfg,
@@ -86,7 +72,7 @@ func NewDesktopHandler(
 		fs:            fs,
 		uploadService: uploadService,
 		tracker:       tracker,
-		hub:           newDesktopHub(),
+		hub:           newDesktopHub(rt),
 	}
 }
 
@@ -594,14 +580,6 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 			}
 
 			h.hub.add(fmt.Sprintf("user:%d", user.ID), conn)
-			go func() {
-				defer conn.Close()
-				for {
-					if _, _, readErr := conn.ReadMessage(); readErr != nil {
-						break
-					}
-				}
-			}()
 			return
 		}
 	}
@@ -619,14 +597,6 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 				}
 
 				h.hub.add(fmt.Sprintf("user:%d", user.ID), conn)
-				go func() {
-					defer conn.Close()
-					for {
-						if _, _, readErr := conn.ReadMessage(); readErr != nil {
-							break
-						}
-					}
-				}()
 				return
 			}
 		}
@@ -645,13 +615,4 @@ func (h *DesktopHandler) WebSocket(c *gin.Context) {
 	}
 
 	h.hub.add("key:"+key.ID, conn)
-
-	go func() {
-		defer conn.Close()
-		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
-				break
-			}
-		}
-	}()
 }

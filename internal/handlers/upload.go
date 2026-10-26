@@ -17,7 +17,6 @@ import (
 type UploadHandler struct {
 	cfg           *config.Config
 	db            *storage.Postgres
-	redis         *storage.Redis
 	fs            *storage.Filesystem
 	uploadService *services.Upload
 }
@@ -25,14 +24,12 @@ type UploadHandler struct {
 func NewUploadHandler(
 	cfg *config.Config,
 	db *storage.Postgres,
-	redis *storage.Redis,
 	fs *storage.Filesystem,
 	uploadService *services.Upload,
 ) *UploadHandler {
 	return &UploadHandler{
 		cfg:           cfg,
 		db:            db,
-		redis:         redis,
 		fs:            fs,
 		uploadService: uploadService,
 	}
@@ -229,10 +226,7 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 	resp, err := h.uploadService.FinalizeUploadWithOptions(c.Request.Context(), req.SessionID, req.Duration, opts)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
-			status := http.StatusBadRequest
-			if appErr == models.ErrSessionNotFound || appErr == models.ErrSessionExpired {
-				status = http.StatusNotFound
-			}
+			status := uploadErrorStatus(appErr)
 			c.JSON(status, models.ErrorResponse{
 				Error: appErr.Message,
 				Code:  appErr.Code,
@@ -327,10 +321,7 @@ func (h *UploadHandler) Chunk(c *gin.Context) {
 	err = h.uploadService.UploadChunk(c.Request.Context(), sessionID, chunkIndex, file)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
-			status := http.StatusBadRequest
-			if appErr == models.ErrSessionNotFound || appErr == models.ErrSessionExpired {
-				status = http.StatusNotFound
-			}
+			status := uploadErrorStatus(appErr)
 			c.JSON(status, models.ErrorResponse{
 				Error: appErr.Message,
 				Code:  appErr.Code,
@@ -384,10 +375,7 @@ func (h *UploadHandler) Complete(c *gin.Context) {
 	resp, err := h.uploadService.CompleteUpload(c.Request.Context(), req.SessionID)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
-			status := http.StatusBadRequest
-			if appErr == models.ErrSessionNotFound || appErr == models.ErrSessionExpired {
-				status = http.StatusNotFound
-			}
+			status := uploadErrorStatus(appErr)
 			c.JSON(status, models.ErrorResponse{
 				Error: appErr.Message,
 				Code:  appErr.Code,
@@ -478,4 +466,18 @@ func (h *UploadHandler) Progress(c *gin.Context) {
 		"total_chunks":    total,
 		"percentage":      percentage,
 	})
+}
+
+// uploadErrorStatus maps an upload error to its HTTP status. 409 tells the
+// client the request was fine but came at the wrong moment (still
+// assembling, already completed), which a client may wait out.
+func uploadErrorStatus(err *models.AppError) int {
+	switch err {
+	case models.ErrSessionNotFound, models.ErrSessionExpired:
+		return http.StatusNotFound
+	case models.ErrAssemblyInProgress, models.ErrUploadNotAccepting:
+		return http.StatusConflict
+	default:
+		return http.StatusBadRequest
+	}
 }

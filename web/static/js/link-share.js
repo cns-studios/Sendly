@@ -810,7 +810,7 @@
                 formData.append('session_id', sessionId);
                 formData.append('chunk_index', chunkIndex.toString());
                 formData.append('chunk', new Blob([chunkData]));
-                const response = await fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
+                const response = await SendlyNet.fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
                 if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, `Chunk ${chunkIndex + 1} failed`); }
                 return;
             } catch (error) { lastError = error; }
@@ -819,7 +819,7 @@
     }
 
     async function initUpload(fileSize, totalChunks) {
-        const response = await fetch('/api/upload/init', {
+        const response = await SendlyNet.fetch('/api/upload/init', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
             body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE })
@@ -829,7 +829,7 @@
     }
 
     async function completeUpload() {
-        const response = await fetch('/api/upload/complete', {
+        const response = await SendlyNet.fetch('/api/upload/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
             body: JSON.stringify({ session_id: uploadSessionId, confirmed: true })
@@ -841,7 +841,7 @@
     async function waitForAssembly(sessionId, intervalMs = 1500, timeoutMs = 600000) {
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
-            const res = await fetch(`/api/upload/status/${sessionId}`);
+            const res = await SendlyNet.fetch(`/api/upload/status/${sessionId}`);
             if (!res.ok) throw new Error('Assembly status check failed');
             const { status } = await res.json();
             if (status === 'done') return;
@@ -854,7 +854,7 @@
     async function finalizeUpload() {
         try {
             const finalizePayload = { session_id: uploadSessionId, ...(finalizeEnvelopePayload || {}), duration: RETENTION };
-            const response = await fetch('/api/upload/finalize', {
+            const response = await SendlyNet.fetch('/api/upload/finalize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
                 body: JSON.stringify(finalizePayload)

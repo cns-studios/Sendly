@@ -529,7 +529,13 @@ func forceCleanup(ctx context.Context, cfg *config.Config, db *storage.Postgres,
 	fmt.Printf("Deleted %d file blobs\n", deletedBlobs)
 
 	 
-	orphanedCount, err := fs.CleanupOrphanedChunks(make(map[string]bool))
+	// Chunks of uploads in progress (on any replica) must survive this.
+	activeSessions, _, err := db.UploadSessionRefs(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing upload sessions: %v\n", err)
+		os.Exit(1)
+	}
+	orphanedCount, err := fs.CleanupOrphanedChunks(activeSessions, 15*time.Minute)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error cleaning orphaned chunks: %v\n", err)
 	} else {

@@ -385,7 +385,8 @@ Moves accounts from before identity keys (legacy AES user key) onto them. All cr
 
 | Route | Description |
 |---|---|
-| `GET /health` | Probes PostgreSQL, Redis and storage (2 s timeout each, cached 5 s): `200 {"status":"healthy","checks":{...}}` or `503 {"status":"unhealthy",...}` with failing checks marked `error`. Details are logged, never returned. |
+| `GET /health` | Probes PostgreSQL and storage (2 s timeout each, cached 5 s): `200 {"status":"healthy","checks":{...}}` or `503 {"status":"unhealthy",...}` with failing checks marked `error`. Details are logged, never returned. |
+| `GET /readyz` | Like `/health`, but `503 {"status":"draining"}` once the replica is shutting down. Kubernetes readiness probe. |
 | `GET /livez` | Process liveness only. |
 | `GET /static/*` | Static assets, including `wordlist.txt` (cached for a year). |
 | `GET /robots.txt`, `/sitemap.xml`, `/.well-known/security.txt` | SEO and security contact. |

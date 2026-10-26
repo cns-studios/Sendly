@@ -14,6 +14,7 @@ import (
 	"sendly/internal/handlers"
 	"sendly/internal/i18n"
 	"sendly/internal/middleware"
+	"sendly/internal/realtime"
 	"sendly/internal/services"
 	"sendly/internal/storage"
 
@@ -27,7 +28,7 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	db, err := storage.NewPostgres(cfg)
+	db, err := connectPostgres(cfg, 2*time.Minute)
 	if err != nil {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
@@ -40,13 +41,6 @@ func main() {
 		log.Fatalf("Failed to run database migrations: %v", err)
 	}
 	log.Println("Database migrations complete")
-
-	rdb, err := storage.NewRedis(cfg)
-	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
-	}
-	defer rdb.Close()
-	log.Println("Connected to Redis")
 
 	fs, err := storage.NewFilesystem(cfg)
 	if err != nil {
@@ -67,34 +61,37 @@ func main() {
 		log.Fatalf("Refusing to start: %v", err)
 	}
 
+	// Replicas share token refreshes and realtime events through Postgres.
+	middleware.SetRefreshStore(db)
+	rt := realtime.NewHub(db)
+	listenCtx, stopListening := context.WithCancel(context.Background())
+	defer stopListening()
+	if err := realtime.Listen(listenCtx, cfg.PostgresDSN(), rt); err != nil {
+		log.Fatalf("Failed to listen for realtime events: %v", err)
+	}
+
 	discord := services.NewDiscord(cfg)
 
-	cleanup := services.NewCleanup(cfg, db, rdb, fs)
+	cleanup := services.NewCleanup(cfg, db, fs)
 	go cleanup.Start()
-	defer cleanup.Stop()
 	log.Println("Cleanup service started")
 
 	tracker := services.NewTracker(db)
 	statsReporter := services.NewStatsReporter(cfg, db)
 	go statsReporter.Start()
-	defer statsReporter.Stop()
 	log.Println("Stats reporter started")
-	uploadService := services.NewUpload(cfg, db, rdb, fs, tracker)
-	go uploadService.StartPendingCleanup()
-	defer uploadService.Stop()
+	uploadService := services.NewUpload(cfg, db, fs, tracker)
+	uploadService.Start()
 	log.Println("Upload service started")
 
 	cnsClient := services.NewCNSClient(cfg)
 	userCache := services.NewUserCache(cfg, db, cnsClient)
 	userCache.Start()
-	defer userCache.Stop()
 	log.Println("User cache reconciliation service started")
 
 	if cfg.IsProd() {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
-	
 
 	router := gin.New()
 	// Only forwarding headers from configured proxies are believed; with no
@@ -112,7 +109,7 @@ func main() {
 	translator := i18n.NewTranslator()
 
 	ipMiddleware := middleware.NewIPMiddleware(cfg)
-	standardRateLimiter, strictRateLimiter, downloadRateLimiter := middleware.NewRateLimiterSet(cfg, rdb)
+	standardRateLimiter, strictRateLimiter, downloadRateLimiter := middleware.NewRateLimiterSet(cfg, db)
 	cnsAuth := middleware.CNSAuthMiddleware(cfg)
 
 	router.Use(ipMiddleware.Handler())
@@ -122,12 +119,12 @@ func main() {
 
 	pageHandler := handlers.NewPageHandler(cfg, translator, db)
 	authHandler := handlers.NewAuthHandler(cfg)
-	uploadHandler := handlers.NewUploadHandler(cfg, db, rdb, fs, uploadService)
+	uploadHandler := handlers.NewUploadHandler(cfg, db, fs, uploadService)
 	downloadHandler := handlers.NewDownloadHandler(cfg, db, fs, tracker)
 	reportHandler := handlers.NewReportHandler(cfg, db, discord)
-	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService, tracker)
-	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, uploadService, tracker)
-	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db)
+	desktopHandler := handlers.NewDesktopHandler(cfg, db, fs, uploadService, tracker, rt)
+	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, uploadService, tracker, rt)
+	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db, rt)
 	identityRescueHandler := handlers.NewIdentityRescueHandler(db)
 	// Temporary: moves accounts from before identity keys onto them.
 	identityMigrationHandler := handlers.NewIdentityMigrationHandler(db)
@@ -147,11 +144,11 @@ func main() {
 
 	healthHandler := handlers.NewHealthHandler(
 		handlers.HealthCheck{Name: "postgres", Check: db.Ping},
-		handlers.HealthCheck{Name: "redis", Check: rdb.Ping},
 		handlers.HealthCheck{Name: "storage", Check: func(context.Context) error { return fs.CheckHealth(instanceID) }},
 	)
 	router.GET("/health", healthHandler.Health)
 	router.GET("/livez", healthHandler.Live)
+	router.GET("/readyz", healthHandler.Ready)
 
 	router.GET("/robots.txt", pageHandler.RobotsTXT)
 	router.GET("/sitemap.xml", pageHandler.Sitemap)
@@ -436,12 +433,43 @@ func main() {
 	<-quit
 	log.Println("Shutting down server...")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// By the time SIGTERM arrives, Kubernetes has already taken the pod out
+	// of the Service (the preStop delay covers the propagation), so only
+	// requests that are already in flight remain.
+	deadline := time.Now().Add(cfg.ShutdownTimeout)
+	healthHandler.SetDraining()
 
+	// Hijacked WebSocket connections are not tracked by srv.Shutdown. Close
+	// them with "service restart" so clients reconnect to another replica.
+	rt.Shutdown()
+
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Printf("Server shutdown cut off in-flight requests: %v", err)
 	}
 
+	// Running assemblies get the rest of the grace period, then hand over to
+	// another replica.
+	uploadService.Stop(time.Until(deadline))
+	cleanup.Stop()
+	statsReporter.Stop()
+	userCache.Stop()
+	stopListening()
+
 	log.Println("Server exited gracefully")
+}
+
+// connectPostgres keeps trying for up to wait, so that a replica starting
+// during a database failover or restart waits instead of crash-looping.
+func connectPostgres(cfg *config.Config, wait time.Duration) (*storage.Postgres, error) {
+	deadline := time.Now().Add(wait)
+	for {
+		db, err := storage.NewPostgres(cfg)
+		if err == nil || time.Now().After(deadline) {
+			return db, err
+		}
+		log.Printf("PostgreSQL not reachable yet, retrying: %v", err)
+		time.Sleep(3 * time.Second)
+	}
 }

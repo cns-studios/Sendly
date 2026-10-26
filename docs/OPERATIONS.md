@@ -4,11 +4,11 @@ Running, configuring and maintaining a Sendly instance. See [ARCHITECTURE.md](AR
 
 ## Running
 
-Sendly needs Go (see `go.mod`), PostgreSQL and Redis. The `Makefile` wraps the common Docker Compose flows:
+Sendly needs Go (see `go.mod`) and PostgreSQL. The `Makefile` wraps the common Docker Compose flows. For several replicas on Kubernetes, see [KUBERNETES.md](KUBERNETES.md).
 
 | Command | What it does |
 |---|---|
-| `make dev-up` | Start the dev stack (app, PostgreSQL, Redis) in the background. |
+| `make dev-up` | Start the dev stack (app, PostgreSQL) in the background. |
 | `make dev-full` | Rebuild images and start the dev stack. |
 | `make dev-build` | Build dev images only. |
 | `make prod-build` / `make prod-up` | Build / start with `docker-compose.prod.yaml` layered on top. |
@@ -16,7 +16,7 @@ Sendly needs Go (see `go.mod`), PostgreSQL and Redis. The `Makefile` wraps the c
 | `make logs` | Follow the app logs. |
 | `make migrate` | Run migrations manually (`go run cmd/migrate/main.go`). |
 
-Without Docker: `cp .env.example .env`, start PostgreSQL and Redis, then `go run ./cmd/server`. The app listens on `PORT` (default `8085`).
+Without Docker: `cp .env.example .env`, start PostgreSQL, then `go run ./cmd/server`. The app listens on `PORT` (default `8085`).
 
 Staging and other non-prod stacks should use the base `docker-compose.yaml` alone (named volumes), never the prod override ([storage ownership](#storage-ownership)).
 
@@ -30,10 +30,14 @@ All settings are environment variables; `.env.example` is the annotated template
 - `TOS_VERSION`: terms version exposed to clients.
 - `GIN_MODE`: `release` for production.
 
-### PostgreSQL and Redis
+### PostgreSQL
 - `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
-- `REDIS_HOST`, `REDIS_PORT`
+- `POSTGRES_SSLMODE` (`disable`): `disable`, `require`, `verify-ca` or `verify-full`.
 - `MIGRATIONS_DIR` (`db/migrations`): migrations run at startup and are tracked in the schema history.
+
+### Replicas and shutdown
+- `POD_NAME`: names this replica in upload assembly leases; defaults to the hostname. Kubernetes sets it from the pod name.
+- `SHUTDOWN_TIMEOUT_SECONDS` (`25`): after SIGTERM, in-flight requests and upload assemblies get this long. Unfinished assemblies are then handed to another replica.
 
 ### Storage
 - `DATA_DIR` (`./data`): final encrypted blobs.
@@ -77,27 +81,28 @@ Runs in the cleanup cycle (every 5 minutes). `0` disables a purge; negative or i
 - `TUNNEL_REJECTION_RETENTION_DAYS` (`30`): deletes rejections for tunnels that have ended or expired.
 
 ### Production baseline
-Strong database credentials, `BASE_URL` set to the public HTTPS origin, `GIN_MODE=release`, rate limits tuned to expected traffic, PostgreSQL and Redis not exposed publicly, `TRUSTED_PROXIES` set if behind a proxy, `CNS_AUTH_*` configured for accounts.
+Strong database credentials, `BASE_URL` set to the public HTTPS origin, `GIN_MODE=release`, rate limits tuned to expected traffic, PostgreSQL not exposed publicly, `TRUSTED_PROXIES` set if behind a proxy, `CNS_AUTH_*` configured for accounts.
 
 ## Startup and shutdown
 
-Startup order: load config → connect PostgreSQL → run migrations → connect Redis → init filesystem storage → storage ownership check → start cleanup and pending-upload services → listen.
+Startup order: load config → connect PostgreSQL (retried for up to 2 minutes) → run migrations → init filesystem storage → storage ownership check → start listening for realtime events → start cleanup and upload services → listen.
 
-Shutdown is graceful (30 s timeout); background services stop and wait for their goroutines.
+Shutdown is graceful: readiness starts failing, WebSockets are closed with 1012 so clients reconnect elsewhere, in-flight requests and upload assemblies get `SHUTDOWN_TIMEOUT_SECONDS`, unfinished assemblies are released to other replicas, then background services stop.
 
 ## Health checks
 
-- `GET /health` probes PostgreSQL, Redis and storage (a durable write into `DATA_DIR` and `CHUNK_DIR`, plus the instance marker), 2 s timeout each, cached for 5 s. It answers `200 {"status":"healthy","checks":{...}}` or `503 {"status":"unhealthy",...}` with the failing check marked `error`. Details go to the log (`Health check "redis" failed: ...`), never to the response. The Docker `HEALTHCHECK` uses it. It does not verify migration consistency.
-- `GET /livez` only reports that the process answers.
+- `GET /health` probes PostgreSQL and storage (a durable write into `DATA_DIR` and `CHUNK_DIR`, plus the instance marker), 2 s timeout each, cached for 5 s. It answers `200 {"status":"healthy","checks":{...}}` or `503 {"status":"unhealthy",...}` with the failing check marked `error`. Details go to the log (`Health check "postgres" failed: ...`), never to the response. The Docker `HEALTHCHECK` uses it. It does not verify migration consistency.
+- `GET /readyz` is `/health` plus the shutdown state: it fails as soon as the replica starts draining. Use it as the readiness probe.
+- `GET /livez` only reports that the process answers. Use it as the liveness probe, so a database outage never restarts pods.
 
 ## Cleanup
 
-- Every 5 minutes: mark expired files deleted, delete their blobs, remove orphaned chunk directories and blobs absent from the database, then apply data retention.
-- Every minute: remove abandoned upload sessions and stale pending artifacts.
+- Every 5 minutes, on one replica of the deployment: mark expired files deleted, delete their blobs, remove orphaned chunk directories, interrupted assemblies and blobs that neither a file nor an upload session refers to, purge old rate limit counters and token refresh results, then apply data retention.
+- Every minute, on every replica: remove expired upload sessions with their chunks and unfinalized blobs.
 
 ## Storage ownership
 
-Orphan cleanup deletes every blob its database does not know about and every chunk session its Redis does not know about. Two instances sharing storage (for example staging started with the prod override, which bind-mounts `/mnt/shareit`) would delete each other's files within minutes.
+Orphan cleanup deletes every blob and every chunk directory its database does not know about. Two instances sharing storage (for example staging started with the prod override, which bind-mounts `/mnt/shareit`) would delete each other's files within minutes.
 
 To prevent that, each database holds a random ID (`instance_meta`), and the server writes it to a `.sendly-instance` marker in `DATA_DIR` and in `CHUNK_DIR` when that lies outside `DATA_DIR`. On startup:
 
@@ -128,7 +133,7 @@ then add a migration dropping `legacy_identity_escrow`, `user_key_envelopes` and
 
 ## Troubleshooting
 
-- **Upload finalize fails:** check the session's pending status in Redis, that the assembled file exists on disk, the duration or tunnel rules, and the identity envelope fields.
+- **Upload finalize fails:** check the session in `upload_sessions` (state, error, assembly lease), that the assembled file exists on disk, the duration or tunnel rules, and the identity envelope fields.
 - **Device enrollment stuck:** check device ownership and trust state, the enrollment expiry, the verification code, and the WebSocket connection of the approving device.
 - **Tunnel errors:** check tunnel status (`pending`, `joined`, `active`, `ended`, `expired`), membership and host approval, and the expiry time.
 - **Everyone shares one rate limit:** the app sees the proxy's IP; set `TRUSTED_PROXIES`.

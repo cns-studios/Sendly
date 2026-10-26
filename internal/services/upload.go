@@ -15,14 +15,40 @@ import (
 	"sendly/internal/storage"
 )
 
+const (
+	// uploadSessionTTL is how long an upload may sit idle between chunks.
+	uploadSessionTTL = 1 * time.Hour
+	// uploadPendingTTL is how long an upload waits for finalize after complete.
+	uploadPendingTTL = 10 * time.Minute
+
+	// A replica assembling an upload holds a lease on it and renews it
+	// regularly. If the replica dies, the lease runs out and another replica
+	// resumes the assembly from the chunks, which are kept until it is done.
+	assemblyLease       = 30 * time.Second
+	assemblyRenewEvery  = 10 * time.Second
+	assemblyResumeEvery = 10 * time.Second
+)
+
 type Upload struct {
-	cfg      *config.Config
-	db       *storage.Postgres
-	redis    *storage.Redis
-	fs       *storage.Filesystem
-	tracker  *Tracker
+	cfg     *config.Config
+	db      *storage.Postgres
+	fs      *storage.Filesystem
+	tracker *Tracker
+	// owner identifies this replica in assembly leases.
+	owner string
+
 	stopChan chan struct{}
 	wg       sync.WaitGroup
+
+	// Assemblies run under assemblyCtx so a shutdown can interrupt them.
+	assemblyCtx    context.Context
+	stopAssemblies context.CancelFunc
+	assemblies     sync.WaitGroup
+	// running holds the sessions this replica is assembling right now. The
+	// lease alone can't tell: a restarted pod keeps its name, so the lease
+	// owner matches this replica either way.
+	runningMu sync.Mutex
+	running   map[string]bool
 }
 
 type FinalizeUploadOptions struct {
@@ -41,88 +67,112 @@ type FinalizeUploadOptions struct {
 	IdentityKeyVersion     int
 }
 
-func NewUpload(cfg *config.Config, db *storage.Postgres, redis *storage.Redis, fs *storage.Filesystem, tracker *Tracker) *Upload {
+func NewUpload(cfg *config.Config, db *storage.Postgres, fs *storage.Filesystem, tracker *Tracker) *Upload {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Upload{
-		cfg:      cfg,
-		db:       db,
-		redis:    redis,
-		fs:       fs,
-		tracker:  tracker,
-		stopChan: make(chan struct{}),
+		cfg:            cfg,
+		db:             db,
+		fs:             fs,
+		tracker:        tracker,
+		owner:          cfg.InstanceName,
+		stopChan:       make(chan struct{}),
+		assemblyCtx:    ctx,
+		stopAssemblies: cancel,
+		running:        make(map[string]bool),
 	}
 }
 
-func (u *Upload) StartPendingCleanup() {
-	u.wg.Add(1)
-	go u.runPendingCleanup()
+// Start runs the background loops: resuming assemblies that lost their
+// replica, and removing expired upload sessions. Every replica runs both;
+// leases and row locks keep them from doing the same work twice.
+func (u *Upload) Start() {
+	u.wg.Add(2)
+	go u.runLoop(assemblyResumeEvery, u.resumeOrphanedAssemblies)
+	go u.runLoop(time.Minute, u.cleanupExpiredSessions)
 }
 
-func (u *Upload) Stop() {
+// Stop ends the background loops and gives running assemblies until drain
+// to finish. Whatever is still running then is interrupted and its lease
+// released, so another replica picks it up at once.
+func (u *Upload) Stop(drain time.Duration) {
 	close(u.stopChan)
 	u.wg.Wait()
+
+	done := make(chan struct{})
+	go func() { u.assemblies.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(drain):
+		u.runningMu.Lock()
+		unfinished := len(u.running)
+		u.runningMu.Unlock()
+		if unfinished > 0 {
+			log.Printf("Upload service: handing %d unfinished assemblies over to other replicas", unfinished)
+		}
+		u.stopAssemblies()
+		<-done
+	}
+	u.stopAssemblies()
 }
 
-func (u *Upload) runPendingCleanup() {
+func (u *Upload) runLoop(every time.Duration, fn func()) {
 	defer u.wg.Done()
-
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(every)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ticker.C:
-			u.cleanupPendingUploads()
+			fn()
 		case <-u.stopChan:
-			log.Println("Upload service stopping...")
 			return
 		}
 	}
 }
 
-func (u *Upload) cleanupPendingUploads() {
+func (u *Upload) resumeOrphanedAssemblies() {
+	ctx, cancel := context.WithTimeout(u.assemblyCtx, 10*time.Second)
+	defer cancel()
+	ids, err := u.db.ListOrphanedAssemblies(ctx, 10)
+	if err != nil {
+		log.Printf("Upload service: listing orphaned assemblies failed: %v", err)
+		return
+	}
+	for _, id := range ids {
+		u.startAssembly(id)
+	}
+}
+
+func (u *Upload) cleanupExpiredSessions() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	sessionIDs, err := u.fs.GetAllSessionIDs()
-	if err != nil {
-		log.Printf("Error getting session IDs: %v", err)
+	for {
+		sessions, err := u.db.TakeExpiredUploadSessions(ctx, 100)
+		if err != nil {
+			log.Printf("Upload service: taking expired sessions failed: %v", err)
+			return
+		}
+		for _, s := range sessions {
+			u.removeSessionFiles(ctx, &s)
+		}
+		if len(sessions) < 100 {
+			return
+		}
+	}
+}
+
+// removeSessionFiles deletes a dropped session's chunks and, unless it was
+// finalized into a file, its blob.
+func (u *Upload) removeSessionFiles(ctx context.Context, s *models.UploadSession) {
+	if err := u.fs.DeleteChunks(s.SessionID); err != nil {
+		log.Printf("Error deleting chunks for session %s: %v", s.SessionID, err)
+	}
+	if !u.fs.FileExists(s.FileID) {
 		return
 	}
-
-	for _, sessionID := range sessionIDs {
-
-		session, err := u.redis.GetUploadSession(ctx, sessionID)
-		if err == models.ErrSessionNotFound {
-
-			log.Printf("Cleaning up expired session: %s", sessionID)
-			if err := u.fs.DeleteChunks(sessionID); err != nil {
-				log.Printf("Error deleting chunks for session %s: %v", sessionID, err)
-			}
-			continue
-		}
-		if err != nil {
-			log.Printf("Error getting session %s: %v", sessionID, err)
-			continue
-		}
-
-		isPending, err := u.redis.IsFilePending(ctx, session.FileID)
-		if err != nil {
-			log.Printf("Error checking pending status for file %s: %v", session.FileID, err)
-			continue
-		}
-
-		if !isPending {
-
-			chunkCount, chunkErr := u.fs.GetChunkCount(sessionID)
-			if chunkErr != nil {
-				log.Printf("Error checking chunk count for session %s: %v", sessionID, chunkErr)
-				continue
-			}
-
-			if chunkCount == 0 && u.fs.FileExists(session.FileID) {
-				log.Printf("Cleaning up abandoned pending upload: session=%s, file=%s", sessionID, session.FileID)
-				u.CleanupSession(ctx, sessionID)
-			}
+	if _, err := u.db.GetFileForAdmin(ctx, s.FileID); errors.Is(err, models.ErrFileNotFound) {
+		if err := u.fs.DeleteFile(s.FileID); err != nil {
+			log.Printf("Error deleting unfinalized blob %s: %v", s.FileID, err)
 		}
 	}
 }
@@ -147,14 +197,14 @@ func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, 
 		CreatedAt:    time.Now(),
 	}
 
-	if err := u.redis.CreateUploadSession(ctx, session); err != nil {
+	if err := u.db.CreateUploadSession(ctx, session, uploadSessionTTL); err != nil {
 		log.Printf("ERROR CreateUploadSession: %v", err)
 		return nil, fmt.Errorf("error creating upload session: %w", err)
 	}
 
 	if err := u.fs.CreateChunkDir(sessionID); err != nil {
 		log.Printf("ERROR CreateChunkDir: %v", err)
-		u.redis.DeleteUploadSession(ctx, sessionID)
+		u.db.DeleteUploadSession(ctx, sessionID)
 		return nil, fmt.Errorf("error creating chunk directory: %w", err)
 	}
 
@@ -166,9 +216,11 @@ func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, 
 	}, nil
 }
 
+// UploadChunk stores one chunk. Sending a chunk again (a client retrying
+// after a lost response, possibly to another replica) replaces it.
 func (u *Upload) UploadChunk(ctx context.Context, sessionID string, chunkIndex int, data io.Reader) error {
 
-	session, err := u.redis.GetUploadSession(ctx, sessionID)
+	session, err := u.db.GetUploadSession(ctx, sessionID)
 	if err != nil {
 		return err
 	}
@@ -176,82 +228,171 @@ func (u *Upload) UploadChunk(ctx context.Context, sessionID string, chunkIndex i
 	if chunkIndex < 0 || chunkIndex >= session.TotalChunks {
 		return models.ErrInvalidChunk
 	}
-
-	exists, err := u.redis.IsChunkUploaded(ctx, sessionID, chunkIndex)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return models.ErrChunkAlreadyExists
+	if session.State != models.UploadStateUploading {
+		return models.ErrUploadNotAccepting
 	}
 
-	_, err = u.fs.SaveChunk(sessionID, chunkIndex, data)
-	if err != nil {
+	if _, err := u.fs.SaveChunk(sessionID, chunkIndex, data); err != nil {
 		return fmt.Errorf("error saving chunk: %w", err)
 	}
 
-	if err := u.redis.MarkChunkUploaded(ctx, sessionID, chunkIndex); err != nil {
-
+	if err := u.db.RecordChunk(ctx, sessionID, chunkIndex, uploadSessionTTL); err != nil {
+		if errors.Is(err, models.ErrUploadNotAccepting) {
+			return err
+		}
 		return fmt.Errorf("error marking chunk as uploaded: %w", err)
-	}
-
-	if err := u.redis.ExtendUploadSession(ctx, sessionID); err != nil {
-		log.Printf("Warning: failed to extend session TTL: %v", err)
 	}
 
 	return nil
 }
 
+// CompleteUpload starts assembling the blob in the background; the client
+// polls GetAssemblyStatus. Repeating it is harmless and returns the same
+// answer, so a client may retry it after a lost response.
 func (u *Upload) CompleteUpload(ctx context.Context, sessionID string) (*models.UploadCompleteResponse, error) {
 
-	session, err := u.redis.GetUploadSession(ctx, sessionID)
+	session, err := u.db.StartAssembly(ctx, sessionID, uploadPendingTTL)
 	if err != nil {
 		return nil, err
 	}
 
-	uploadedCount, err := u.redis.GetUploadedChunkCount(ctx, sessionID)
-	if err != nil {
-		return nil, err
+	if session.State == models.UploadStateAssembling {
+		u.startAssembly(sessionID)
 	}
-
-	if int(uploadedCount) != session.TotalChunks {
-		return nil, models.ErrUploadIncomplete
-	}
-
-	pendingTTL := u.redis.PendingTTL()
-	if err := u.redis.MarkFilePending(ctx, session.FileID, sessionID); err != nil {
-		return nil, fmt.Errorf("error marking file as pending: %w", err)
-	}
-	if err := u.redis.SetUploadSessionTTL(ctx, sessionID, pendingTTL); err != nil {
-		log.Printf("Warning: failed to shrink session TTL for pending upload %s: %v", sessionID, err)
-	}
-
-	if err := u.redis.SetAssemblyStatus(ctx, sessionID, "pending"); err != nil {
-		return nil, fmt.Errorf("error setting assembly status: %w", err)
-	}
-
-	go func() {
-		bgCtx := context.Background()
-		if err := u.fs.AssembleChunks(sessionID, session.FileID, session.TotalChunks); err != nil {
-			log.Printf("Error assembling chunks for session %s: %v", sessionID, err)
-			u.redis.SetAssemblyStatus(bgCtx, sessionID, "error:"+err.Error())
-			u.redis.RemovePendingFile(bgCtx, session.FileID)
-			return
-		}
-		u.redis.DeleteChunkTracking(bgCtx, sessionID)
-		u.redis.SetAssemblyStatus(bgCtx, sessionID, "done")
-		log.Printf("Assembly complete for session %s file %s", sessionID, session.FileID)
-	}()
 
 	return &models.UploadCompleteResponse{
 		SessionID:        sessionID,
 		FileID:           session.FileID,
-		PendingExpiresAt: time.Now().Add(pendingTTL),
+		PendingExpiresAt: session.ExpiresAt,
 	}, nil
 }
 
+// startAssembly assembles the session in the background if this replica can
+// take its lease. It returns at once; without the lease it does nothing.
+func (u *Upload) startAssembly(sessionID string) {
+	u.runningMu.Lock()
+	if u.running[sessionID] {
+		u.runningMu.Unlock()
+		return
+	}
+	u.running[sessionID] = true
+	u.runningMu.Unlock()
+	done := func() {
+		u.runningMu.Lock()
+		delete(u.running, sessionID)
+		u.runningMu.Unlock()
+	}
+
+	session, err := u.db.ClaimAssembly(u.assemblyCtx, sessionID, u.owner, assemblyLease)
+	if err != nil || session == nil {
+		if err != nil {
+			log.Printf("Claiming assembly of session %s failed: %v", sessionID, err)
+		}
+		done()
+		return
+	}
+
+	u.assemblies.Add(1)
+	go func() {
+		defer u.assemblies.Done()
+		defer done()
+		u.assemble(session)
+	}()
+}
+
+func (u *Upload) assemble(session *models.UploadSession) {
+	ctx, cancel := context.WithCancel(u.assemblyCtx)
+	defer cancel()
+
+	// Keep the lease while working; losing it means another replica has
+	// taken over, so stop.
+	go func() {
+		ticker := time.NewTicker(assemblyRenewEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				ok, err := u.db.RenewAssembly(ctx, session.SessionID, u.owner, assemblyLease)
+				if err != nil {
+					// The database may be failing over: keep going, the fenced
+					// update at the end decides whether this run counts.
+					log.Printf("Renewing assembly lease of session %s failed: %v", session.SessionID, err)
+					continue
+				}
+				if !ok {
+					log.Printf("Assembly lease of session %s was lost", session.SessionID)
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+
+	err := u.fs.AssembleChunks(ctx, session.SessionID, session.FileID, session.TotalChunks)
+
+	// The outcome is recorded even while shutting down, so it must not use
+	// the cancelled context; retry it so a database failover is waited out.
+	record := func(what string, fn func(context.Context) error) {
+		deadline := time.Now().Add(2 * time.Minute)
+		for {
+			recordCtx, recordCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			recErr := fn(recordCtx)
+			recordCancel()
+			if recErr == nil || time.Now().After(deadline) {
+				if recErr != nil {
+					log.Printf("Recording %s for session %s failed: %v", what, session.SessionID, recErr)
+				}
+				return
+			}
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	switch {
+	case err == nil:
+		var finished bool
+		record("assembly", func(ctx context.Context) (err error) {
+			finished, err = u.db.FinishAssembly(ctx, session.SessionID, u.owner, uploadPendingTTL/2)
+			return err
+		})
+		if finished {
+			if err := u.fs.DeleteChunks(session.SessionID); err != nil {
+				log.Printf("Warning: failed to delete chunks for session %s: %v", session.SessionID, err)
+			}
+			log.Printf("Assembly complete for session %s file %s", session.SessionID, session.FileID)
+		}
+	case ctx.Err() != nil:
+		// Interrupted by shutdown or a lost lease: let another replica redo it.
+		record("lease release", func(ctx context.Context) error {
+			return u.db.ReleaseAssembly(ctx, session.SessionID, u.owner)
+		})
+	default:
+		log.Printf("Error assembling chunks for session %s: %v", session.SessionID, err)
+		record("assembly failure", func(ctx context.Context) error {
+			return u.db.FailAssembly(ctx, session.SessionID, u.owner, err.Error())
+		})
+	}
+}
+
+// GetAssemblyStatus answers "pending" while the blob is being assembled,
+// "done" once it can be finalized, or "error:<message>".
 func (u *Upload) GetAssemblyStatus(ctx context.Context, sessionID string) (string, error) {
-	return u.redis.GetAssemblyStatus(ctx, sessionID)
+	session, err := u.db.GetUploadSession(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	switch session.State {
+	case models.UploadStateAssembled, models.UploadStateFinalized:
+		return "done", nil
+	case models.UploadStateFailed:
+		return "error:" + session.Error.String, nil
+	case models.UploadStateAssembling:
+		return "pending", nil
+	default:
+		return "", models.ErrSessionNotFound
+	}
 }
 
 func (u *Upload) FinalizeUpload(ctx context.Context, sessionID, duration string) (*models.UploadFinalizeResponse, error) {
@@ -259,43 +400,30 @@ func (u *Upload) FinalizeUpload(ctx context.Context, sessionID, duration string)
 }
 
 func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, duration string, opts *FinalizeUploadOptions) (*models.UploadFinalizeResponse, error) {
-	var session *models.UploadSession
-	var err error
-	const maxRetries = 3
-	for i := 0; i < maxRetries; i++ {
-		session, err = u.redis.GetUploadSession(ctx, sessionID)
-		if err == nil {
-			break
-		}
-		if i == maxRetries-1 {
-			break
-		}
-		time.Sleep(time.Duration(50<<i) * time.Millisecond)
-	}
+	session, err := u.db.GetUploadSession(ctx, sessionID)
 	if err != nil {
 		if err == models.ErrSessionNotFound {
 			return nil, models.ErrSessionExpired
 		}
 		return nil, err
 	}
-	var isPending bool
-	var err2 error
-	for i := 0; i < maxRetries; i++ {
-		isPending, err2 = u.redis.IsFilePending(ctx, session.FileID)
-		if err2 == nil {
-			err = nil
-			break
+
+	// A finalize repeated after its response was lost answers with the file
+	// the first one created.
+	if existing, err := u.db.GetFileForAdmin(ctx, session.FileID); err == nil {
+		if session.State != models.UploadStateFinalized {
+			u.db.MarkUploadFinalized(ctx, sessionID)
 		}
-		if i == maxRetries-1 {
-			err = err2
-			break
-		}
-		time.Sleep(time.Duration(50<<i) * time.Millisecond)
-	}
-	if err != nil {
+		return u.finalizeResponse(existing), nil
+	} else if !errors.Is(err, models.ErrFileNotFound) {
 		return nil, err
 	}
-	if !isPending {
+
+	switch session.State {
+	case models.UploadStateAssembled:
+	case models.UploadStateAssembling:
+		return nil, models.ErrAssemblyInProgress
+	default:
 		return nil, models.ErrUploadNotPending
 	}
 
@@ -395,21 +523,30 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 	}
 
 	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, identityEnvelope); err != nil {
+		// Two finalize requests of the same upload raced; the first one won.
+		if existing, getErr := u.db.GetFileForAdmin(ctx, session.FileID); getErr == nil {
+			return u.finalizeResponse(existing), nil
+		}
 		return nil, fmt.Errorf("error creating file record: %w", err)
 	}
 
 	u.tracker.RecordUpload(ctx, actualSize, session.UploaderIP)
 
-	u.redis.RemovePendingFile(ctx, session.FileID)
-	u.redis.DeleteUploadSession(ctx, sessionID)
-	u.redis.DeleteChunkTracking(ctx, sessionID)
+	// The session stays until it expires so that a repeated finalize can be
+	// answered; cleanup removes it then.
+	if err := u.db.MarkUploadFinalized(ctx, sessionID); err != nil {
+		log.Printf("Warning: failed to mark session %s finalized: %v", sessionID, err)
+	}
 
-	shareURL := fmt.Sprintf("%s/shared/%s", u.cfg.BaseURL, session.FileID)
+	return u.finalizeResponse(file), nil
+}
+
+func (u *Upload) finalizeResponse(file *models.File) *models.UploadFinalizeResponse {
 	return &models.UploadFinalizeResponse{
-		FileID:      session.FileID,
-		NumericCode: numericCode,
-		ShareURL:    shareURL,
-	}, nil
+		FileID:      file.ID,
+		NumericCode: file.NumericCode,
+		ShareURL:    fmt.Sprintf("%s/shared/%s", u.cfg.BaseURL, file.ID),
+	}
 }
 
 func (u *Upload) generateUniqueNumericCode(ctx context.Context) (string, error) {
@@ -429,59 +566,34 @@ func (u *Upload) generateUniqueNumericCode(ctx context.Context) (string, error) 
 
 func (u *Upload) CancelUpload(ctx context.Context, sessionID string) error {
 
-	session, err := u.redis.GetUploadSession(ctx, sessionID)
-	if err != nil && err != models.ErrSessionNotFound {
+	session, err := u.db.GetUploadSession(ctx, sessionID)
+	if err == models.ErrSessionNotFound {
+		return u.fs.DeleteChunks(sessionID)
+	}
+	if err != nil {
 		return err
 	}
-
-	if err := u.fs.DeleteChunks(sessionID); err != nil {
-		log.Printf("Error deleting chunks for session %s: %v", sessionID, err)
+	if session.State == models.UploadStateFinalized {
+		return nil
 	}
 
-	if session != nil {
-		if u.fs.FileExists(session.FileID) {
-			u.fs.DeleteFile(session.FileID)
-		}
-		u.redis.RemovePendingFile(ctx, session.FileID)
+	if err := u.db.DeleteUploadSession(ctx, sessionID); err != nil {
+		return err
 	}
-	u.redis.DeleteUploadSession(ctx, sessionID)
-	u.redis.DeleteChunkTracking(ctx, sessionID)
-
+	u.removeSessionFiles(ctx, session)
 	return nil
 }
 
-func (u *Upload) CleanupSession(ctx context.Context, sessionID string) {
-	session, _ := u.redis.GetUploadSession(ctx, sessionID)
-
-	if err := u.fs.DeleteChunks(sessionID); err != nil {
-		log.Printf("Error deleting chunks for session %s: %v", sessionID, err)
-	}
-
-	if session != nil {
-		if u.fs.FileExists(session.FileID) {
-			_, err := u.db.GetFileByID(ctx, session.FileID)
-			if err == models.ErrFileNotFound {
-
-				u.fs.DeleteFile(session.FileID)
-			}
-		}
-		u.redis.RemovePendingFile(ctx, session.FileID)
-	}
-
-	u.redis.DeleteUploadSession(ctx, sessionID)
-	u.redis.DeleteChunkTracking(ctx, sessionID)
-}
-
 func (u *Upload) GetUploadProgress(ctx context.Context, sessionID string) (int, int, error) {
-	session, err := u.redis.GetUploadSession(ctx, sessionID)
+	session, err := u.db.GetUploadSession(ctx, sessionID)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	uploadedCount, err := u.redis.GetUploadedChunkCount(ctx, sessionID)
+	uploadedCount, err := u.db.CountUploadedChunks(ctx, sessionID)
 	if err != nil {
 		return 0, 0, err
 	}
 
-	return int(uploadedCount), session.TotalChunks, nil
+	return uploadedCount, session.TotalChunks, nil
 }
