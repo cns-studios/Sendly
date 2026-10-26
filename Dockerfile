@@ -2,16 +2,14 @@ FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache gcc musl-dev
-
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY . .
+COPY cmd ./cmd
+COPY internal ./internal
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
-
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o admin ./cmd/admin
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o server ./cmd/server && \
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o admin ./cmd/admin
 
 FROM alpine:3.19
 
@@ -21,23 +19,20 @@ ENV PORT=8085
 
 RUN apk add --no-cache ca-certificates tzdata
 
-RUN adduser -D -g '' appuser
+# A fixed numeric UID, so Kubernetes can verify runAsNonRoot. 1000 is what
+# the image used before, which keeps existing volumes writable.
+RUN adduser -D -u 1000 -g '' appuser
 
-RUN mkdir -p /data && chown appuser:appuser /data
+COPY --from=builder /app/server /app/admin ./
+COPY web ./web
+COPY db ./db
+COPY wordlist.txt ./web/static/wordlist.txt
 
-COPY --from=builder /app/server .
-COPY --from=builder /app/admin .
+# Everything under /app is read-only at runtime (Kubernetes mounts the root
+# filesystem read-only); only the storage directories are written.
+RUN mkdir -p /data /chunks && chown appuser:appuser /data /chunks
 
-COPY --from=builder /app/web ./web
-COPY --from=builder /app/db ./db
-
-COPY --from=builder /app/wordlist.txt ./web/static/wordlist.txt
-
-RUN chown -R appuser:appuser /app
-
-RUN mkdir -p /chunks && chown appuser:appuser /chunks
-
-USER appuser
+USER 1000:1000
 
 EXPOSE 8085
 

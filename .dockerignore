@@ -1,0 +1,9 @@
+.git
+.github
+.claude
+.env
+*.md
+legal
+docs
+scripts
+docker-compose*.yaml

@@ -26,6 +26,7 @@ import (
 	"sendly/internal/handlers"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/services"
 	"sendly/internal/storage"
 
@@ -34,7 +35,7 @@ import (
 
 func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
-		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres and Redis")
+		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres")
 	}
 
 	root := t.TempDir()
@@ -49,20 +50,15 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	rdb, err := storage.NewRedis(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rdb.Close()
 	fs, err := storage.NewFilesystem(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tracker := services.NewTracker(db)
-	upload := services.NewUpload(cfg, db, rdb, fs, tracker)
-	uploadHandler := handlers.NewUploadHandler(cfg, db, rdb, fs, upload)
-	recentHandler := handlers.NewRecentUploadsHandler(cfg, db)
-	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, upload, tracker)
+	upload := services.NewUpload(cfg, db, fs, tracker)
+	uploadHandler := handlers.NewUploadHandler(cfg, db, fs, upload)
+	recentHandler := handlers.NewRecentUploadsHandler(cfg, db, realtime.NewHub(nil))
+	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, upload, tracker, realtime.NewHub(nil))
 
 	userID := time.Now().UnixNano()
 	user := &middleware.CNSUser{ID: int(userID), Username: "live-owner"}
@@ -237,7 +233,7 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 
 func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
-		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres and Redis")
+		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres")
 	}
 
 	root := t.TempDir()
@@ -252,17 +248,12 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	rdb, err := storage.NewRedis(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rdb.Close()
 	fs, err := storage.NewFilesystem(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload := services.NewUpload(cfg, db, rdb, fs, services.NewTracker(db))
-	uploadHandler := handlers.NewUploadHandler(cfg, db, rdb, fs, upload)
+	upload := services.NewUpload(cfg, db, fs, services.NewTracker(db))
+	uploadHandler := handlers.NewUploadHandler(cfg, db, fs, upload)
 	tunnelHandler := handlers.NewTunnelHandler(cfg, db, fs)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -467,7 +458,7 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 // the host and the first joiner.
 func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
-		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres and Redis")
+		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres")
 	}
 	root := t.TempDir()
 	t.Setenv("DATA_DIR", filepath.Join(root, "data"))
@@ -481,17 +472,12 @@ func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	rdb, err := storage.NewRedis(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rdb.Close()
 	fs, err := storage.NewFilesystem(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload := services.NewUpload(cfg, db, rdb, fs, services.NewTracker(db))
-	uploadHandler := handlers.NewUploadHandler(cfg, db, rdb, fs, upload)
+	upload := services.NewUpload(cfg, db, fs, services.NewTracker(db))
+	uploadHandler := handlers.NewUploadHandler(cfg, db, fs, upload)
 	tunnelHandler := handlers.NewTunnelHandler(cfg, db, fs)
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
@@ -509,7 +495,7 @@ func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 	router.POST("/api/upload/complete", uploadHandler.Complete)
 	router.GET("/api/upload/status/:session_id", uploadHandler.AssemblyStatus)
 	router.POST("/api/upload/finalize", uploadHandler.Finalize)
-	router.GET("/api/me/files/:id/access", handlers.NewRecentUploadsHandler(cfg, db).FileAccess)
+	router.GET("/api/me/files/:id/access", handlers.NewRecentUploadsHandler(cfg, db, realtime.NewHub(nil)).FileAccess)
 
 	base := int(time.Now().UnixNano() % 1000000000)
 	host, first, second := base, base+1, base+2

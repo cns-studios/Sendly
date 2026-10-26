@@ -106,6 +106,7 @@
 
     var socket = null;
     var retryDelay = 2000;
+    var socketEverOpened = false;
     function connectSocket() {
         if (!('WebSocket' in window)) return;
         var scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -114,7 +115,13 @@
         } catch (e) {
             return;
         }
-        socket.addEventListener('open', function () { retryDelay = 2000; });
+        socket.addEventListener('open', function () {
+            retryDelay = 2000;
+            // Sent transfers answered while the socket was down: let an open
+            // transfers page reload its history.
+            if (socketEverOpened) window.dispatchEvent(new CustomEvent('sendly:sent-transfers-updated', { detail: {} }));
+            socketEverOpened = true;
+        });
         socket.addEventListener('message', function (event) {
             var data;
             try { data = JSON.parse(event.data); } catch (e) { return; }

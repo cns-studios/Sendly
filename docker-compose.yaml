@@ -13,8 +13,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-sendly}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sendly}
       - POSTGRES_DB=${POSTGRES_DB:-sendly}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - POSTGRES_SSLMODE=${POSTGRES_SSLMODE:-disable}
       - CHUNK_DIR=/chunks
       - DATA_DIR=/data
       - SENDLY_ADOPT_DATA_DIR=${SENDLY_ADOPT_DATA_DIR:-false}
@@ -46,16 +45,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: unless-stopped
     networks:
       - sendly
 
   postgres:
-    build:
-      context: .
-      dockerfile: Dockerfile.postgres
+    image: postgres:16-alpine
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-sendly}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-sendly}
@@ -71,23 +66,8 @@ services:
     networks:
       - sendly
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - sendly
-
 volumes:
   postgres_data:
-  redis_data:
   chunk_data:
   file_data:
 networks:

@@ -2,50 +2,38 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"sync"
 
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
 
+// deviceEnrollmentHub carries account events to the browser sockets of
+// /api/me/devices/ws, on whichever replica they are connected.
 type deviceEnrollmentHub struct {
-	mu    sync.Mutex
-	conns map[int64][]*websocket.Conn
+	rt *realtime.Hub
 }
 
-func newDeviceEnrollmentHub() *deviceEnrollmentHub {
-	return &deviceEnrollmentHub{conns: make(map[int64][]*websocket.Conn)}
+func newDeviceEnrollmentHub(rt *realtime.Hub) *deviceEnrollmentHub {
+	return &deviceEnrollmentHub{rt: rt}
 }
 
-func (h *deviceEnrollmentHub) add(userID int64, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.conns[userID] = append(h.conns[userID], conn)
+func deviceEventsTopic(userID int64) string {
+	return fmt.Sprintf("web:user:%d", userID)
+}
+
+func (h *deviceEnrollmentHub) add(userID int64, conn *websocket.Conn) *realtime.Conn {
+	return h.rt.Add(deviceEventsTopic(userID), conn)
 }
 
 func (h *deviceEnrollmentHub) broadcast(userID int64, payload any) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	conns := h.conns[userID]
-	if len(conns) == 0 {
-		return
-	}
-
-	alive := conns[:0]
-	for _, conn := range conns {
-		if err := conn.WriteJSON(payload); err != nil {
-			_ = conn.Close()
-			continue
-		}
-		alive = append(alive, conn)
-	}
-	h.conns[userID] = alive
+	h.rt.Publish(context.Background(), deviceEventsTopic(userID), payload)
 }
 
 func gatherEnrollmentEventData(ctx context.Context, db *storage.Postgres, userID int64, enrollmentID string) (enrollment *models.DeviceEnrollment, requestDevice models.UserDevice, pendingCount int, ok bool) {
@@ -154,13 +142,4 @@ func (h *RecentUploadsHandler) DeviceEvents(c *gin.Context) {
 	}
 
 	h.hub.add(int64(user.ID), conn)
-
-	go func() {
-		defer conn.Close()
-		for {
-			if _, _, err := conn.ReadMessage(); err != nil {
-				break
-			}
-		}
-	}()
 }

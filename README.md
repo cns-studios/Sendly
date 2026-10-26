@@ -32,10 +32,11 @@ Details and trust assumptions: [docs/SECURITY.md](docs/SECURITY.md).
 | [Security](docs/SECURITY.md) | Threat model, encryption design, authorization, abuse prevention, CSP, hardening checklist. |
 | [API](docs/API.md) | Every HTTP endpoint with requests, responses, limits and error codes. |
 | [Operations](docs/OPERATIONS.md) | Running Sendly, every configuration variable, health checks, cleanup, storage safety, troubleshooting. |
+| [Kubernetes](docs/KUBERNETES.md) | Running several replicas on a k3s HA cluster: what the cluster provides, probes, shutdown, failover. |
 
 ## Run it
 
-Needs Docker with Compose, or Go with PostgreSQL and Redis.
+Needs Docker with Compose, or Go with PostgreSQL.
 
 ```bash
 cp .env.example .env   # adjust values

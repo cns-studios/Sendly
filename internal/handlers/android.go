@@ -9,11 +9,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 
 	"sendly/internal/config"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/services"
 	"sendly/internal/storage"
 
@@ -21,85 +21,43 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// androidHub carries events to the Android app's sockets, on whichever
+// replica they are connected: per user, per user's pending approvals, and
+// per enrollment a new device is waiting on.
 type androidHub struct {
-	mu              sync.Mutex
-	userConns       map[int64][]*websocket.Conn
-	pendingConns    map[int64][]*websocket.Conn
-	enrollmentConns map[string][]*websocket.Conn
+	rt *realtime.Hub
 }
 
-func newAndroidHub() *androidHub {
-	return &androidHub{
-		userConns:       make(map[int64][]*websocket.Conn),
-		pendingConns:    make(map[int64][]*websocket.Conn),
-		enrollmentConns: make(map[string][]*websocket.Conn),
-	}
+func newAndroidHub(rt *realtime.Hub) *androidHub {
+	return &androidHub{rt: rt}
 }
 
-func (h *androidHub) addUser(userID int64, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.userConns[userID] = append(h.userConns[userID], conn)
+func androidUserTopic(userID int64) string     { return fmt.Sprintf("android:user:%d", userID) }
+func androidPendingTopic(userID int64) string  { return fmt.Sprintf("android:pending:%d", userID) }
+func androidEnrollmentTopic(id string) string  { return "android:enrollment:" + id }
+
+func (h *androidHub) addUser(userID int64, conn *websocket.Conn) *realtime.Conn {
+	return h.rt.Add(androidUserTopic(userID), conn)
 }
 
-func (h *androidHub) addPending(userID int64, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.pendingConns[userID] = append(h.pendingConns[userID], conn)
+func (h *androidHub) addPending(userID int64, conn *websocket.Conn) *realtime.Conn {
+	return h.rt.Add(androidPendingTopic(userID), conn)
 }
 
-func (h *androidHub) addEnrollment(enrollmentID string, conn *websocket.Conn) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.enrollmentConns[enrollmentID] = append(h.enrollmentConns[enrollmentID], conn)
+func (h *androidHub) addEnrollment(enrollmentID string, conn *websocket.Conn) *realtime.Conn {
+	return h.rt.Add(androidEnrollmentTopic(enrollmentID), conn)
 }
 
 func (h *androidHub) broadcastUser(userID int64, payload any) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	conns := h.userConns[userID]
-	alive := conns[:0]
-	for _, conn := range conns {
-		if err := conn.WriteJSON(payload); err != nil {
-			_ = conn.Close()
-			continue
-		}
-		alive = append(alive, conn)
-	}
-	h.userConns[userID] = alive
+	h.rt.Publish(context.Background(), androidUserTopic(userID), payload)
 }
 
 func (h *androidHub) broadcastPending(userID int64, payload any) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	conns := h.pendingConns[userID]
-	alive := conns[:0]
-	for _, conn := range conns {
-		if err := conn.WriteJSON(payload); err != nil {
-			_ = conn.Close()
-			continue
-		}
-		alive = append(alive, conn)
-	}
-	h.pendingConns[userID] = alive
+	h.rt.Publish(context.Background(), androidPendingTopic(userID), payload)
 }
 
 func (h *androidHub) broadcastEnrollment(enrollmentID string, payload any) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	conns := h.enrollmentConns[enrollmentID]
-	alive := conns[:0]
-	for _, conn := range conns {
-		if err := conn.WriteJSON(payload); err != nil {
-			_ = conn.Close()
-			continue
-		}
-		alive = append(alive, conn)
-	}
-	h.enrollmentConns[enrollmentID] = alive
+	h.rt.Publish(context.Background(), androidEnrollmentTopic(enrollmentID), payload)
 }
 
 type AndroidHandler struct {
@@ -135,6 +93,7 @@ func NewAndroidHandler(
 	fs *storage.Filesystem,
 	uploadService *services.Upload,
 	tracker *services.Tracker,
+	rt *realtime.Hub,
 ) *AndroidHandler {
 	return &AndroidHandler{
 		cfg:           cfg,
@@ -142,7 +101,7 @@ func NewAndroidHandler(
 		fs:            fs,
 		uploadService: uploadService,
 		tracker:       tracker,
-		hub:           newAndroidHub(),
+		hub:           newAndroidHub(rt),
 	}
 }
 
@@ -548,7 +507,6 @@ func (h *AndroidHandler) DeviceNotificationsWS(c *gin.Context) {
 		return
 	}
 	h.hub.addUser(int64(user.ID), conn)
-	go holdOpen(conn)
 }
 
 func (h *AndroidHandler) PendingApprovalsWS(c *gin.Context) {
@@ -562,10 +520,9 @@ func (h *AndroidHandler) PendingApprovalsWS(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	h.hub.addPending(int64(user.ID), conn)
+	client := h.hub.addPending(int64(user.ID), conn)
 	pendingItems, _ := h.db.ListPendingEnrollments(c.Request.Context(), int64(user.ID))
-	_ = conn.WriteJSON(gin.H{"type": "pending_approvals_snapshot", "pending_count": len(pendingItems)})
-	go holdOpen(conn)
+	_ = client.WriteJSON(gin.H{"type": "pending_approvals_snapshot", "pending_count": len(pendingItems)})
 }
 
 func (h *AndroidHandler) WaitingForApprovalWS(c *gin.Context) {
@@ -591,15 +548,14 @@ func (h *AndroidHandler) WaitingForApprovalWS(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	h.hub.addEnrollment(enrollmentID, conn)
-	_ = conn.WriteJSON(gin.H{
+	client := h.hub.addEnrollment(enrollmentID, conn)
+	_ = client.WriteJSON(gin.H{
 		"type":              "enrollment_status_snapshot",
 		"enrollment_id":     enrollmentID,
 		"status":            enrollment.Status,
 		"expires_at":        enrollment.ExpiresAt,
 		"request_device_id": enrollment.RequestDeviceID,
 	})
-	go holdOpen(conn)
 }
 
 func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int64, eventType, enrollmentID, approverDeviceID string) {
@@ -621,15 +577,6 @@ func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int
 
 	if h.deviceHub != nil {
 		h.deviceHub.broadcast(userID, payload)
-	}
-}
-
-func holdOpen(conn *websocket.Conn) {
-	defer conn.Close()
-	for {
-		if _, _, err := conn.ReadMessage(); err != nil {
-			return
-		}
 	}
 }
 

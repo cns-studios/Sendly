@@ -483,7 +483,7 @@
         setProgress(2);
         try {
             const passphrase = await fileKeyFor(item);
-            const response = await fetch(`/api/file/${encodeURIComponent(item.file_id)}/download`);
+            const response = await SendlyNet.fetch(`/api/file/${encodeURIComponent(item.file_id)}/download`);
             if (!response.ok) throw new Error(t('transfers_download_failed_generic'));
             const total = parseInt(response.headers.get('Content-Length'), 10);
             const reader = response.body.getReader();

@@ -4,14 +4,13 @@ How Sendly is built, what it stores, and how the pieces fit together. Companion 
 
 ## Overview
 
-Sendly is an end-to-end encrypted file sharing service. A single Go server renders the web app, exposes the JSON API, assembles uploads and serves ciphertext. All encryption and decryption happens in the browser; the server never holds a key it could use to read a file.
+Sendly is an end-to-end encrypted file sharing service. A Go server renders the web app, exposes the JSON API, assembles uploads and serves ciphertext. Any number of identical replicas can run side by side: they share all state through PostgreSQL and one storage volume ([KUBERNETES.md](KUBERNETES.md)). All encryption and decryption happens in the browser; the server never holds a key it could use to read a file.
 
 ```mermaid
 flowchart LR
     B[Browser<br/>encrypts / decrypts] -->|HTTPS + WebSocket| S[Go server · Gin]
-    S --> P[(PostgreSQL<br/>metadata, wrapped keys)]
-    S --> R[(Redis<br/>sessions, rate limits)]
-    S --> F[(Filesystem<br/>encrypted blobs, chunks)]
+    S --> P[(PostgreSQL<br/>metadata, wrapped keys,<br/>upload sessions, rate limits, events)]
+    S --> F[(Shared volume<br/>encrypted blobs, chunks)]
     S -.-> C[CNS Auth<br/>sign-in, tokens]
     S -.-> D[Discord webhook<br/>report alerts]
 ```
@@ -33,7 +32,7 @@ flowchart LR
 
 - **Go + Gin**: HTTP server, templates, API, WebSockets.
 - **PostgreSQL**: persistent metadata and wrapped keys. Migrations in `db/migrations`, applied on startup.
-- **Redis**: transient state: upload sessions, chunk tracking, pending flags, rate-limit counters.
+- **PostgreSQL** also holds the transient state every replica needs: upload sessions and chunk tracking, rate-limit counters, token refresh results, periodic job runs, and carries live events between replicas (`LISTEN`/`NOTIFY`).
 - **Filesystem**: encrypted file blobs and temporary chunks (`DATA_DIR`, optional `CHUNK_DIR`).
 - **Frontend**: server-rendered templates in `web/templates`, vanilla JS in `web/static/js` (WebCrypto for all cryptography), no third-party scripts or fonts.
 - **Optional**: CNS Auth for accounts (without it the app runs guest-only), Discord webhook for reports.
@@ -48,7 +47,8 @@ flowchart LR
 | `internal/handlers` | HTTP handlers: pages, auth, upload, download, reports, transfers, tunnels, devices, identity. |
 | `internal/middleware` | Security headers, client IP, CNS auth bridge, CSRF, rate limiting, tiers, locale, user cache. |
 | `internal/services` | Upload lifecycle, cleanup, retention, user cache, tracker, Discord, CNS client. |
-| `internal/storage` | PostgreSQL, Redis and filesystem access. |
+| `internal/storage` | PostgreSQL and filesystem access, including the coordination between replicas. |
+| `internal/realtime` | WebSocket hub: per-replica sockets, events between replicas over `LISTEN`/`NOTIFY`. |
 | `internal/models` | Data types and error definitions. |
 | `web/` | Templates and static assets. |
 | `db/migrations` | Ordered SQL migrations. |
@@ -60,12 +60,12 @@ Global middleware, in order: recovery, logger, security headers (CSP), client-IP
 
 ## Upload flow
 
-1. **Init**: the client announces name, size and chunk count; the server checks the tier limit and creates a session in Redis.
+1. **Init**: the client announces name, size and chunk count; the server checks the tier limit and creates an upload session.
 2. **Chunks**: the already-encrypted file is uploaded in pieces to the chunk directory.
-3. **Complete**: the server assembles the chunks into a single blob in the background. The client polls status.
+3. **Complete**: the server assembles the chunks into a single blob in the background, holding a lease on the session. If the replica dies, another one takes over when the lease runs out. The client polls status.
 4. **Finalize**: the client picks a lifetime (or a tunnel) and sends the wrapped key for its own account. The file record is saved, the pending state is removed and a share URL is returned.
 
-Sessions that are never finalized are removed after 10 minutes.
+Sessions that are never finalized are removed after 10 minutes. Every step can be repeated after a lost response, on any replica, with the same result ([KUBERNETES.md](KUBERNETES.md#upload-flow-across-replicas)).
 
 ## Device trust and identity keys
 
@@ -104,9 +104,16 @@ Tunnel status: `pending` → `joined` → `active` → `ended`, or `expired`.
 | Users | `users` | Local cache of CNS profiles: username and avatar from CNS, for display and recipient search. |
 | Tracking | `uploads_by_ip`, `data_counters`, `instance_meta` | Per-IP upload and data counters; the instance ID used for [storage ownership](OPERATIONS.md#storage-ownership). |
 
-### Redis
+### Runtime state (PostgreSQL)
 
-Upload session metadata, chunk tracking, pending-file flags, assembly status and rate-limit counters. Nothing here is the source of truth for files.
+| Tables | Notes |
+|---|---|
+| `upload_sessions`, `upload_chunks` | Uploads from init until they expire: state (`uploading`, `assembling`, `assembled`, `finalized`, `failed`), assembly lease, received chunks. |
+| `rate_limit_counters` | Fixed-window counters, unlogged. |
+| `token_refresh_results` | Encrypted CNS refresh results, kept 10 seconds, unlogged. |
+| `job_runs` | Last start of each periodic job. |
+
+None of it is the source of truth for files.
 
 ### Filesystem
 
@@ -116,11 +123,12 @@ Final encrypted blobs keyed by file ID, temporary chunk directories keyed by ses
 
 | Job | Interval | What it does |
 |---|---|---|
-| Cleanup | 5 min | Marks expired files deleted, removes their blobs, orphaned chunks and blobs missing from the DB, then runs [data retention](OPERATIONS.md#data-retention). |
-| Pending-upload cleanup | 1 min | Drops abandoned upload sessions and stale pending artifacts. |
+| Cleanup | 5 min, one replica | Marks expired files deleted, removes their blobs, orphaned chunks and blobs missing from the DB, purges expired coordination rows, then runs [data retention](OPERATIONS.md#data-retention). |
+| Upload sessions | 1 min, every replica | Drops expired upload sessions with their chunks and unfinalized blobs (rows are locked, so replicas never take the same one). |
+| Assembly takeover | 10 s, every replica | Resumes assemblies whose replica went away. |
 | User cache reconcile | `USER_CACHE_RECONCILE_INTERVAL_MINUTES` | Re-syncs cached CNS profiles. |
-| Stats reporter | `STATS_REPORT_INTERVAL_MINUTES` | Reports usage stats when a bot URL is configured. |
+| Stats reporter | `STATS_REPORT_INTERVAL_MINUTES`, one replica | Reports usage stats when a bot URL is configured. |
 
 ## WebSockets
 
-`/api/me/devices/ws` pushes live account events: enrollment requests and decisions, and transfer updates.
+`/api/me/devices/ws` pushes live account events: enrollment requests and decisions, and transfer updates. Events travel between replicas over PostgreSQL `NOTIFY`, so a socket gets them whichever replica it is connected to; sockets are pinged every 25 seconds and closed with 1012 when their replica shuts down, and clients reload their state when they reconnect.

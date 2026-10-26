@@ -11,6 +11,7 @@ import (
 	"sendly/internal/config"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
+	"sendly/internal/realtime"
 	"sendly/internal/services"
 	"sendly/internal/storage"
 
@@ -24,8 +25,8 @@ type RecentUploadsHandler struct {
 	androidHub *androidHub
 }
 
-func NewRecentUploadsHandler(cfg *config.Config, db *storage.Postgres) *RecentUploadsHandler {
-	return &RecentUploadsHandler{cfg: cfg, db: db, hub: newDeviceEnrollmentHub()}
+func NewRecentUploadsHandler(cfg *config.Config, db *storage.Postgres, rt *realtime.Hub) *RecentUploadsHandler {
+	return &RecentUploadsHandler{cfg: cfg, db: db, hub: newDeviceEnrollmentHub(rt)}
 }
 
 func (h *RecentUploadsHandler) SetAndroidHub(ah *androidHub) {

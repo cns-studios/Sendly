@@ -71,22 +71,36 @@ func (r *StatsReporter) Stop() {
 	r.wg.Wait()
 }
 
+// run checks regularly whether a report is due. Every replica checks, but
+// only one reports per StatsReportInterval.
 func (r *StatsReporter) run() {
 	defer r.wg.Done()
 
-	r.report()
+	r.reportIfDue()
 
-	ticker := time.NewTicker(r.cfg.StatsReportInterval)
+	check := r.cfg.StatsReportInterval / 4
+	if check < 15*time.Second {
+		check = 15 * time.Second
+	}
+	ticker := time.NewTicker(check)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			r.report()
+			r.reportIfDue()
 		case <-r.stopChan:
 			log.Println("Stats reporter stopping...")
 			return
 		}
+	}
+}
+
+func (r *StatsReporter) reportIfDue() {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	if _, err := r.db.RunJob(ctx, "stats-report", r.cfg.StatsReportInterval, func(context.Context) { r.report() }); err != nil {
+		log.Printf("Stats reporter: could not claim the report run: %v", err)
 	}
 }
 
