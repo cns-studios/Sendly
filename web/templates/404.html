@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="{{.locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <meta name="description" content="{{.description}}">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/vendor/lucide-1.53.0.min.js"></script>
+    <script src="/static/js/avatar.js"></script>
+    <script src="/static/js/mobile-menu.js" defer></script>
+    <meta name="theme-color" content="#00AE71">
+    <link rel="apple-touch-icon" href="/static/images/bun.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+</head>
+<body class="page-404">
+    <div id="browser-old-nudge" class="browser-old-nudge hidden">Browser is too old. This service might not work as intended</div>
+    <div class="header-wrapper">
+        <header class="header">
+            <div class="header-left">
+                <a href="/" class="logo-text">{{.t.header_logo}}</a>
+                <nav class="quicklinks">
+                    <a href="/limits">{{.t.header_pricing}}</a>
+                    <a href="/data-encryption">{{.t.header_security}}</a>
+                    <a href="/help">{{.t.header_faq}}</a>
+                    <a href="?lang={{.otherLocale}}" class="lang-toggle">{{.otherLocaleLabel}}</a>
+                </nav>
+            </div>
+            {{template "account_menu" .}}
+            {{template "mobile_menu_button" .}}
+        </header>
+    </div>
+    {{template "mobile_menu" .}}
+    <main class="nf-main">
+        <section class="nf-card">
+            <div class="nf-code" aria-hidden="true">4<span class="nf-zero">0</span>4</div>
+            <h1 class="nf-title">{{.t.error_404_title}}</h1>
+            <p class="nf-text">{{.t.error_404_text}}</p>
+            <div class="nf-actions">
+                <a href="/" class="nf-btn nf-btn-primary">{{.t.error_404_home}}</a>
+                <a href="/help" class="nf-btn nf-btn-outline">{{.t.error_404_help}}</a>
+            </div>
+        </section>
+    </main>
+    <footer class="footer">
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/legal-notice">{{.t.footer_legal_notice}}</a>
+        <a href="/limits">{{.t.footer_limits}}</a>
+        <a href="/data-encryption">{{.t.footer_encryption}}</a>
+        <a href="/help">{{.t.footer_help}}</a>
+    </footer>
+    <script src="/static/js/page-init.js"></script>
+</body>
+</html>

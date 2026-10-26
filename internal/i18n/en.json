@@ -137,6 +137,14 @@
   "desc_encryption": "Sendly encrypts every file end-to-end before it leaves your device. Learn how data encryption and decryption work.",
   "desc_help": "Help and FAQ for Sendly. Answers to common questions about sharing files, links, quick shares and encryption.",
 
+  "title_404": "Page not found ➤ Sendly",
+  "desc_404": "This page does not exist on Sendly. Head back and share a file instead.",
+  "error_404_code": "Error 404",
+  "error_404_title": "Nothing here.",
+  "error_404_text": "This page doesn’t exist or has moved. The link may be mistyped, or the file may have expired.",
+  "error_404_home": "Back to Sendly",
+  "error_404_help": "Need help?",
+
   "tos_accept_title": "Accept to continue",
   "tos_accept_desc": "Please review and accept our",
   "tos_accept_and": "and",

@@ -137,6 +137,14 @@
   "desc_encryption": "Sendly verschlüsselt jede Datei Ende-zu-Ende, bevor sie dein Gerät verlässt. Erfahre, wie Datenverschlüsselung und -entschlüsselung funktionieren.",
   "desc_help": "Hilfe und FAQ für Sendly. Antworten auf häufige Fragen zu Dateien, Links, Quick Shares und Verschlüsselung.",
 
+  "title_404": "Seite nicht gefunden ➤ Sendly",
+  "desc_404": "Diese Seite gibt es bei Sendly nicht. Geh zurück und teile stattdessen eine Datei.",
+  "error_404_code": "Fehler 404",
+  "error_404_title": "Hier ist nichts.",
+  "error_404_text": "Diese Seite existiert nicht oder wurde verschoben. Vielleicht ist der Link falsch geschrieben oder die Datei abgelaufen.",
+  "error_404_home": "Zurück zu Sendly",
+  "error_404_help": "Hilfe nötig?",
+
   "tos_accept_title": "Akzeptieren um fortzufahren",
   "tos_accept_desc": "Bitte lies und akzeptiere unsere",
   "tos_accept_and": "und",

@@ -7678,3 +7678,110 @@ body.page-transfers-guest .tg-sticky {
         stroke-dashoffset: 0;
     }
 }
+
+/* ── 404 page ── */
+body.page-404 .nf-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px 60px;
+}
+
+body.page-404 .nf-card {
+    width: 100%;
+    max-width: 520px;
+    background: #FFFFFF;
+    border-radius: 27px;
+    padding: clamp(32px, 5vw, 56px) clamp(24px, 4vw, 48px);
+    text-align: center;
+    animation: blurReveal 0.8s cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+}
+
+body.page-404 .nf-code {
+    font-family: 'TASA Orbiter', sans-serif;
+    font-weight: 800;
+    font-size: clamp(72px, 16vw, 112px);
+    line-height: 1;
+    color: #000000;
+    margin-bottom: 20px;
+}
+
+body.page-404 .nf-zero {
+    color: #00AE71;
+}
+
+body.page-404 .nf-label {
+    font-weight: 510;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6E6E73;
+    margin: 0 0 8px;
+}
+
+body.page-404 .nf-title {
+    font-family: 'TASA Orbiter', sans-serif;
+    font-weight: 800;
+    font-size: clamp(26px, 5vw, 34px);
+    color: #000000;
+    margin: 0 0 12px;
+}
+
+body.page-404 .nf-text {
+    font-size: 17px;
+    line-height: 1.45;
+    color: #6E6E73;
+    margin: 0 auto 32px;
+    max-width: 400px;
+}
+
+body.page-404 .nf-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+body.page-404 .nf-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 52px;
+    padding: 0 28px;
+    border-radius: 15px;
+    font-weight: 510;
+    font-size: 17px;
+    text-decoration: none;
+    transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+body.page-404 .nf-btn-primary {
+    background: #00827B;
+    color: #FFFFFF;
+}
+
+body.page-404 .nf-btn-primary:hover {
+    opacity: 0.9;
+}
+
+body.page-404 .nf-btn-outline {
+    color: #000000;
+    border: 2px solid #00827B;
+}
+
+body.page-404 .nf-btn-outline:hover {
+    background: rgba(0, 130, 123, 0.05);
+}
+
+@media (max-width: 480px) {
+    body.page-404 .nf-btn {
+        width: 100%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.page-404 .nf-card {
+        animation: none;
+    }
+}

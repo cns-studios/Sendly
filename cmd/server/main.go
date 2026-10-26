@@ -166,6 +166,7 @@ func main() {
 	router.GET("/shared/:id", pageHandler.SharedFile)
 	router.GET("/transfers", pageHandler.Transfers)
 	router.GET("/uploaded", pageHandler.Uploaded)
+	router.NoRoute(pageHandler.NotFound)
 
 	auth := router.Group("/auth")
 	{

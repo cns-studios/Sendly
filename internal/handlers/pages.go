@@ -32,6 +32,10 @@ func NewPageHandler(cfg *config.Config, tr *i18n.Translator, db *storage.Postgre
 }
 
 func (h *PageHandler) render(c *gin.Context, templateName string, data gin.H) {
+	h.renderStatus(c, http.StatusOK, templateName, data)
+}
+
+func (h *PageHandler) renderStatus(c *gin.Context, status int, templateName string, data gin.H) {
 	locale := middleware.GetLocale(c)
 	translations := h.tr.Get(locale)
 	if data == nil {
@@ -57,7 +61,7 @@ func (h *PageHandler) render(c *gin.Context, templateName string, data gin.H) {
 	if locale == "de" {
 		data["ogLocale"] = "de_DE"
 	}
-	c.HTML(http.StatusOK, templateName, data)
+	c.HTML(status, templateName, data)
 }
 
 func setCSRFTokenCookie(c *gin.Context) {
@@ -210,6 +214,41 @@ func (h *PageHandler) LegalNotice(c *gin.Context) {
 		"description":   translations["desc_legal_notice"],
 		"baseURL":       h.cfg.BaseURL,
 		"authenticated": authenticated,
+		"authLoginURL":  authLoginURL,
+		"username":      username,
+		"userAvatar":    userAvatar,
+		"accountURL":    accountURL,
+	})
+}
+
+// NotFound serves the 404 page for HTML clients; API and static paths keep a
+// plain JSON/text answer so clients don't get a page where they expect data.
+func (h *PageHandler) NotFound(c *gin.Context) {
+	path := c.Request.URL.Path
+	if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/static/") {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	user := middleware.GetCNSUser(c)
+	username := ""
+	userAvatar := ""
+	accountURL := ""
+	if user != nil {
+		username = user.Username
+		userAvatar = user.Avatar
+	}
+	authLoginURL := ""
+	if h.cfg.CNSAuthURL != "" {
+		authLoginURL = "/auth/login"
+		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
+	}
+	translations := h.tr.Get(middleware.GetLocale(c))
+	h.renderStatus(c, http.StatusNotFound, "404.html", gin.H{
+		"title":         translations["title_404"],
+		"description":   translations["desc_404"],
+		"baseURL":       h.cfg.BaseURL,
+		"noindex":       true,
+		"authenticated": user != nil,
 		"authLoginURL":  authLoginURL,
 		"username":      username,
 		"userAvatar":    userAvatar,
