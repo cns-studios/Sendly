@@ -1,8 +1,8 @@
-# [Sendly](https://sendly.cns-studios.com)
+# [Sendly](https://sendly.zip)
 
 **Share files privately.** Sendly is an end-to-end encrypted file sharing service: files are encrypted in your browser before they leave it, so the server only ever stores ciphertext it cannot read.
 
-Built by [CNS Studios](https://cns-studios.com). No account is needed to share a file.
+Built by [CNS Studios](https://cns.ad). No account is needed to share a file.
 
 ## Features
 

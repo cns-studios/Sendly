@@ -188,7 +188,7 @@
         });
 
         tosDeclineBtn?.addEventListener('click', () => {
-            window.location.href = 'https://cns-studios.com';
+            window.location.href = 'https://cns.ad';
         });
 
         return false;

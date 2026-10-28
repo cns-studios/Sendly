@@ -106,7 +106,7 @@
         if (hasAcceptedCurrentTOS()) { hideTOSGate(); return true; }
         showTOSGate();
         tosAcceptBtn?.addEventListener('click', () => { setCookie(TOS_COOKIE_NAME, TOS_VERSION, 31536000); hideTOSGate(); });
-        tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns-studios.com'; });
+        tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns.ad'; });
         return false;
     }
 

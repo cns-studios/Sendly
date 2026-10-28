@@ -70,7 +70,7 @@
         if (hasAcceptedCurrentTOS()) { tosOverlay.classList.add('hidden'); return; }
         tosOverlay.classList.remove('hidden');
         tosAcceptBtn?.addEventListener('click', () => { setCookie('sendly_tos_accepted', window.CONFIG?.tosVersion || '2026-09-25', 31536000); tosOverlay.classList.add('hidden'); });
-        tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns-studios.com'; });
+        tosDeclineBtn?.addEventListener('click', () => { window.location.href = 'https://cns.ad'; });
     }
 
     function setupEventListeners() {
