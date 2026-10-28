@@ -55,7 +55,11 @@ func (h *PageHandler) renderStatus(c *gin.Context, status int, templateName stri
 		data["description"] = translations["desc_index"]
 	}
 	baseURL := strings.TrimSuffix(h.cfg.BaseURL, "/")
+	// Matches the hreflang targets: English lives on the bare path, German on ?lang=de.
 	data["canonicalURL"] = baseURL + c.Request.URL.Path
+	if c.Query("lang") == "de" {
+		data["canonicalURL"] = baseURL + c.Request.URL.Path + "?lang=de"
+	}
 	data["ogImage"] = baseURL + "/static/images/og-image.png"
 	data["ogLocale"] = "en_US"
 	if locale == "de" {

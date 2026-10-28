@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,21 +29,20 @@ func (h *PageHandler) RobotsTXT(c *gin.Context) {
 
 func (h *PageHandler) Sitemap(c *gin.Context) {
 	baseURL := strings.TrimSuffix(h.cfg.BaseURL, "/")
-	now := time.Now().Format("2006-01-02")
 
 	urls := []sitemapURL{
-		{Loc: baseURL + "/", LastMod: now, ChangeFreq: "weekly", Priority: "1.0"},
-		{Loc: baseURL + "/link", LastMod: now, ChangeFreq: "weekly", Priority: "0.9"},
-		{Loc: baseURL + "/quickshare", LastMod: now, ChangeFreq: "weekly", Priority: "0.9"},
-		{Loc: baseURL + "/limits", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
-		{Loc: baseURL + "/data-encryption", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
-		{Loc: baseURL + "/help", LastMod: now, ChangeFreq: "monthly", Priority: "0.7"},
+		{Loc: baseURL + "/", ChangeFreq: "weekly", Priority: "1.0"},
+		{Loc: baseURL + "/link", ChangeFreq: "weekly", Priority: "0.9"},
+		{Loc: baseURL + "/quickshare", ChangeFreq: "weekly", Priority: "0.9"},
+		{Loc: baseURL + "/limits", ChangeFreq: "monthly", Priority: "0.7"},
+		{Loc: baseURL + "/data-encryption", ChangeFreq: "monthly", Priority: "0.7"},
+		{Loc: baseURL + "/help", ChangeFreq: "monthly", Priority: "0.7"},
 		{Loc: baseURL + "/tos", LastMod: "2026-10-08", ChangeFreq: "yearly", Priority: "0.5"},
 		{Loc: baseURL + "/privacy", LastMod: "2026-10-08", ChangeFreq: "yearly", Priority: "0.5"},
 		{Loc: baseURL + "/legal-notice", LastMod: "2026-10-08", ChangeFreq: "yearly", Priority: "0.5"},
 	}
 	if h.cfg.CNSAuthURL != "" {
-		urls = append(urls, sitemapURL{Loc: baseURL + "/transfers", LastMod: now, ChangeFreq: "weekly", Priority: "0.8"})
+		urls = append(urls, sitemapURL{Loc: baseURL + "/transfers", ChangeFreq: "weekly", Priority: "0.8"})
 	}
 
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9", URLs: urls}
