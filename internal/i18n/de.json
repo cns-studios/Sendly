@@ -432,8 +432,8 @@
   "device_connect_count": " ausstehend",
   "device_connect_one": "1 ausstehend",
   "device_pending_title": "Genehmigung erforderlich",
-  "device_pending_message": "Behalte diesen Tab geöffnet. Genehmige diesen Browser von einem anderen angemeldeten Gerät aus. Wenn du alle vertrauenswürdigen Geräte verloren hast, kannst du alle hochgeladenen Dateien löschen und hier neu beginnen",
-  "device_pending_message_legacy": "Behalte diesen Tab geöffnet und öffne Sendly auf einem Gerät, das du bisher benutzt hast. Es aktualisiert dein Konto und kann diesen Browser dann genehmigen. Wenn du alle diese Geräte verloren hast, kannst du alle hochgeladenen Dateien löschen und hier neu beginnen",
+  "device_pending_message": "Behalte diesen Tab geöffnet. Genehmige diesen Browser von einem anderen angemeldeten Gerät aus. Wenn du alle vertrauenswürdigen Geräte verloren hast, kannst du alle hochgeladenen Dateien löschen und hier neu beginnen.",
+  "device_pending_message_legacy": "Behalte diesen Tab geöffnet und öffne Sendly auf einem Gerät, das du bisher benutzt hast. Es aktualisiert dein Konto und kann diesen Browser dann genehmigen. Wenn du alle diese Geräte verloren hast, kannst du alle hochgeladenen Dateien löschen und hier neu beginnen.",
   "device_pending_count": "Warte",
 
   "crypto_password_required": "Passwort ist erforderlich",

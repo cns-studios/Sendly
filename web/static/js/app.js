@@ -449,6 +449,13 @@
         }
     }
 
+    function renderDeviceApprovalMeta(rows) {
+        if (!deviceApprovalMeta) return;
+        deviceApprovalMeta.innerHTML = rows.map(([label, value]) =>
+            `<div class="device-approval-row"><dt>${escapeHtml(String(label).replace(/\s*:\s*$/, ''))}</dt><dd>${escapeHtml(value)}</dd></div>`
+        ).join('');
+    }
+
     function showApprovalEnrollment(item, count) {
         pendingEnrollmentMode = 'approval';
         activePendingEnrollment = item;
@@ -465,12 +472,12 @@
 
         deviceApprovalTitle.textContent = t('device_connect_title');
         deviceApprovalMessage.textContent = t('device_connect_message');
-        deviceApprovalMeta.innerHTML = [
-            `<span>${t('device_connect_device')}${escapeHtml(deviceName)}</span>`,
-            `<span>${t('device_connect_device_id')}${escapeHtml(deviceId)}</span>`,
-            `<span>${t('device_connect_key')}${escapeHtml(keyAlgorithm)}</span>`,
-            `<span>${t('device_connect_requested')}${escapeHtml(requestedAt)}</span>`
-        ].join('');
+        renderDeviceApprovalMeta([
+            [t('device_connect_device'), deviceName],
+            [t('device_connect_device_id'), deviceId],
+            [t('device_connect_key'), keyAlgorithm],
+            [t('device_connect_requested'), requestedAt]
+        ]);
 
         if (deviceApprovalCount) {
             deviceApprovalCount.textContent = count > 1 ? `${count}${t('device_connect_count')}` : t('device_connect_one');
@@ -510,11 +517,11 @@
 
         deviceApprovalTitle.textContent = t('device_pending_title');
         deviceApprovalMessage.textContent = t(awaitingLegacyApproval ? 'device_pending_message_legacy' : 'device_pending_message');
-        deviceApprovalMeta.innerHTML = [
-            `<span>${t('device_connect_device')}${escapeHtml(deviceName)}</span>`,
-            `<span>${t('device_connect_device_id')}${escapeHtml(deviceId)}</span>`,
-            `<span>${t('device_connect_requested')}${escapeHtml(requestedAt)}</span>`
-        ].join('');
+        renderDeviceApprovalMeta([
+            [t('device_connect_device'), deviceName],
+            [t('device_connect_device_id'), deviceId],
+            [t('device_connect_requested'), requestedAt]
+        ]);
 
         if (deviceApprovalCount) {
             deviceApprovalCount.textContent = count > 1 ? `${count}${t('device_connect_count')}` : t('device_pending_count');

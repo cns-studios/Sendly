@@ -432,8 +432,8 @@
   "device_connect_count": " pending",
   "device_connect_one": "1 pending",
   "device_pending_title": "Approval required",
-  "device_pending_message": "Keep this tab open. Approve this Browser from another logged-in device. If you lost all trusted devices, you can wipe all uploaded files and start fresh here",
-  "device_pending_message_legacy": "Keep this tab open and open Sendly on a device you used before. It updates your account and can then approve this browser. If you lost all those devices, you can wipe all uploaded files and start fresh here",
+  "device_pending_message": "Keep this tab open. Approve this browser from another logged-in device. If you lost all trusted devices, you can wipe all uploaded files and start fresh here.",
+  "device_pending_message_legacy": "Keep this tab open and open Sendly on a device you used before. It updates your account and can then approve this browser. If you lost all those devices, you can wipe all uploaded files and start fresh here.",
   "device_pending_count": "Waiting",
 
   "crypto_password_required": "Password is required",

@@ -111,18 +111,18 @@
             <button id="device-approval-close" type="button" class="tos-modal-close" aria-label="{{.t.device_approval_close}}" title="{{.t.device_approval_close}}">
                 <i data-lucide="x" style="width:18px;height:18px;"></i>
             </button>
-            <h2 id="device-approval-title" style="margin:0 0 16px;font-size:24px;font-weight:590;">{{.t.device_approval_title}}</h2>
-            <p id="device-approval-message" class="tos-modal-description" style="margin-bottom:28px;">
+            <h2 id="device-approval-title" class="device-approval-title">{{.t.device_approval_title}}</h2>
+            <p id="device-approval-message" class="tos-modal-description">
                 {{.t.device_approval_desc}}
             </p>
-            <div id="device-approval-meta" style="margin-bottom:28px;font-size:14px;color:#555;line-height:1.6;"></div>
-            <div id="device-approval-waiting" class="hidden" style="display:flex;flex-direction:column;align-items:center;gap:20px;margin-bottom:28px;">
-                <div class="downloading-spinner" style="width:36px;height:36px;"></div>
-                <button id="device-approval-recover" type="button" style="background:none;border:none;color:#595959;font-size:15px;text-decoration:underline;cursor:pointer;padding:0;">
+            <dl id="device-approval-meta" class="device-approval-meta"></dl>
+            <div id="device-approval-waiting" class="device-approval-waiting hidden">
+                <div class="downloading-spinner device-approval-spinner"></div>
+                <button id="device-approval-recover" type="button" class="device-approval-recover">
                     {{.t.device_approval_recover}}
                 </button>
             </div>
-            <span id="device-approval-count" style="display:none;"></span>
+            <span id="device-approval-count" hidden></span>
             <div class="tos-modal-actions">
                 <button id="device-approval-decline" class="btn btn-secondary btn-large">{{.t.device_approval_decline}}</button>
                 <button id="device-approval-approve" class="btn btn-accent btn-large">{{.t.device_approval_approve}}</button>

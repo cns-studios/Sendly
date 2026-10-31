@@ -1820,6 +1820,83 @@ body.page-shared .page-shared-footer {
     background: #b5b5b5;
 }
 
+/* Device approval dialog */
+.device-approval-title {
+    margin: 0 0 12px;
+    padding-right: 36px;
+    font-size: 24px;
+    font-weight: 590;
+    line-height: 1.2;
+}
+
+.device-approval-meta {
+    margin: 0 0 24px;
+    padding: 4px 14px;
+    background: #fff;
+    border-radius: 12px;
+    font-size: 14px;
+}
+
+.device-approval-meta:empty {
+    display: none;
+}
+
+.device-approval-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+.device-approval-row:last-child {
+    border-bottom: none;
+}
+
+.device-approval-row dt {
+    flex: none;
+    color: #6E6E73;
+}
+
+.device-approval-row dd {
+    margin: 0;
+    min-width: 0;
+    color: #000;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.device-approval-waiting {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 4px;
+}
+
+.device-approval-spinner {
+    width: 32px;
+    height: 32px;
+}
+
+.device-approval-recover {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #595959;
+    font: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    text-align: center;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+#device-approval-modal .tos-modal-description {
+    margin-bottom: 20px;
+}
+
 body.tos-gate-open {
     overflow: hidden;
 }
