@@ -385,7 +385,7 @@ Moves accounts from before identity keys (legacy AES user key) onto them. All cr
 ## CNS webhooks
 
 ### `POST /webhooks/cns`
-Account events from CNS for Sendly's OAuth client: `user.updated` (username or avatar changed), `user.deleted` and `ping`. Not under `/api`, so no CSRF check; instead every request must carry a valid `CNS-Webhook-Signature` (`v1=` + hex HMAC-SHA256 of `CNS-Webhook-Timestamp + "." + body` under `CNS_WEBHOOK_SECRET`) with a timestamp within 5 minutes. Body at most 64 KiB.
+Account events from CNS for Sendly's OAuth client: `user.updated` (username or avatar changed), `user.deleted`, `app.disconnected` (the user removed Sendly in their CNS settings; their open pages are told to reload and sign out) and `ping`. Not under `/api`, so no CSRF check; instead every request must carry a valid `CNS-Webhook-Signature` (`v1=` + hex HMAC-SHA256 of `CNS-Webhook-Timestamp + "." + body` under `CNS_WEBHOOK_SECRET`) with a timestamp within 5 minutes. Body at most 64 KiB.
 
 `204` when handled, including repeats of an event id and unknown event types. `401 INVALID_SIGNATURE`, `400 INVALID_EVENT` (signed but unusable), `413` (too large), `500 WEBHOOK_APPLY_FAILED` (CNS retries). `404` while `CNS_WEBHOOK_SECRET` is unset. Event format: accounts-api `docs/INTEGRATION.md`, section "react to account changes". Effects: [OPERATIONS.md](OPERATIONS.md#cns-user-cache).
 

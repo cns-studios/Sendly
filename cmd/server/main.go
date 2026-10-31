@@ -171,6 +171,7 @@ func main() {
 	// CNS account events (renames, deletions). Signed by CNS, so it sits
 	// outside /api and its CSRF check.
 	cnsWebhookHandler := handlers.NewCNSWebhookHandler(cfg.CNSWebhookSecrets, db)
+	cnsWebhookHandler.SetSignOutNotifier(handlers.NewCNSSignOutNotifier(rt))
 	router.POST("/webhooks/cns", cnsWebhookHandler.Handle)
 
 	auth := router.Group("/auth")

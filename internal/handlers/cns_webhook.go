@@ -32,6 +32,13 @@ type CNSWebhookStore interface {
 	ApplyCNSUserDeleted(ctx context.Context, eventID string, cnsUserID int64) (bool, error)
 }
 
+// CNSSignOutNotifier tells a user's open Sendly pages, on every replica, that
+// their session ended, so they leave the signed-in view without waiting for
+// their next request.
+type CNSSignOutNotifier interface {
+	SignedOut(ctx context.Context, cnsUserID int64)
+}
+
 // CNSWebhookHandler receives CNS account events for Sendly's OAuth client
 // (docs: accounts-api INTEGRATION.md, "react to account changes"). Any 2xx
 // tells CNS the event is handled; anything else is retried with backoff for
@@ -39,8 +46,14 @@ type CNSWebhookStore interface {
 type CNSWebhookHandler struct {
 	secrets [][]byte
 	store   CNSWebhookStore
+	signOut CNSSignOutNotifier
 	now     func() time.Time
 }
+
+// SetSignOutNotifier enables reacting to app.disconnected. Without one the
+// event is acknowledged and nothing else happens: CNS has already revoked
+// the user's tokens, so their next request is signed out anyway.
+func (h *CNSWebhookHandler) SetSignOutNotifier(n CNSSignOutNotifier) { h.signOut = n }
 
 func NewCNSWebhookHandler(secrets []string, store CNSWebhookStore) *CNSWebhookHandler {
 	h := &CNSWebhookHandler{store: store, now: time.Now}
@@ -122,6 +135,20 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 		if err == nil && applied {
 			log.Printf("cns webhook: cns_user_id=%d was deleted; erased the cached profile", data.UserID)
 		}
+	case "app.disconnected":
+		var data struct {
+			UserID int64 `json:"user_id"`
+		}
+		if err := json.Unmarshal(event.Data, &data); err != nil || data.UserID <= 0 {
+			h.reject(c, event, "app.disconnected without a user id")
+			return
+		}
+		// CNS revoked the tokens before sending this, so every cookie the user
+		// holds is already dead. All that is left is their open pages.
+		if h.signOut != nil {
+			h.signOut.SignedOut(ctx, data.UserID)
+		}
+		log.Printf("cns webhook: cns_user_id=%d disconnected Sendly in CNS; signed out their open pages", data.UserID)
 	case "ping":
 		log.Printf("cns webhook: ping %s received", event.ID)
 	default:

@@ -797,6 +797,12 @@
         }
 
         const eventType = payload?.type || '';
+        if (eventType === 'signed_out') {
+            // The account was disconnected from Sendly in CNS. The cookies are
+            // dead already; a reload shows the signed-out page.
+            window.location.reload();
+            return;
+        }
         // The same socket carries transfer events for the account menu.
         if (!eventType.startsWith('device_enrollment_')) {
             return;

@@ -36,6 +36,17 @@ func (h *deviceEnrollmentHub) broadcast(userID int64, payload any) {
 	h.rt.Publish(context.Background(), deviceEventsTopic(userID), payload)
 }
 
+// NewCNSSignOutNotifier publishes sign-out events on the sockets of
+// /api/me/devices/ws.
+func NewCNSSignOutNotifier(rt *realtime.Hub) CNSSignOutNotifier {
+	return newDeviceEnrollmentHub(rt)
+}
+
+// SignedOut implements CNSSignOutNotifier.
+func (h *deviceEnrollmentHub) SignedOut(ctx context.Context, cnsUserID int64) {
+	h.rt.Publish(ctx, deviceEventsTopic(cnsUserID), map[string]any{"type": "signed_out", "reason": "app_disconnected"})
+}
+
 func gatherEnrollmentEventData(ctx context.Context, db *storage.Postgres, userID int64, enrollmentID string) (enrollment *models.DeviceEnrollment, requestDevice models.UserDevice, pendingCount int, ok bool) {
 	enrollment, err := db.GetEnrollmentByID(ctx, userID, enrollmentID)
 	if err != nil {

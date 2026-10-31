@@ -213,3 +213,45 @@ func TestCNSWebhookRejectsOversizedBody(t *testing.T) {
 		t.Fatalf("status %d", w.Code)
 	}
 }
+
+type fakeSignOut struct{ users []int64 }
+
+func (f *fakeSignOut) SignedOut(_ context.Context, id int64) { f.users = append(f.users, id) }
+
+const disconnectedEvent = `{"id":"evt-9","type":"app.disconnected","created_at":"2026-10-31T10:00:00Z","data":{"user_id":42,"client_id":"sendly"}}`
+
+func TestCNSWebhookSignsOutOnAppDisconnected(t *testing.T) {
+	store, out := &fakeWebhookStore{}, &fakeSignOut{}
+	h := NewCNSWebhookHandler([]string{testWebhookSecret}, store)
+	h.SetSignOutNotifier(out)
+	w := postWebhook(t, h, disconnectedEvent, nil)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	if len(out.users) != 1 || out.users[0] != 42 {
+		t.Fatalf("expected user 42 signed out once, got %v", out.users)
+	}
+	if len(store.deleted) != 0 || len(store.updated) != 0 {
+		t.Fatal("a disconnect must not touch the cached profile")
+	}
+}
+
+func TestCNSWebhookAppDisconnectedWithoutNotifierIsAcknowledged(t *testing.T) {
+	w := postWebhook(t, NewCNSWebhookHandler([]string{testWebhookSecret}, &fakeWebhookStore{}), disconnectedEvent, nil)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+}
+
+func TestCNSWebhookRejectsAppDisconnectedWithoutUser(t *testing.T) {
+	out := &fakeSignOut{}
+	h := NewCNSWebhookHandler([]string{testWebhookSecret}, &fakeWebhookStore{})
+	h.SetSignOutNotifier(out)
+	body := `{"id":"evt-10","type":"app.disconnected","created_at":"2026-10-31T10:00:00Z","data":{"client_id":"sendly"}}`
+	if w := postWebhook(t, h, body, nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("status %d", w.Code)
+	}
+	if len(out.users) != 0 {
+		t.Fatal("nobody should be signed out")
+	}
+}
