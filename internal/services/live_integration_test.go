@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -212,10 +211,9 @@ func TestLiveUserCacheUpsertGetAndDeactivateStale(t *testing.T) {
 		t.Fatalf("expected ErrUserNotFound before first sync, got %v", err)
 	}
 
-	if err := db.UpsertUser(ctx, &models.User{
-		CNSUserID: userID, Username: "livetest", Status: models.UserStatusActive,
-		AvatarURL: sql.NullString{String: "https://cdn.example/livetest.png", Valid: true},
-	}); err != nil {
+	if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{
+		CNSUserID: userID, Username: "livetest", AvatarURL: "https://cdn.example/livetest.png", ObservedAt: time.Now(),
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	stored, err := db.GetUser(ctx, userID)
@@ -230,9 +228,9 @@ func TestLiveUserCacheUpsertGetAndDeactivateStale(t *testing.T) {
 	}
 	firstSync := stored.LastSyncedAt
 
-	if err := db.UpsertUser(ctx, &models.User{
-		CNSUserID: userID, Username: "livetest-renamed", Status: models.UserStatusActive,
-	}); err != nil {
+	if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{
+		CNSUserID: userID, Username: "livetest-renamed", ObservedAt: time.Now(),
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	restored, err := db.GetUser(ctx, userID)

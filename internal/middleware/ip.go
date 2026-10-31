@@ -4,6 +4,7 @@ import (
 	"net"
 	"strings"
 
+	"sendly/internal/cnshttp"
 	"sendly/internal/config"
 
 	"github.com/gin-gonic/gin"
@@ -30,6 +31,8 @@ func (m *IPMiddleware) Handler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := m.getClientIP(c)
 		c.Set(ClientIPKey, ip)
+		// CNS calls made for this request forward the user's IP.
+		c.Request = c.Request.WithContext(cnshttp.WithClientIP(c.Request.Context(), ip))
 		c.Next()
 	}
 }

@@ -53,10 +53,16 @@ All settings are environment variables; `.env.example` is the annotated template
 
 ### Accounts (CNS Auth, optional)
 Leave unset to run guest-only.
-- `CNS_AUTH_URL`, `CNS_AUTH_CLIENT_ID`, `CNS_AUTH_SERVICE_KEY`
+- `CNS_AUTH_URL`, `CNS_AUTH_CLIENT_ID`, `CNS_AUTH_SERVICE_KEY` (scopes `push:send` and `users:read`, see [CNS user cache](#cns-user-cache))
 - `CNS_AUTH_DESKTOP_CLIENT_ID`: kept for non-web clients.
 - `CNS_SERVICE_API_URL`, `CNS_SERVICE_SLUG` (`sendly`): CNS service gateway and this service's slug.
-- `USER_CACHE_TTL_HOURS` (`24`), `USER_CACHE_RECONCILE_INTERVAL_MINUTES` (`60`), `USER_CACHE_STALE_AFTER_DAYS` (`30`): local cache of CNS profiles used for recipient search.
+- `CNS_API_URL`: where Sendly's server calls the CNS API (token checks and refreshes, code exchange, logout, push, the directory, `/api/service/me`, `/api/data`). Unset falls back to `CNS_SERVICE_API_URL`, then `CNS_AUTH_URL`. `CNS_AUTH_URL` itself is only where browsers are sent, because `accounts.cns.ad` is the accounts web app and serves neither the directory nor push. In Kubernetes set it to the accounts-api Service (`http://accounts-api.accounts-api.svc.cluster.local:3845`): the calls then skip Cloudflare and accounts-web, and forward the user's IP as `CF-Connecting-IP`, which CNS trusts from the cluster network, so its per-IP rate limits count each user instead of all of Sendly. Every call is repeated once when it reaches a CNS replica that is going away (refused connection, 503; also reset, 502 and 504 for repeatable calls); a token check that still fails serves that request signed out without touching the cookies, and only a 401/403 from CNS refreshes or clears them.
+- `CNS_WEBHOOK_SECRET`: the `whsec_...` secret CNS showed when the webhook was set. Comma-separate two while rotating. Unset disables `POST /webhooks/cns`.
+- `USER_CACHE_TTL_HOURS` (`24`): how long a signed-in user's own profile is trusted before Sendly fetches it again.
+- `USER_CACHE_RECONCILE_INTERVAL_MINUTES` (`60`): how often one replica runs the reconciliation job.
+- `USER_CACHE_RECHECK_HOURS` (`24`): how long a cached user goes before the job re-checks them against the CNS directory. Must be shorter than the stale period.
+- `USER_CACHE_STALE_AFTER_DAYS` (`30`): users CNS hasn't confirmed for this long leave recipient search (only happens when the directory can't be reached).
+- `USER_CACHE_MAX_DELETIONS_PER_RUN` (`25`): above this many users missing from the directory in one run, the run deletes none of them.
 
 ### Proxies
 - `BEHIND_CLOUDFLARE` (`false`): use `CF-Connecting-IP` as the client IP, but only for requests whose direct peer is a trusted proxy.
@@ -100,6 +106,28 @@ Shutdown is graceful: readiness starts failing, WebSockets are closed with 1012 
 - Every 5 minutes, on one replica of the deployment: mark expired files deleted, delete their blobs, remove orphaned chunk directories, interrupted assemblies and blobs that neither a file nor an upload session refers to, purge old rate limit counters and token refresh results, then apply data retention.
 - Every minute, on every replica: remove expired upload sessions with their chunks and unfinalized blobs.
 
+## CNS user cache
+
+The `users` table caches the CNS username and avatar of everyone who signed in to Sendly, for recipient search and display. It stays current through:
+
+- **Sign-in:** a signed-in request refreshes the user's own row from `GET /api/service/me` once per `USER_CACHE_TTL_HOURS`. Only this source knows whether the account is locked; a locked account leaves search until the user's next request.
+- **Webhooks:** CNS posts `user.updated` (rename, new avatar) and `user.deleted` to `POST /webhooks/cns` within seconds. Deliveries are signed (HMAC-SHA256 over timestamp and body, 5 minute window), applied once per event id, and older events never overwrite newer data. Renames only arrive for users who are still signed in to Sendly; deletions always arrive.
+- **Directory check:** the reconciliation job re-checks every user against CNS's `users:read` directory once per `USER_CACHE_RECHECK_HOURS`, at most 2000 users per run. A user missing from the batch answer counts as deleted only after a single lookup returns CNS's `not_found`.
+
+A deleted account is final: its username and avatar are erased (also the copy on its files), it disappears from search, and sharing to it answers `404 USER_NOT_FOUND`. Its row stays, empty, so late events can't bring it back. CNS lets someone else take the freed name; if two cached rows ever hold the same name, the one observed earlier leaves search until it is re-checked.
+
+Setup, once per environment (CNS admin API):
+
+1. Add `users:read` to Sendly's service key: `PATCH /api/admin/service-clients/{id}` with `"scopes": ["push:send", "users:read"]`. The key itself doesn't change.
+2. Point Sendly's OAuth client at the webhook: `PUT /api/admin/clients/{CNS_AUTH_CLIENT_ID}/webhook` with `{"webhook_url": "https://<BASE_URL host>/webhooks/cns", "reason": "..."}`. Put the returned `webhook_secret` into `CNS_WEBHOOK_SECRET` and deploy.
+3. Check it: `POST /api/admin/clients/{CNS_AUTH_CLIENT_ID}/webhook/test` sends a `ping` (logged as `cns webhook: ping ... received`), and `GET .../webhook/deliveries` should show `204`s.
+
+Setting the webhook again issues a new secret and CNS signs with it immediately. Deliveries signed with a secret Sendly doesn't have yet fail and are retried for about a day, so deploy promptly; to avoid failures, deploy `CNS_WEBHOOK_SECRET=<new>,<old>` right after rotating and drop the old one later.
+
+Without `users:read` the job logs `directory check stopped early: cns directory access denied` every run and falls back to aging users out after `USER_CACHE_STALE_AFTER_DAYS`.
+
+If a run finds more than `USER_CACHE_MAX_DELETIONS_PER_RUN` users missing, it deletes none and logs `CNS directory no longer returns N cached user(s)`. That protects the cache from a CNS fault. If CNS really deleted them, run `admin sync-users --max-deletions N`.
+
 ## Storage ownership
 
 Orphan cleanup deletes every blob and every chunk directory its database does not know about. Two instances sharing storage (for example staging started with the prod override, which bind-mounts `/mnt/shareit`) would delete each other's files within minutes.
@@ -129,7 +157,7 @@ then add a migration dropping `legacy_identity_escrow`, `user_key_envelopes` and
 
 ## Admin CLI
 
-`cmd/admin` (shipped in the Docker image as `./admin`) works against the same database and storage: `view`, `delete`, `download`, `list`, `stats`, `tracking`, `reports <file_id>` and `cleanup`. It also has desktop API key commands (`create-key`, `revoke-key`, `list-keys`, ...). Run `admin help` for usage.
+`cmd/admin` (shipped in the Docker image as `./admin`) works against the same database and storage: `view`, `delete`, `download`, `list`, `stats`, `tracking`, `reports <file_id>` and `cleanup`. It also has desktop API key commands (`create-key`, `revoke-key`, `list-keys`, ...) and `sync-users [--all] [--max-deletions N]`, which runs the [CNS user cache](#cns-user-cache) directory check now. Run `admin help` for usage.
 
 ## Troubleshooting
 
@@ -137,4 +165,5 @@ then add a migration dropping `legacy_identity_escrow`, `user_key_envelopes` and
 - **Device enrollment stuck:** check device ownership and trust state, the enrollment expiry, the verification code, and the WebSocket connection of the approving device.
 - **Tunnel errors:** check tunnel status (`pending`, `joined`, `active`, `ended`, `expired`), membership and host approval, and the expiry time.
 - **Everyone shares one rate limit:** the app sees the proxy's IP; set `TRUSTED_PROXIES`.
+- **Renamed or deleted users still show up in search:** check the CNS delivery log (`GET /api/admin/clients/{id}/webhook/deliveries`; `401` from Sendly means `CNS_WEBHOOK_SECRET` is wrong) and the `user cache:` log lines of the reconciliation job. See [CNS user cache](#cns-user-cache).
 - **Server refuses to start on storage:** see [Storage ownership](#storage-ownership).

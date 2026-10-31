@@ -20,8 +20,9 @@ Sendly is end-to-end encrypted: every key, ciphertext and wrapped key in this AP
 10. [Devices and enrollment](#devices-and-enrollment)
 11. [Identity key rescue](#identity-key-rescue)
 12. [Identity migration (temporary)](#identity-migration-temporary)
-13. [Health, pages and static routes](#health-pages-and-static-routes)
-14. [Error codes](#error-codes)
+13. [CNS webhooks](#cns-webhooks)
+14. [Health, pages and static routes](#health-pages-and-static-routes)
+15. [Error codes](#error-codes)
 
 ## Conventions
 
@@ -176,13 +177,13 @@ The key opens only with the identity key version it was wrapped for; a device on
 Files received through accepted transfers. Paginated; item shape as in recent uploads.
 
 ### `GET /api/users/lookup?q=<text>`
-Searches users by username for the recipient picker (min 3 characters, else an empty list; max 10 results, never yourself). `{ "items": [{ user_id, username, avatar_url }] }`. Searches Sendly's local user cache, so only people who have used Sendly are found.
+Searches users by username for the recipient picker (min 3 characters, else an empty list; max 10 results, never yourself). `{ "items": [{ user_id, username, avatar_url }] }`. Searches Sendly's local user cache, so only people who have used Sendly are found; renamed and deleted accounts are updated from [CNS webhooks](#cns-webhooks) and a daily directory check.
 
 ### `GET /api/me/recent-share-recipients`
 Up to 8 people you recently sent files to, same item shape.
 
 ### `GET /api/users/:id/identity-key`
-A user's active identity public key, needed to wrap a file key for them: `{ "public_key_jwk", "key_version" }`. `404 RECIPIENT_NOT_READY` if they have not set up encryption yet.
+A user's active identity public key, needed to wrap a file key for them: `{ "public_key_jwk", "key_version" }`. `404 RECIPIENT_NOT_READY` if they have not set up encryption yet, `404 USER_NOT_FOUND` if their CNS account was deleted.
 
 ### `POST /api/file/:id/share-to-user`
 Sends a file you own to another user, creating a pending [transfer](#transfers). The sender wraps the file key for the recipient in the browser first.
@@ -197,7 +198,7 @@ Sends a file you own to another user, creating a pending [transfer](#transfers).
 }
 ```
 
-Response: `{ "file_id", "recipient_user_id", "status": "pending" }`. Errors: `400 INVALID_RECIPIENT` (yourself), `403 FILE_OWNERSHIP_REQUIRED`, `404 RECIPIENT_NOT_READY`, `409 RECIPIENT_KEY_VERSION_MISMATCH` (their key rotated, refetch it), `409 TRANSFER_EXISTS`.
+Response: `{ "file_id", "recipient_user_id", "status": "pending" }`. Errors: `400 INVALID_RECIPIENT` (yourself), `403 FILE_OWNERSHIP_REQUIRED`, `404 RECIPIENT_NOT_READY`, `404 USER_NOT_FOUND` (account deleted), `409 RECIPIENT_KEY_VERSION_MISMATCH` (their key rotated, refetch it), `409 TRANSFER_EXISTS`.
 
 ## Transfers
 
@@ -380,6 +381,13 @@ Moves accounts from before identity keys (legacy AES user key) onto them. All cr
 | `POST /api/me/identity-migration/adopt` | A legacy device stores its own copy of the identity key decrypted from the escrow; no approval needed. |
 | `GET /api/me/identity-migration/files?device_id=&after=` | Trusted device only: your uploads whose key is still wrapped only with the legacy user key. |
 | `POST /api/me/identity-migration/files` | Trusted device only: those keys re-wrapped for the active identity key; files that already have one are left alone. |
+
+## CNS webhooks
+
+### `POST /webhooks/cns`
+Account events from CNS for Sendly's OAuth client: `user.updated` (username or avatar changed), `user.deleted` and `ping`. Not under `/api`, so no CSRF check; instead every request must carry a valid `CNS-Webhook-Signature` (`v1=` + hex HMAC-SHA256 of `CNS-Webhook-Timestamp + "." + body` under `CNS_WEBHOOK_SECRET`) with a timestamp within 5 minutes. Body at most 64 KiB.
+
+`204` when handled, including repeats of an event id and unknown event types. `401 INVALID_SIGNATURE`, `400 INVALID_EVENT` (signed but unusable), `413` (too large), `500 WEBHOOK_APPLY_FAILED` (CNS retries). `404` while `CNS_WEBHOOK_SECRET` is unset. Event format: accounts-api `docs/INTEGRATION.md`, section "react to account changes". Effects: [OPERATIONS.md](OPERATIONS.md#cns-user-cache).
 
 ## Health, pages and static routes
 

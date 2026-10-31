@@ -66,13 +66,31 @@ type Config struct {
 	// /api/account/me, /api/auth/token/refresh) used for cookie-based
 	// browser auth.
 	CNSServiceAPIURL string
-	CNSServiceSlug   string
+	// CNSAPIURL is where Sendly's own server sends every API call to CNS
+	// (token check, refresh, code exchange, logout, push, directory). In the
+	// cluster it is the accounts-api Service, so these calls skip Cloudflare
+	// and accounts-web and can forward the user's IP. Empty falls back to
+	// CNSServiceAPIURL, then CNSAuthURL; read it through CNSAPIBaseURL.
+	CNSAPIURL      string
+	CNSServiceSlug string
+	// CNSWebhookSecrets verify CNS webhook deliveries (the whsec_ secret
+	// CNS shows when an admin sets the webhook URL). Several are accepted
+	// so a new secret can be deployed before the old one stops being used.
+	// Empty disables the webhook endpoint.
+	CNSWebhookSecrets []string
 	AuthMaxFileSize  int64
 	MigrationsDir    string
 
 	UserCacheTTL               time.Duration
 	UserCacheReconcileInterval time.Duration
 	UserCacheStaleAfter        time.Duration
+	// UserCacheRecheck is how long a cached user goes before the
+	// reconciliation job re-checks them against the CNS directory.
+	UserCacheRecheck time.Duration
+	// UserCacheMaxDeletionsPerRun caps how many users one reconciliation
+	// run may record as deleted from directory answers. Above it the run
+	// deletes none, so a CNS fault can't erase the cache.
+	UserCacheMaxDeletionsPerRun int
 
 	// Retention periods; 0 disables the matching purge.
 	FileRecordRetention      time.Duration
@@ -120,12 +138,16 @@ func Load() (*Config, error) {
 		CNSAuthDesktopClientID:         getEnv("CNS_AUTH_DESKTOP_CLIENT_ID", ""),
 		CNSAuthServiceKey:              getEnv("CNS_AUTH_SERVICE_KEY", ""),
 		CNSServiceAPIURL:               getEnv("CNS_SERVICE_API_URL", ""),
+		CNSAPIURL:                      getEnv("CNS_API_URL", ""),
 		CNSServiceSlug:                 getEnv("CNS_SERVICE_SLUG", "sendly"),
+		CNSWebhookSecrets:              getEnvList("CNS_WEBHOOK_SECRET"),
 		AuthMaxFileSize:                getEnvInt64("AUTH_MAX_FILE_SIZE", 1610612736), // 1.5 GB
 		MigrationsDir:                  getEnv("MIGRATIONS_DIR", "db/migrations"),
 		UserCacheTTL:                   time.Duration(getEnvInt("USER_CACHE_TTL_HOURS", 24)) * time.Hour,
 		UserCacheReconcileInterval:     time.Duration(getEnvInt("USER_CACHE_RECONCILE_INTERVAL_MINUTES", 60)) * time.Minute,
 		UserCacheStaleAfter:            time.Duration(getEnvInt("USER_CACHE_STALE_AFTER_DAYS", 30)) * 24 * time.Hour,
+		UserCacheRecheck:               time.Duration(getEnvInt("USER_CACHE_RECHECK_HOURS", 24)) * time.Hour,
+		UserCacheMaxDeletionsPerRun:    getEnvInt("USER_CACHE_MAX_DELETIONS_PER_RUN", 25),
 		FileRecordRetention:            getEnvDays("FILE_RECORD_RETENTION_DAYS", 30),
 		UploadIPRetention:              getEnvDays("UPLOAD_IP_RETENTION_DAYS", 30),
 		ReportRetention:                getEnvDays("REPORT_RETENTION_DAYS", 90),
@@ -149,6 +171,18 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// CNSAPIBaseURL is the base URL for server-to-server calls to the CNS API,
+// without a trailing slash. CNSAuthURL stays the user-facing sign-in and
+// dashboard address that browsers are sent to.
+func (c *Config) CNSAPIBaseURL() string {
+	for _, u := range []string{c.CNSAPIURL, c.CNSServiceAPIURL, c.CNSAuthURL} {
+		if u = strings.TrimSpace(u); u != "" {
+			return strings.TrimSuffix(u, "/")
+		}
+	}
+	return ""
+}
+
 func (c *Config) validate() error {
 	if c.Port == "" {
 		return fmt.Errorf("PORT is required")
@@ -169,6 +203,13 @@ func (c *Config) validate() error {
 	}
 	if c.ShutdownTimeout <= 0 {
 		return fmt.Errorf("SHUTDOWN_TIMEOUT_SECONDS must be positive")
+	}
+	if c.UserCacheReconcileInterval <= 0 {
+		return fmt.Errorf("USER_CACHE_RECONCILE_INTERVAL_MINUTES must be positive")
+	}
+	// Otherwise users would age out of search before their re-check is due.
+	if c.UserCacheRecheck <= 0 || c.UserCacheRecheck >= c.UserCacheStaleAfter {
+		return fmt.Errorf("USER_CACHE_RECHECK_HOURS must be positive and shorter than USER_CACHE_STALE_AFTER_DAYS")
 	}
 	for _, proxy := range c.TrustedProxies {
 		if _, _, err := net.ParseCIDR(proxy); err == nil {

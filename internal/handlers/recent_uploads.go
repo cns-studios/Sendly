@@ -163,7 +163,7 @@ func (h *RecentUploadsHandler) CreateEnrollment(c *gin.Context) {
 		return
 	}
 	if user := middleware.GetCNSUser(c); user != nil {
-		services.NotifyCNSAccounts(h.cfg.CNSAuthURL, h.cfg.CNSAuthServiceKey, int64(user.ID), "sendly_enrollment", item.ID)
+		services.NotifyCNSAccounts(h.cfg.CNSAPIBaseURL(), h.cfg.CNSAuthServiceKey, int64(user.ID), "sendly_enrollment", item.ID)
 	}
 }
 

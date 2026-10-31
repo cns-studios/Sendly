@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,6 +26,9 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid user id", Code: "INVALID_USER_ID"})
 		return
 	}
+	if !h.checkRecipientExists(c, targetID) {
+		return
+	}
 	key, err := h.db.GetActiveUserIdentityKey(c.Request.Context(), targetID)
 	if err != nil {
 		if err == models.ErrIdentityKeyNotFound {
@@ -41,11 +45,11 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 }
 
 // LookupUsers searches Sendly's own local user cache by username, rather
-// than CNS: CNS has no service-callable username-search endpoint, only
-// /api/service/me (a caller's own profile) and /api/data/{service}/* (this
-// service's own KV blob). The cache is populated by UserCacheSyncMiddleware
-// as users authenticate, so only users who have interacted with Sendly
-// while this cache existed will be found here.
+// than CNS: CNS's directory resolves exact usernames and ids but has no
+// search, and the picker should only offer people who use Sendly anyway.
+// UserCacheSyncMiddleware adds users as they authenticate; CNS webhooks and
+// the reconciliation job keep names current and drop deleted accounts (see
+// services.UserCache).
 func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
@@ -90,6 +94,22 @@ func (h *RecentUploadsHandler) RecentShareRecipients(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"items": items})
 }
 
+// checkRecipientExists answers 404 and returns false if CNS deleted the
+// recipient's account. A recipient missing from the cache is allowed: the
+// identity key lookup that follows decides whether they can receive files.
+func (h *RecentUploadsHandler) checkRecipientExists(c *gin.Context, recipientID int64) bool {
+	recipient, err := h.db.GetUser(c.Request.Context(), recipientID)
+	if err != nil && !errors.Is(err, models.ErrUserNotFound) {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "User lookup failed", Code: "USER_LOOKUP_FAILED"})
+		return false
+	}
+	if recipient != nil && recipient.Status == models.UserStatusDeleted {
+		c.JSON(http.StatusNotFound, models.ErrorResponse{Error: models.ErrRecipientDeleted.Message, Code: models.ErrRecipientDeleted.Code})
+		return false
+	}
+	return true
+}
+
 // shareUserJSON is the user shape the share-recipient picker renders.
 func shareUserJSON(u models.User) gin.H {
 	return gin.H{"user_id": u.CNSUserID, "username": u.Username, "avatar_url": u.AvatarURL.String}
@@ -119,6 +139,9 @@ func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {
 			}
 		}
 		c.JSON(status, models.ErrorResponse{Error: "Only the file owner can share this file", Code: "FILE_OWNERSHIP_REQUIRED"})
+		return
+	}
+	if !h.checkRecipientExists(c, req.RecipientUserID) {
 		return
 	}
 	recipientKey, err := h.db.GetActiveUserIdentityKey(c.Request.Context(), req.RecipientUserID)

@@ -538,6 +538,8 @@ var (
 	ErrRateLimited              = &AppError{Code: "RATE_LIMITED", Message: "too many requests, please slow down"}
 	ErrInvalidCode              = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
 	ErrUserNotFound             = &AppError{Code: "USER_NOT_FOUND", Message: "user not found in local cache"}
+	// ErrRecipientDeleted shares the client-facing code of ErrUserNotFound.
+	ErrRecipientDeleted = &AppError{Code: "USER_NOT_FOUND", Message: "this account no longer exists"}
 )
 
 func GenerateID(length int) string {

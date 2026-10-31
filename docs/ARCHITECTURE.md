@@ -126,7 +126,7 @@ Final encrypted blobs keyed by file ID, temporary chunk directories keyed by ses
 | Cleanup | 5 min, one replica | Marks expired files deleted, removes their blobs, orphaned chunks and blobs missing from the DB, purges expired coordination rows, then runs [data retention](OPERATIONS.md#data-retention). |
 | Upload sessions | 1 min, every replica | Drops expired upload sessions with their chunks and unfinalized blobs (rows are locked, so replicas never take the same one). |
 | Assembly takeover | 10 s, every replica | Resumes assemblies whose replica went away. |
-| User cache reconcile | `USER_CACHE_RECONCILE_INTERVAL_MINUTES` | Re-syncs cached CNS profiles. |
+| User cache reconcile | `USER_CACHE_RECONCILE_INTERVAL_MINUTES`, one replica | Re-checks cached CNS users against the CNS directory, ages out users CNS hasn't confirmed, forgets old webhook event ids. See [OPERATIONS.md](OPERATIONS.md#cns-user-cache). |
 | Stats reporter | `STATS_REPORT_INTERVAL_MINUTES`, one replica | Reports usage stats when a bot URL is configured. |
 
 ## WebSockets

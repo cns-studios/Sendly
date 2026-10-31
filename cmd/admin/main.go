@@ -114,6 +114,9 @@ func main() {
 	case "cleanup":
 		forceCleanup(ctx, cfg, db, fs)
 
+	case "sync-users":
+		syncUsers(cfg, db, os.Args[2:])
+
 	case "create-key":
 		if len(os.Args) < 3 {
 			fmt.Fprintln(os.Stderr, "Usage: admin create-key <owner_name>")
@@ -175,6 +178,13 @@ FILE COMMANDS
   reports <file_id>                 Show reports for a file
   cleanup                           Force cleanup of expired files
 
+USER CACHE COMMANDS
+  sync-users [--all] [--max-deletions N]
+                                    Re-check cached CNS users against the CNS directory now.
+                                    --all re-checks every user, not just those due.
+                                    --max-deletions overrides USER_CACHE_MAX_DELETIONS_PER_RUN
+                                    (-1 = no limit) after the scheduled job held back deletions.
+
 DESKTOP KEY COMMANDS
   create-key <owner_name>           Create a new desktop API key for the given owner
   revoke-key <key_or_id>            Revoke a desktop API key (accepts key value or UUID)
@@ -195,6 +205,7 @@ Examples:
   admin list-keys
   admin key-info dz_abc123...
   admin key-files dz_abc123... 50
+  admin sync-users --max-deletions 40
 `
 	fmt.Println(usage)
 }
@@ -707,4 +718,65 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+// syncUsers runs directory passes until every due user has been re-checked
+// or a pass makes no progress.
+func syncUsers(cfg *config.Config, db *storage.Postgres, args []string) {
+	all := false
+	maxDeletions := cfg.UserCacheMaxDeletionsPerRun
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--all":
+			all = true
+		case "--max-deletions":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "Usage: admin sync-users [--all] [--max-deletions N]")
+				os.Exit(1)
+			}
+			i++
+			if _, err := fmt.Sscanf(args[i], "%d", &maxDeletions); err != nil {
+				fmt.Fprintf(os.Stderr, "Invalid --max-deletions value %q\n", args[i])
+				os.Exit(1)
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Unknown sync-users option: %s\n", args[i])
+			os.Exit(1)
+		}
+	}
+
+	cns := services.NewCNSClient(cfg)
+	if !cns.DirectoryConfigured() {
+		fmt.Fprintln(os.Stderr, "CNS_AUTH_URL and CNS_AUTH_SERVICE_KEY must be set")
+		os.Exit(1)
+	}
+	cache := services.NewUserCache(cfg, db, cns)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	syncedBefore := time.Now().Add(-cfg.UserCacheRecheck)
+	if all {
+		syncedBefore = time.Now()
+	}
+
+	var confirmed, deleted int
+	for {
+		result := cache.VerifyWithDirectory(ctx, syncedBefore, maxDeletions)
+		confirmed += result.Confirmed
+		deleted += result.Deleted
+		if result.MassDeletionHeld {
+			fmt.Fprintf(os.Stderr, "Held back: %d user(s) are missing from the CNS directory, more than --max-deletions %d. Nothing was deleted.\n", result.Missing, maxDeletions)
+			break
+		}
+		if result.Err != nil {
+			fmt.Fprintf(os.Stderr, "Stopped early: %v\n", result.Err)
+			break
+		}
+		if result.Confirmed+result.Deleted == 0 {
+			break
+		}
+		if maxDeletions >= 0 {
+			maxDeletions -= result.Deleted
+		}
+	}
+	fmt.Printf("Confirmed %d user(s), recorded %d deletion(s)\n", confirmed, deleted)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -97,10 +96,10 @@ func TestLiveDeclinedJoinerDoesNotBlockTheSession(t *testing.T) {
 		}
 	}
 	// Signed-in participants are shown by their cached username and avatar.
-	if err := db.UpsertUser(context.Background(), &models.User{
+	if err := db.RecordCNSProfile(context.Background(), models.CNSUserProfile{
 		CNSUserID: int64(accepted), Username: fmt.Sprintf("accepted-%d", accepted),
-		AvatarURL: sql.NullString{String: "https://example.com/a.png", Valid: true}, Status: "active",
-	}); err != nil {
+		AvatarURL: "https://example.com/a.png", ObservedAt: time.Now(),
+	}, nil); err != nil {
 		t.Fatal(err)
 	}
 	participants, err := db.GetTunnelParticipants(context.Background(), tunnelID)

@@ -168,6 +168,11 @@ func main() {
 	router.GET("/uploaded", pageHandler.Uploaded)
 	router.NoRoute(pageHandler.NotFound)
 
+	// CNS account events (renames, deletions). Signed by CNS, so it sits
+	// outside /api and its CSRF check.
+	cnsWebhookHandler := handlers.NewCNSWebhookHandler(cfg.CNSWebhookSecrets, db)
+	router.POST("/webhooks/cns", cnsWebhookHandler.Handle)
+
 	auth := router.Group("/auth")
 	{
 		auth.GET("/login", authHandler.Login)

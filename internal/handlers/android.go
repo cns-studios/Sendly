@@ -456,7 +456,7 @@ func (h *AndroidHandler) CreateEnrollment(c *gin.Context) {
 	if item != nil {
 		if user := middleware.GetCNSUser(c); user != nil {
 			h.publishEnrollmentChange(c.Request.Context(), int64(user.ID), "device_enrollment_created", item.ID, "")
-			services.NotifyCNSAccounts(h.cfg.CNSAuthURL, h.cfg.CNSAuthServiceKey, int64(user.ID), "sendly_enrollment", item.ID)
+			services.NotifyCNSAccounts(h.cfg.CNSAPIBaseURL(), h.cfg.CNSAuthServiceKey, int64(user.ID), "sendly_enrollment", item.ID)
 		}
 	}
 }

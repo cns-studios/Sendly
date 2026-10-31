@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sendly/internal/cnshttp"
 	"sendly/internal/config"
 	"sendly/internal/middleware"
 	"strings"
@@ -179,7 +181,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	}
 
 	redirectURI := h.cfg.BaseURL + "/auth/callback"
-	result, exchangeErr := h.exchangeToken(code, verifier, h.cfg.CNSAuthClientID, redirectURI, state)
+	result, exchangeErr := h.exchangeToken(c.Request.Context(), code, verifier, h.cfg.CNSAuthClientID, redirectURI, state)
 	if exchangeErr != nil {
 		c.String(http.StatusBadGateway, "Token exchange failed: %v", exchangeErr)
 		return
@@ -224,14 +226,18 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	// This ensures the session is fully invalidated, not just the local cookies cleared.
 	// If CNS Auth is unreachable or returns an error, we log it but still proceed with
 	// local logout so the user is never blocked from logging out.
-	if h.cfg.CNSAuthURL != "" {
+	if base := h.cfg.CNSAPIBaseURL(); base != "" {
 		authToken, err := c.Cookie("auth_token")
 		if err == nil && authToken != "" {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 			defer cancel()
 
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.CNSAuthURL+"/api/auth/logout", nil)
-			if err == nil {
+			// Logout always answers 204, so repeating it is harmless.
+			resp, err := cnshttp.Do(ctx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/auth/logout", nil)
+				if err != nil {
+					return nil, err
+				}
 				req.Header.Set("Authorization", "Bearer "+authToken)
 				req.Header.Set("Content-Type", "application/json")
 				// Include client_id if configured (for proper token revocation scoping)
@@ -240,16 +246,15 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 					q.Set("client_id", h.cfg.CNSAuthClientID)
 					req.URL.RawQuery = q.Encode()
 				}
-
-				resp, err := http.DefaultClient.Do(req)
-				if err != nil {
-					// Log but don't block local logout
-					fmt.Printf("CNS Auth logout call failed: %v\n", err)
-				} else {
-					resp.Body.Close()
-					if resp.StatusCode != http.StatusNoContent {
-						fmt.Printf("CNS Auth logout returned non-204: %d\n", resp.StatusCode)
-					}
+				return req, nil
+			})
+			if err != nil {
+				// Log but don't block local logout
+				fmt.Printf("CNS Auth logout call failed: %v\n", err)
+			} else {
+				resp.Body.Close()
+				if resp.StatusCode != http.StatusNoContent {
+					fmt.Printf("CNS Auth logout returned non-204: %d\n", resp.StatusCode)
 				}
 			}
 		}
@@ -313,11 +318,13 @@ func generateChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
-func (h *AuthHandler) exchangeToken(code, verifier, clientID, redirectURI, state string) (*tokenExchangeResult, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (h *AuthHandler) exchangeToken(parent context.Context, code, verifier, clientID, redirectURI, state string) (*tokenExchangeResult, error) {
+	// Detached from the request so a client hanging up mid-exchange does not
+	// waste the one-time code, but keeping its values (the user's IP).
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 	defer cancel()
 
-	tokenURL := h.cfg.CNSAuthURL + "/api/auth/token"
+	tokenURL := h.cfg.CNSAPIBaseURL() + "/api/auth/token"
 
 	jsonPayload := map[string]string{
 		"code":          code,
@@ -328,7 +335,7 @@ func (h *AuthHandler) exchangeToken(code, verifier, clientID, redirectURI, state
 	}
 	body, _ := json.Marshal(jsonPayload)
 
-	result, statusCode, rawBody, reqErr := doTokenRequest(ctx, tokenURL, "application/json", strings.NewReader(string(body)))
+	result, statusCode, rawBody, reqErr := doTokenRequest(ctx, tokenURL, "application/json", body)
 	if reqErr == nil && statusCode == http.StatusOK {
 		return result, nil
 	}
@@ -341,7 +348,7 @@ func (h *AuthHandler) exchangeToken(code, verifier, clientID, redirectURI, state
 	formPayload.Set("redirect_uri", redirectURI)
 	formPayload.Set("state", state)
 
-	fallbackResult, fallbackStatus, fallbackRawBody, fallbackErr := doTokenRequest(ctx, tokenURL, "application/x-www-form-urlencoded", strings.NewReader(formPayload.Encode()))
+	fallbackResult, fallbackStatus, fallbackRawBody, fallbackErr := doTokenRequest(ctx, tokenURL, "application/x-www-form-urlencoded", []byte(formPayload.Encode()))
 	if fallbackErr == nil && fallbackStatus == http.StatusOK {
 		return fallbackResult, nil
 	}
@@ -353,16 +360,19 @@ func (h *AuthHandler) exchangeToken(code, verifier, clientID, redirectURI, state
 	return nil, fmt.Errorf("primary request failed (status=%d body=%q): %v; fallback status=%d body=%q", statusCode, limitText(rawBody, 500), reqErr, fallbackStatus, limitText(fallbackRawBody, 500))
 }
 
-func doTokenRequest(ctx context.Context, tokenURL, contentType string, body io.Reader) (*tokenExchangeResult, int, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, body)
-	if err != nil {
-		return nil, 0, "", err
-	}
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
-
-	resp, err := http.DefaultClient.Do(req)
+func doTokenRequest(ctx context.Context, tokenURL, contentType string, body []byte) (*tokenExchangeResult, int, string, error) {
+	// Repeating is harmless: the code is single-use, so a repeat of an
+	// exchange CNS already did fails just as the lost answer would have.
+	resp, err := cnshttp.Do(ctx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", contentType)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return nil, 0, "", err
 	}

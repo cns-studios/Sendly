@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"sendly/internal/cnshttp"
 	"sendly/internal/config"
 
 	"github.com/gin-gonic/gin"
@@ -83,60 +84,69 @@ func findAvatarURL(value interface{}) string {
 	return ""
 }
 
+// CNSStatusError is a CNS answer other than success. Callers tell a rejected
+// token (IsTokenRejected) apart from CNS being briefly unreachable, which
+// must never sign the user out.
+type CNSStatusError struct {
+	Status int
+}
+
+func (e *CNSStatusError) Error() string {
+	return fmt.Sprintf("token validation failed with status %d", e.Status)
+}
+
+// IsTokenRejected reports whether CNS itself refused the access token
+// (401/403), as opposed to a network error or a 5xx.
+func IsTokenRejected(err error) bool {
+	var se *CNSStatusError
+	return errors.As(err, &se) && (se.Status == http.StatusUnauthorized || se.Status == http.StatusForbidden)
+}
+
+// cnsValidateTimeout bounds one token check, including its one retry.
+const cnsValidateTimeout = 4 * time.Second
+
 func ValidateCNSAccessToken(ctx context.Context, cfg *config.Config, token string) (*CNSUser, error) {
-	if cfg.CNSAuthURL == "" {
+	base := cfg.CNSAPIBaseURL()
+	if base == "" {
 		return nil, fmt.Errorf("cns auth is not configured")
 	}
 	if token == "" {
 		return nil, fmt.Errorf("missing access token")
 	}
 
-	requestCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	requestCtx, cancel := context.WithTimeout(ctx, cnsValidateTimeout)
 	defer cancel()
 
-	validateAtPath := func(path string, serviceKey string) (*CNSUser, error) {
-		req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, cfg.CNSAuthURL+path, nil)
+	// /api/account/me is served by the CNS API and, with the bearer token,
+	// also by the accounts site, so it works whichever of the two base
+	// URLs is configured.
+	resp, err := cnshttp.Do(requestCtx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/account/me", nil)
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Accept", "application/json")
 		req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
-		if serviceKey != "" {
-			req.Header.Set("x-service-key", serviceKey)
-		}
+		return req, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("token validation failed with status %d", resp.StatusCode)
-		}
-
-		var user CNSUser
-		if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
-			return nil, err
-		}
-		if user.ID == 0 {
-			return nil, fmt.Errorf("token resolved to empty user")
-		}
-
-		return &user, nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, &CNSStatusError{Status: resp.StatusCode}
 	}
 
-	if cfg.CNSAuthServiceKey != "" {
-		if user, err := validateAtPath("/api/me", cfg.CNSAuthServiceKey); err == nil {
-			return user, nil
-		}
+	var user CNSUser
+	if err := json.NewDecoder(resp.Body).Decode(&user); err != nil {
+		return nil, err
 	}
-
-	if user, err := validateAtPath("/api/account/me", ""); err == nil {
-		return user, nil
+	if user.ID == 0 {
+		return nil, fmt.Errorf("token resolved to empty user")
 	}
-
-	return nil, fmt.Errorf("token validation failed")
+	return &user, nil
 }
 
 type refreshTokenResult struct {
@@ -305,7 +315,7 @@ func refreshAccessTokenLocally(ctx context.Context, cfg *config.Config, refreshT
 }
 
 func requestTokenRefresh(ctx context.Context, cfg *config.Config, refreshToken string) (*refreshTokenResult, error) {
-	tokenURL := cfg.CNSAuthURL + "/api/auth/token/refresh"
+	tokenURL := cfg.CNSAPIBaseURL() + "/api/auth/token/refresh"
 
 	jsonPayload := map[string]string{
 		"refresh_token": refreshToken,
@@ -315,15 +325,18 @@ func requestTokenRefresh(ctx context.Context, cfg *config.Config, refreshToken s
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
-
-	resp, err := http.DefaultClient.Do(req)
+	// Repeating a refresh whose answer was lost is safe: CNS accepts the
+	// just-rotated token again for 10 seconds.
+	resp, err := cnshttp.Do(ctx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", "Sendly-Auth-Bridge/1.0")
+		return req, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +472,11 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		user, err := ValidateCNSAccessToken(ctx, cfg, authToken)
 		if err != nil {
-			if strings.Contains(err.Error(), "status 401") || strings.Contains(err.Error(), "status 403") {
+			// Only a token CNS refused is refreshed or cleared. A network
+			// error or 5xx (CNS replaced mid-request, after one retry) leaves
+			// the cookies alone; this request is served signed out and the
+			// next one tries again.
+			if IsTokenRejected(err) {
 				if newToken, ok := refreshAccessToken(c, cfg); ok {
 					newCtx, newCancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 					defer newCancel()
