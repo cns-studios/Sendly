@@ -32,6 +32,7 @@ type tokenExchangeResult struct {
 	User         *middleware.CNSUser `json:"user,omitempty"`
 	Avatar       string              `json:"avatar,omitempty"`
 	AvatarURL    string              `json:"avatar_url,omitempty"`
+	IDToken      string              `json:"id_token,omitempty"`
 }
 
 func (r *tokenExchangeResult) UnmarshalJSON(data []byte) error {
@@ -129,6 +130,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	val.Add("code_challenge_method", "S256")
 	val.Add("state", state)
 	val.Add("scope", "openid profile")
+	// The CNS login page opens in the language the visitor is already reading.
+	val.Add("ui_locales", middleware.GetLocale(c))
 
 	c.Redirect(http.StatusFound, authURL+"?"+val.Encode())
 }
@@ -217,6 +220,9 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	if result.RefreshToken != "" {
 		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
+	// The account's language takes over after sign-in. Without one, CNS
+	// stores the language the login page was shown in.
+	middleware.ApplyAccountLocale(c, result.IDToken)
 
 	c.Redirect(http.StatusFound, "/")
 }
@@ -302,6 +308,8 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if result.RefreshToken != "" {
 		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
+	// A language change made elsewhere reaches Sendly with the next refresh.
+	middleware.ApplyAccountLocale(c, result.IDToken)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -378,7 +386,8 @@ func doTokenRequest(ctx context.Context, tokenURL, contentType string, body []by
 	}
 	defer resp.Body.Close()
 
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	// Room for the ID token next to the access and refresh tokens.
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
 	rawBody := strings.TrimSpace(string(raw))
 
 	if resp.StatusCode != http.StatusOK {

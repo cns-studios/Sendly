@@ -85,6 +85,16 @@ func main() {
 	log.Println("Upload service started")
 
 	cnsClient := services.NewCNSClient(cfg)
+	// A language picked while signed in follows the user's CNS account. CNS
+	// refuses this for clients that are not first-party; the choice then
+	// stays local until the next token refresh brings the account language.
+	middleware.OnLocaleChosen = func(accessToken, locale string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := cnsClient.SetAccountLocale(ctx, accessToken, locale); err != nil {
+			log.Printf("could not save language to the CNS account: %v", err)
+		}
+	}
 	userCache := services.NewUserCache(cfg, db, cnsClient)
 	userCache.Start()
 	log.Println("User cache reconciliation service started")

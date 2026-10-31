@@ -153,6 +153,7 @@ type refreshTokenResult struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int64  `json:"expires_in"`
+	IDToken      string `json:"id_token,omitempty"`
 }
 
 // tokenRefreshError carries the upstream status so callers can distinguish a
@@ -342,7 +343,8 @@ func requestTokenRefresh(ctx context.Context, cfg *config.Config, refreshToken s
 	}
 	defer resp.Body.Close()
 
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	// Room for the ID token next to the access and refresh tokens.
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
 	rawBody := strings.TrimSpace(string(raw))
 
 	if resp.StatusCode != http.StatusOK {
@@ -441,6 +443,7 @@ func refreshAccessToken(c *gin.Context, cfg *config.Config) (string, bool) {
 	}
 
 	setAuthCookies(c, cfg, result.AccessToken, result.RefreshToken, result.ExpiresIn)
+	ApplyAccountLocale(c, result.IDToken)
 	return result.AccessToken, true
 }
 
