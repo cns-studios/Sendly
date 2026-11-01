@@ -20,8 +20,6 @@
     let tunnelPollTimer = null;
     let authDeviceIdentity = null;
     let authIdentityKey = null;
-    let isUploading = false;
-    let isDownloadingFile = false;
     let sessionPassword = null;
     let participants = [];
     let isHost = false;
@@ -46,12 +44,11 @@
     const startBtn = document.getElementById('startBtn');
     const joinSubmitBtn = document.getElementById('joinSubmitBtn');
     const leaveBtn = document.getElementById('leaveBtn');
-    const fileList = document.getElementById('fileList');
-    const fileListEmpty = document.getElementById('fileListEmpty');
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('fileInput');
-    const dropMainText = document.getElementById('dropMainText');
-    const dropSubText = document.getElementById('dropSubText');
+    const sessionPeople = document.getElementById('sessionPeople');
+    const dropZoneHost = document.getElementById('dropZone');
+    let dropZone = null;
+    // Files go up one after another: each one's row waits its turn here.
+    let uploadQueue = Promise.resolve();
     const connectedText = document.getElementById('connectedText');
     const codeSquares = document.querySelectorAll('#codeSquares .code-square');
     const joinCodeSquares = document.querySelectorAll('#joinCodeSquares .join-code-square');
@@ -494,27 +491,33 @@
     }
 
     function renderParticipants(items) {
-        const container = isHost ? peopleRow : queuePeopleRow;
-        if (!container) return;
+        // The invite screen has its own row; once the session runs the same people show beside the dropzone.
+        const containers = [isHost ? peopleRow : queuePeopleRow, sessionPeople].filter(Boolean);
+        if (!containers.length) return;
 
         const allParticipants = Array.isArray(items) ? items : [];
         const myCurrentDeviceID = myDeviceId || (AUTHENTICATED ? authDeviceIdentity?.deviceId || '' : getOrCreateGuestDeviceId());
 
-        container.innerHTML = '';
+        const self = findSelfParticipant();
+        const rank = (p) => (isHostParticipant(p) ? 0 : p.approved ? 1 : 2);
+        const sorted = [...allParticipants].sort((a, b) => rank(a) - rank(b));
 
-        if (allParticipants.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'recent-state';
-            empty.textContent = t('nobody_joined');
-            empty.style.color = '#888';
-            empty.style.fontSize = '0.85rem';
-            empty.style.textAlign = 'center';
-            empty.style.padding = '1rem 0';
-            container.appendChild(empty);
-        } else {
-            const self = findSelfParticipant();
-            const rank = (p) => (isHostParticipant(p) ? 0 : p.approved ? 1 : 2);
-            [...allParticipants].sort((a, b) => rank(a) - rank(b)).forEach(p => {
+        containers.forEach((container) => {
+            container.innerHTML = '';
+
+            if (sorted.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'recent-state';
+                empty.textContent = t('nobody_joined');
+                empty.style.color = '#888';
+                empty.style.fontSize = '0.85rem';
+                empty.style.textAlign = 'center';
+                empty.style.padding = '1rem 0';
+                container.appendChild(empty);
+                return;
+            }
+
+            sorted.forEach(p => {
                 // You are marked by a blue ring, people still waiting are greyed out.
                 const isSelf = p === self || (!!myCurrentDeviceID && extractDeviceID(p) === myCurrentDeviceID);
                 const isPending = !p.approved && !isHostParticipant(p);
@@ -535,7 +538,7 @@
                 person.append(circle, nameEl);
                 container.appendChild(person);
             });
-        }
+        });
 
         if (connectedText) {
             connectedText.textContent = `${allParticipants.length}${t('label_connected')}`;
@@ -544,47 +547,12 @@
         renderApprovals();
     }
 
+    // The session's files are the same for everyone in it: the server's list is what the dropzone shows
+    // below itself, with each file's download button.
     function renderTunnelFiles(files) {
-        if (!fileList || !fileListEmpty) return;
-
+        if (!dropZone) return;
         const items = Array.isArray(files) ? files : [];
-        fileList.innerHTML = '';
-
-        if (items.length === 0) {
-            fileList.classList.add('hidden');
-            fileListEmpty.classList.remove('hidden');
-            return;
-        }
-
-        fileList.classList.remove('hidden');
-        fileListEmpty.classList.add('hidden');
-
-        items.forEach(item => {
-            const el = document.createElement('div');
-            el.className = 'file-entry';
-            el.dataset.fileId = item.file_id;
-            el.innerHTML = `
-                <div class="file-entry-left">
-                    <span class="file-name">${escapeHtml(item.filename)}</span>
-                    <span class="file-info">${SecureCrypto.formatFileSize(item.size_bytes)}</span>
-                </div>
-                <div class="file-entry-right">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="file-download-btn" title="${t('label_download')}">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-                    </svg>
-                </div>
-            `;
-            el.querySelector('.file-download-btn').addEventListener('click', () => {
-                downloadTunnelFile(item.file_id, item.filename, el);
-            });
-            fileList.appendChild(el);
-        });
-    }
-
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+        dropZone.sync(items.map((item) => ({ id: item.file_id, name: item.filename, size: item.size_bytes })));
     }
 
     async function resolveSessionPassword(fileId) {
@@ -674,22 +642,10 @@
         return null;
     }
 
-    async function downloadTunnelFile(fileId, fileName, cardEl = null) {
-        isDownloadingFile = true;
-        let progressFill = null;
-        if (cardEl) {
-            const progressBar = document.createElement('div');
-            progressBar.className = 'file-download-progress';
-            progressFill = document.createElement('div');
-            progressFill.className = 'file-download-progress-bar';
-            progressBar.appendChild(progressFill);
-            cardEl.insertBefore(progressBar, cardEl.firstChild);
-        }
-
+    // Downloads and decrypts one session file; onProgress gets 0..1.
+    async function downloadTunnelFile(fileId, fileName, onProgress) {
         const updateProgress = (pct) => {
-            if (progressFill) {
-                progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-            }
+            onProgress?.(Math.min(100, Math.max(0, pct)) / 100);
         };
 
         try {
@@ -747,12 +703,6 @@
         } catch (error) {
             console.error('Tunnel file download failed:', error);
             SendlyToast.fail(error, t('quickshare_download_failed'));
-        } finally {
-            isDownloadingFile = false;
-            if (progressFill && progressFill.parentNode) {
-                const bar = progressFill.parentNode;
-                if (bar.parentNode) bar.parentNode.removeChild(bar);
-            }
         }
     }
 
@@ -1047,9 +997,7 @@
                 updateTunnelUI();
             }
 
-            if (!isDownloadingFile) {
-                renderTunnelFiles(payload?.files || []);
-            }
+            renderTunnelFiles(payload?.files || []);
         } catch (error) {
             console.error('Tunnel refresh failed:', error);
         }
@@ -1092,30 +1040,38 @@
         announcedRequests.clear();
         document.title = baseTitle;
 
-        if (fileList) fileList.innerHTML = '';
-        if (fileListEmpty) fileListEmpty.classList.remove('hidden');
-        if (fileList) fileList.classList.add('hidden');
+        if (dropZone) dropZone.clear();
+        if (sessionPeople) sessionPeople.innerHTML = '';
         if (connectedText) connectedText.textContent = '';
     }
 
-    async function processFileForTunnel(file) {
-        if (isUploading || !activeTunnel?.id) return;
+    function setupDropZone() {
+        dropZone = SendlyDropMembrane.create(dropZoneHost, {
+            title: t('quickshare_drop_text'),
+            mobileTitle: t('dropzone_mobile_title'),
+            mobileHint: t('dropzone_mobile_subtitle'),
+            multiple: true,
+            validate: (file) => {
+                if (file.size > TUNNEL_MAX_FILE_SIZE) return tpl('quickshare_file_too_large', {size: SecureCrypto.formatFileSize(TUNNEL_MAX_FILE_SIZE)});
+                if (file.size === 0) return t('quickshare_cannot_upload_empty');
+                return '';
+            },
+            formatSize: (n) => SecureCrypto.formatFileSize(n),
+            t,
+            onDownload: (entry, ctx) => downloadTunnelFile(entry.id, entry.name, ctx.progress),
+            onUpload: (file, ctx) => {
+                const run = uploadQueue.then(() => (ctx.signal.aborted ? undefined : processFileForTunnel(file, ctx)));
+                uploadQueue = run.catch(() => {});
+                return run;
+            }
+        });
+    }
 
-        if (file.size > TUNNEL_MAX_FILE_SIZE) {
-            showErrorBanner(tpl('quickshare_file_too_large', {size: SecureCrypto.formatFileSize(TUNNEL_MAX_FILE_SIZE)}));
-            return;
-        }
+    // Uploads one file into the session. Rejects on failure so its dropzone row shows the error with Retry.
+    async function processFileForTunnel(file, ctx) {
+        if (!activeTunnel?.id) throw new Error(t('toast_upload_failed'));
 
-        if (file.size === 0) {
-            showErrorBanner(t('quickshare_cannot_upload_empty'));
-            return;
-        }
-
-        isUploading = true;
-        dropZone.classList.add('uploading');
-        dropMainText.textContent = t('status_uploading');
-        dropSubText.textContent = file.name;
-
+        let sessionId = null;
         try {
             if (isHost && !sessionPassword) {
                 sessionPassword = await SecureCrypto.generatePassword();
@@ -1124,7 +1080,7 @@
             }
 
             if (!isHost && !sessionPassword) {
-                dropSubText.textContent = t('state_waiting_key');
+                ctx.note(t('state_waiting_key'));
                 for (let attempt = 0; attempt < 10; attempt++) {
                     const resolved = await resolveSessionPassword(null);
                     if (resolved) break;
@@ -1155,7 +1111,7 @@
                 };
             }
 
-            dropSubText.textContent = file.name;
+            ctx.note('');
 
             const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
@@ -1168,7 +1124,8 @@
                     total_chunks: totalChunks,
                     chunk_size: CHUNK_SIZE,
                     tunnel_id: activeTunnel.id
-                })
+                }),
+                signal: ctx.signal
             });
 
             if (!initRes.ok) {
@@ -1177,7 +1134,7 @@
             }
 
             const initData = await initRes.json();
-            const sessionId = initData.session_id;
+            sessionId = initData.session_id;
 
             let uploadedChunks = 0;
 
@@ -1191,6 +1148,8 @@
                         if (attempt > 0) {
                             await new Promise(r => setTimeout(r, 2000 * attempt));
                         }
+                        // Cancelled: stop here, don't retry, and don't start another request.
+                        if (ctx.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
                         try {
                             const formData = new FormData();
                             formData.append('session_id', sessionId);
@@ -1200,7 +1159,8 @@
                             const res = await SendlyNet.fetch('/api/upload/chunk', {
                                 method: 'POST',
                                 headers: buildHeaders(),
-                                body: formData
+                                body: formData,
+                                signal: ctx.signal
                             });
 
                             if (!res.ok) {
@@ -1210,16 +1170,20 @@
 
                             lastError = null;
                             uploadedChunks++;
-                            dropSubText.textContent = t('status_uploading');
+                            ctx.progress(uploadedChunks / totalChunks);
                             break;
                         } catch (error) {
+                            if (error?.name === 'AbortError') throw error;
                             lastError = error;
                         }
                     }
                     if (lastError) throw lastError;
                 },
-                { concurrency: PARALLEL_CHUNK_UPLOADS }
+                { concurrency: PARALLEL_CHUNK_UPLOADS, signal: ctx.signal }
             );
+
+            // Every chunk is up: what remains is assembly on the server, which can't be cancelled from here.
+            ctx.row.setCancelable(false);
 
             await SendlyNet.fetch('/api/upload/complete', {
                 method: 'POST',
@@ -1259,20 +1223,22 @@
             const finalizeData = await finalizeRes.json();
             if (finalizeData.file_id) {
                 SecureCrypto.cacheFileKey(finalizeData.file_id, password);
+                // From here on the file is the session's: its row and its entry in the shared list are one.
+                ctx.row.adopt(finalizeData.file_id);
             }
 
-            dropMainText.textContent = t('quickshare_place_files');
-            dropSubText.textContent = '';
-            isUploading = false;
-            dropZone.classList.remove('uploading');
             await refreshTunnelState();
         } catch (error) {
+            if (ctx.signal.aborted) {
+                // The user cancelled the row: drop the half-uploaded session and go quiet.
+                if (sessionId) {
+                    fetch('/api/upload/cancel', { method: 'DELETE', headers: buildHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ session_id: sessionId }) }).catch(() => {});
+                }
+                return;
+            }
             console.error('Tunnel file upload failed:', error);
             SendlyToast.fail(error, t('toast_upload_failed'));
-            dropMainText.textContent = t('quickshare_place_files');
-            dropSubText.textContent = '';
-            isUploading = false;
-            dropZone.classList.remove('uploading');
+            throw error;
         }
     }
 
@@ -1302,31 +1268,7 @@
             }
         });
 
-        dropZone?.addEventListener('click', () => fileInput?.click());
-        dropZone?.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.add('active');
-        });
-        dropZone?.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.remove('active');
-        });
-        dropZone?.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            dropZone.classList.remove('active');
-            if (e.dataTransfer.files.length > 0) {
-                processFileForTunnel(e.dataTransfer.files[0]);
-            }
-        });
-
-        fileInput?.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) {
-                processFileForTunnel(e.target.files[0]);
-            }
-        });
+        setupDropZone();
 
         joinCodeSquaresContainer?.addEventListener('click', () => {
             joinCodeHiddenInput?.focus();

@@ -1,0 +1,732 @@
+/* Drop zone · Membrane
+   Styles for /static/js/drop-membrane.js (a port of Hairline UI's "Drop zone · Membrane", MIT).
+   Colours are Sendly's: green accent, light grey hairlines, red for refusals. */
+
+.dm {
+    --dm-border: #C8C8C8;
+    --dm-border-soft: #E3E3E6;
+    --dm-primary: #00AE71;
+    --dm-primary-deep: #00827B;
+    --dm-fg: #1A1A1A;
+    --dm-muted: #6E6E73;
+    --dm-danger: #B3261E;
+    --dm-surface: #FFFFFF;
+    --dm-rest-fill: #FAFAFA;
+    --dm-armed-stroke: #5ABA98;
+    --dm-armed-fill: #F3FBF7;
+    --dm-over-fill: #E9FBF3;
+    --dm-refuse-fill: #FDECEA;
+    --dm-ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --dm-radius: 18px;
+
+    position: relative;
+    width: 100%;
+    max-width: 562px;
+    margin: 0 auto;
+    color: var(--dm-fg);
+    font-family: 'Arimo', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.dm *,
+.dm *::before,
+.dm *::after {
+    box-sizing: border-box;
+}
+
+/* ── The zone ── */
+.dm-zone {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    width: 100%;
+    height: 220px;
+    margin: 0;
+    padding: 0 24px;
+    border: 0;
+    border-radius: var(--dm-radius);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: transform 200ms var(--dm-ease);
+}
+
+.dm-zone:focus-visible {
+    outline: 2px solid var(--dm-primary);
+    outline-offset: 4px;
+}
+
+.dm-zone:active {
+    transform: scale(0.985);
+}
+
+.dm[data-locked] .dm-zone {
+    cursor: default;
+}
+
+.dm[data-locked] .dm-zone:active {
+    transform: none;
+}
+
+.dm-line {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.dm-line path {
+    fill: var(--dm-rest-fill);
+    stroke: var(--dm-border);
+    stroke-width: 1.5;
+    transition: stroke 280ms var(--dm-ease), fill 360ms var(--dm-ease);
+}
+
+@media (hover: hover) {
+    .dm[data-tone="rest"]:not([data-locked]) .dm-zone:hover .dm-line path {
+        stroke: var(--dm-armed-stroke);
+        fill: var(--dm-armed-fill);
+    }
+}
+
+.dm[data-tone="rest"]:not([data-locked]) .dm-zone:active .dm-line path {
+    stroke: var(--dm-armed-stroke);
+    fill: var(--dm-armed-fill);
+}
+
+.dm[data-tone="armed"] .dm-line path {
+    stroke: var(--dm-armed-stroke);
+    fill: var(--dm-armed-fill);
+}
+
+.dm[data-tone="over"] .dm-line path {
+    stroke: var(--dm-primary);
+    fill: var(--dm-over-fill);
+}
+
+.dm[data-tone="refuse"] .dm-line path {
+    stroke: var(--dm-danger);
+    fill: var(--dm-refuse-fill);
+}
+
+/* The badge: an arrow that turns to watch the file, a cross for refusals, a check for additions. */
+.dm-badge {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1.5px solid var(--dm-border);
+    border-radius: 50%;
+    background: var(--dm-surface);
+    color: var(--dm-muted);
+    transition: color 300ms, border-color 300ms;
+}
+
+.dm[data-tone="armed"] .dm-badge,
+.dm[data-tone="over"] .dm-badge,
+.dm[data-icon="added"] .dm-badge {
+    border-color: var(--dm-primary);
+    color: var(--dm-primary);
+}
+
+.dm[data-tone="refuse"] .dm-badge {
+    border-color: var(--dm-danger);
+    color: var(--dm-danger);
+}
+
+.dm-ico {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.6);
+    filter: blur(3px);
+    transition: opacity 220ms var(--dm-ease), transform 380ms var(--dm-ease), filter 220ms var(--dm-ease);
+}
+
+.dm-ico[data-on] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+}
+
+.dm-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+}
+
+.dm-svg {
+    width: 18px;
+    height: 18px;
+}
+
+.dm-text {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.dm-label {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.3;
+    color: var(--dm-fg);
+    overflow-wrap: anywhere;
+    transition: color 300ms;
+}
+
+.dm[data-tone="refuse"] .dm-label {
+    color: var(--dm-danger);
+}
+
+.dm-hint {
+    max-width: 36ch;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--dm-muted);
+    text-wrap: balance;
+}
+
+.dm-hint[hidden],
+.dm-sub[hidden] {
+    display: none;
+}
+
+.dm-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* ── Text that morphs and numbers that roll ── */
+.dm-morph {
+    position: relative;
+    display: inline-block;
+}
+
+.dm-word {
+    display: inline-block;
+    white-space: pre;
+}
+
+.dm-glyph {
+    display: inline-block;
+}
+
+.dm-glyph-out {
+    position: absolute;
+    white-space: pre;
+    pointer-events: none;
+}
+
+.dm-roll {
+    display: inline-flex;
+    font-variant-numeric: tabular-nums;
+}
+
+.dm-roll-cols {
+    display: inline-flex;
+    align-items: baseline;
+    white-space: pre;
+}
+
+.dm-place {
+    display: inline-block;
+}
+
+.dm-digit {
+    position: relative;
+    display: inline-block;
+    clip-path: inset(0);
+}
+
+.dm-digit-ghost {
+    visibility: hidden;
+}
+
+.dm-strip {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: block;
+    white-space: pre;
+    text-align: center;
+    will-change: transform;
+}
+
+/* ── Rows: each file's own hairline is its progress bar ── */
+.dm-rows {
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dm-rows:empty {
+    margin: 0;
+}
+
+.dm-row {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 380ms var(--dm-ease), opacity 320ms var(--dm-ease);
+}
+
+.dm-row.dm-open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+.dm-row.dm-closing {
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition: grid-template-rows 380ms var(--dm-ease) 100ms, opacity 180ms var(--dm-ease);
+}
+
+.dm-row-clip {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.dm-row-inner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    padding: 6px 0;
+}
+
+.dm-lead,
+.dm-meta {
+    opacity: 0;
+    transition: opacity 200ms var(--dm-ease);
+}
+
+.dm-row.dm-landed .dm-lead,
+.dm-row.dm-landed .dm-meta {
+    opacity: 1;
+}
+
+.dm-lead {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.dm-fileicon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    color: var(--dm-muted);
+}
+
+.dm-lead-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.dm-name,
+.dm-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dm-name {
+    font-size: 14px;
+    line-height: 1.35;
+    color: var(--dm-fg);
+}
+
+.dm-sub {
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--dm-muted);
+}
+
+.dm-row[data-status="error"] .dm-sub {
+    color: var(--dm-danger);
+}
+
+.dm-meta {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--dm-muted);
+}
+
+.dm-info {
+    white-space: nowrap;
+}
+
+.dm-row[data-status="error"] .dm-info {
+    color: var(--dm-danger);
+}
+
+/* The percent unfolds beside the size while the file is uploading. */
+.dm-pct-wrap {
+    display: inline-grid;
+    grid-template-columns: 0fr;
+    vertical-align: bottom;
+    opacity: 0;
+    transition: grid-template-columns 300ms var(--dm-ease), opacity 300ms var(--dm-ease);
+}
+
+.dm-row[data-status="uploading"] .dm-pct-wrap,
+.dm-row[data-status="downloading"] .dm-pct-wrap {
+    grid-template-columns: 1fr;
+    opacity: 1;
+}
+
+.dm-pct-inner {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.dm-dot {
+    padding: 0 4px;
+}
+
+/* A ring that closes with progress, then gives way to a check that draws itself; an alert for errors. */
+.dm-mark {
+    position: relative;
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+}
+
+.dm-mark-ring,
+.dm-mark-done,
+.dm-mark-error {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.6);
+    filter: blur(3px);
+    transition: opacity 220ms var(--dm-ease), transform 380ms var(--dm-ease), filter 220ms var(--dm-ease);
+}
+
+.dm-mark-ring {
+    width: 18px;
+    height: 18px;
+    transform: rotate(-90deg) scale(0.6);
+}
+
+.dm-row[data-status="uploading"] .dm-mark-ring,
+.dm-row[data-status="downloading"] .dm-mark-ring {
+    opacity: 1;
+    transform: rotate(-90deg);
+    filter: none;
+}
+
+.dm-row[data-status="done"] .dm-mark-done,
+.dm-row[data-status="error"] .dm-mark-error {
+    opacity: 1;
+    transform: none;
+    filter: none;
+}
+
+.dm-ring-track {
+    stroke: var(--dm-border);
+}
+
+.dm-ring-fill {
+    stroke: var(--dm-primary);
+    transition: stroke-dashoffset 520ms var(--dm-ease);
+}
+
+.dm-mark-done {
+    color: var(--dm-primary);
+}
+
+.dm-mark-error {
+    color: var(--dm-danger);
+}
+
+.dm-mark .dm-svg {
+    width: 18px;
+    height: 18px;
+}
+
+.dm-check path {
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 0ms var(--dm-ease);
+}
+
+.dm-ico[data-on] .dm-check path,
+.dm-row[data-status="done"] .dm-check path {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 420ms var(--dm-ease) 120ms;
+}
+
+.dm-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--dm-muted);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: background-color 160ms, color 160ms;
+}
+
+.dm-btn .dm-svg {
+    width: 16px;
+    height: 16px;
+}
+
+.dm-btn:hover {
+    background: #EDEDEF;
+    color: var(--dm-fg);
+}
+
+.dm-btn:focus-visible {
+    outline: 2px solid var(--dm-primary);
+    outline-offset: 1px;
+}
+
+.dm-retry {
+    display: none;
+    color: var(--dm-fg);
+}
+
+.dm-row[data-status="error"] .dm-retry {
+    display: flex;
+}
+
+.dm-row[data-status="uploading"][data-cancelable="false"] .dm-remove,
+.dm-row[data-status="downloading"] .dm-remove {
+    display: none;
+}
+
+/* A finished file in a list with downloads: the button to fetch it replaces the X. */
+.dm-download {
+    display: none;
+    color: var(--dm-fg);
+}
+
+.dm-row[data-dl="true"][data-status="done"] .dm-download {
+    display: flex;
+}
+
+.dm-row[data-dl="true"][data-status="done"] .dm-remove {
+    display: none;
+}
+
+.dm-base,
+.dm-fill {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 1px;
+}
+
+.dm-base {
+    background: var(--dm-border-soft);
+}
+
+.dm-fill {
+    background: var(--dm-primary);
+    transform-origin: left;
+    transform: scaleX(0);
+    opacity: 0;
+    transition: transform 520ms var(--dm-ease), opacity 200ms var(--dm-ease), background-color 200ms;
+}
+
+.dm-row.dm-landed .dm-fill {
+    opacity: 1;
+}
+
+.dm-row[data-status="error"] .dm-fill {
+    background: var(--dm-danger);
+}
+
+.dm-row[data-status="done"] .dm-fill {
+    opacity: 0;
+    transition: transform 520ms var(--dm-ease), opacity 700ms var(--dm-ease) 300ms;
+}
+
+/* ── A file in flight ── */
+.dm-chip {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 34px;
+    max-width: 220px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: var(--dm-surface);
+    box-shadow: inset 0 0 0 1px var(--dm-border), 0 4px 14px rgba(0, 0, 0, 0.08);
+    font-size: 13px;
+    pointer-events: none;
+    will-change: transform;
+    transition: opacity 200ms var(--dm-ease), background-color 160ms var(--dm-ease), box-shadow 160ms var(--dm-ease);
+}
+
+.dm-chip.dm-chip-landed {
+    opacity: 0;
+    background: transparent;
+    box-shadow: inset 0 0 0 1px transparent;
+}
+
+.dm-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ── Touch screens and narrow windows: taller zone, bigger type, thumb-sized buttons ── */
+@media (max-width: 768px) {
+    .dm {
+        --dm-radius: 24px;
+        max-width: none;
+    }
+
+    .dm-zone {
+        height: auto;
+        min-height: 220px;
+        padding: 32px 20px;
+        gap: 16px;
+    }
+
+    .dm-badge {
+        width: 56px;
+        height: 56px;
+    }
+
+    .dm-ico .dm-svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .dm-label {
+        font-size: 18px;
+        font-weight: 700;
+    }
+
+    .dm-hint {
+        font-size: 14px;
+    }
+
+    .dm-row-inner {
+        min-height: 64px;
+        gap: 8px;
+    }
+
+    .dm-name {
+        font-size: 15px;
+    }
+
+    .dm-sub,
+    .dm-meta {
+        font-size: 13px;
+    }
+
+    .dm-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .dm-btn .dm-svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* Make room for the file name: while uploading, the percentage replaces the size. */
+    .dm-row[data-status="uploading"] .dm-size,
+    .dm-row[data-status="uploading"] .dm-dot,
+    .dm-row[data-status="downloading"] .dm-size,
+    .dm-row[data-status="downloading"] .dm-dot {
+        display: none;
+    }
+}
+
+@media (max-width: 380px) {
+    .dm-row[data-status="uploading"] .dm-mark {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dm-zone,
+    .dm-line path,
+    .dm-badge,
+    .dm-ico,
+    .dm-label,
+    .dm-row,
+    .dm-row.dm-closing,
+    .dm-lead,
+    .dm-meta,
+    .dm-pct-wrap,
+    .dm-mark-ring,
+    .dm-mark-done,
+    .dm-mark-error,
+    .dm-ring-fill,
+    .dm-fill,
+    .dm-chip {
+        transition: none;
+    }
+
+    .dm-zone:active {
+        transform: none;
+    }
+
+    .dm-check path,
+    .dm-ico[data-on] .dm-check path,
+    .dm-row[data-status="done"] .dm-check path {
+        transition: none;
+    }
+}

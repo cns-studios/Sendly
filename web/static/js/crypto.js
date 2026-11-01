@@ -593,7 +593,10 @@ const SecureCrypto = (function() {
         });
     }
 
-    async function encryptFileChunked(file, password, chunkSize, onChunk, { concurrency = 1 } = {}) {
+    // Encrypts `file` chunk by chunk and hands each to onChunk(index, bytes), up to `concurrency` at a time.
+    // The first failed chunk, or an aborted `signal`, stops the loop: no further chunk is read or encrypted,
+    // the uploads already running are waited for, and the call rejects.
+    async function encryptFileChunked(file, password, chunkSize, onChunk, { concurrency = 1, signal } = {}) {
         const salt = generateRandomBytes(CONFIG.saltLength);
         const key = await deriveKey(password, salt);
         const totalChunks = Math.ceil(file.size / chunkSize);
@@ -609,7 +612,9 @@ const SecureCrypto = (function() {
             return wrapped;
         };
 
+        const stopped = () => !!signal?.aborted || errors.length > 0;
         for (let i = 0; i < totalChunks; i++) {
+            if (stopped()) break;
             const start = i * chunkSize;
             const end = Math.min(start + chunkSize, file.size);
             const plaintext = await readFileSlice(file, start, end);
@@ -637,10 +642,12 @@ const SecureCrypto = (function() {
             if (inflight.size >= concurrency) {
                 await Promise.race(inflight);
             }
+            if (stopped()) break;
             startUpload(i, chunkData);
         }
 
         await Promise.all(inflight);
+        if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
         if (errors.length) throw errors[0];
     }
 

@@ -70,6 +70,7 @@
     </script>
 
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/drop-membrane.css">
     <script src="/static/js/staging-notice.js" defer></script>
     <script src="/static/js/vendor/lucide-1.53.0.min.js"></script>
     <script src="/static/js/avatar.js"></script>
@@ -99,18 +100,6 @@
             <div class="tos-modal-actions">
                 <button id="tos-decline-btn" class="btn btn-secondary btn-large">{{.t.tos_decline}}</button>
                 <button id="tos-accept-btn" class="btn btn-accent btn-large">{{.t.tos_accept}}</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="share-url-modal" class="tos-overlay hidden" aria-hidden="true">
-        <div class="share-url-card" role="dialog" aria-modal="true" aria-labelledby="share-url-title">
-            <h2 id="share-url-title" class="share-url-title">{{.t.link_share_title}}</h2>
-            <p id="shareUrlText" class="share-url-text"></p>
-            <div class="share-url-actions">
-                <button id="shareUrlDiscardBtn" type="button" class="btn-share-discard">{{.t.link_share_discard}}</button>
-                <button id="shareUrlNativeBtn" type="button" class="btn-share-native hidden">{{.t.link_share_native}}</button>
-                <button id="shareUrlCopyBtn" type="button" class="btn-share-copy">{{.t.link_share_copy}}</button>
             </div>
         </div>
     </div>
@@ -145,29 +134,7 @@
         <div class="link-content-wrapper">
 
             <div id="stage-entry" class="form-section">
-                <div id="drop-zone" class="drop-zone">
-                    <input type="file" id="file-input" class="hidden">
-                    <div class="drop-zone-icon-wrap">
-                        <span class="drop-zone-ring" aria-hidden="true"></span>
-                        <span class="drop-zone-ring" aria-hidden="true"></span>
-                        <i data-lucide="cloud-upload" class="drop-zone-icon" aria-hidden="true"></i>
-                    </div>
-                    <h3>{{.t.link_drop_heading}}</h3>
-                    <p>{{.t.link_drop_subtext}}</p>
-                    <div class="drop-zone-progress-row">
-                        <div class="drop-zone-progress" aria-hidden="true">
-                            <div class="drop-zone-progress-fill"></div>
-                            <div class="drop-zone-progress-shimmer"></div>
-                        </div>
-                        <div id="drop-zone-eta" class="drop-zone-eta" aria-live="polite"></div>
-                        <span class="drop-zone-pct" aria-hidden="true"></span>
-                    </div>
-                    <div class="drop-zone-badge" aria-live="polite"></div>
-                    <div class="drop-zone-mobile">
-                        <span class="drop-zone-mobile-title">{{.t.dropzone_mobile_title}}</span>
-                        <span class="drop-zone-mobile-subtitle">{{.t.dropzone_mobile_subtitle}}</span>
-                    </div>
-                </div>
+                <div id="drop-zone"></div>
             </div>
 
             <div id="stage-processing" class="hidden processing-container">
@@ -209,112 +176,88 @@
             </div>
 
             <div id="stage-output" class="hidden form-section">
-                <!-- SUCCESS STAGE: Exact design from spec -->
-                <div class="success-stage" role="img" aria-label="{{.t.uploaded_title}}">
-                    <div class="success-ring" aria-hidden="true"></div>
-                    <div class="spark" aria-hidden="true"></div>
-                    <div class="spark" aria-hidden="true"></div>
-                    <div class="spark" aria-hidden="true"></div>
-                    <div class="spark" aria-hidden="true"></div>
-                    <div class="spark" aria-hidden="true"></div>
-                    <div class="success-mark" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M5 12l4 4 9-9"/>
+                <div class="lr">
+                    <div class="lr-seal" role="img" aria-label="{{.t.uploaded_title}}">
+                        <svg class="lr-seal-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
                         </svg>
-                    </div>
-                </div>
-
-                <h1 class="headline">{{.t.uploaded_title}}</h1>
-                <p class="subhead" id="upload-subhead">{{.t.link_upload_subhead}}</p>
-
-                <!-- FILE METADATA CARD -->
-                <div class="card file-card">
-                    <div class="file-row">
-                        <div class="file-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
+                        <span class="lr-seal-badge">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M5 12.5l4.5 4.5L19 7.5"/>
                             </svg>
-                        </div>
-                        <div class="file-meta">
-                            <div class="file-meta-name" id="upload-file-name"></div>
-                            <div class="file-meta-sub" id="upload-file-meta">
-                                <span id="upload-file-size"></span><span class="dot" aria-hidden="true">•</span><span id="upload-file-type"></span>
-                            </div>
-                        </div>
-                        <div class="expiry-pill" id="upload-expiry-pill"></div>
+                        </span>
                     </div>
-                </div>
 
-                <!-- SHARE LINK CARD -->
-                <div class="card link-card">
-                    <div class="card-label">{{.t.share_link_title}}</div>
-                    <div class="link-row">
-                        <input type="text" class="link-field" id="share-link-input" readonly aria-label="{{.t.share_link_title}}" spellcheck="false">
-                        <button class="copy-btn" id="share-link-copy" type="button" aria-label="{{.t.share_copy}}">
-                            <span class="copy-btn-inner">
-                                <span class="copy-label-default">
+                    <h1 class="lr-headline">{{.t.uploaded_title}}</h1>
+                    <p class="lr-file">
+                        <span class="lr-file-name" id="upload-file-name"></span>
+                        <span class="lr-file-size" id="upload-file-size"></span>
+                    </p>
+
+                    <div class="lr-bar" id="share-link-bar" role="group" aria-label="{{.t.share_link_title}}">
+                        <i data-lucide="link-2" class="lr-bar-icon" aria-hidden="true"></i>
+                        <p class="lr-url" id="share-link-url"><span id="share-link-main"></span><span class="lr-url-key" id="share-link-key"></span></p>
+                        <button class="lr-copy" id="share-link-copy" type="button" aria-label="{{.t.share_copy}}">
+                            <span class="lr-copy-inner">
+                                <span class="lr-copy-default">
                                     <i data-lucide="copy" aria-hidden="true"></i>
                                     <span>{{.t.share_copy}}</span>
                                 </span>
-                                <span class="copy-label-done">
+                                <span class="lr-copy-done">
                                     <i data-lucide="check" aria-hidden="true"></i>
                                     <span>{{.t.share_copied}}</span>
                                 </span>
                             </span>
                         </button>
                     </div>
-                </div>
 
-                {{if .authenticated}}
-                <!-- SEND TO USER CARD (authenticated only) -->
-                <div class="card send-card">
-                    <div class="card-label">{{.t.share_users_title}}</div>
-                    <div class="recent-recipients hidden" id="share-recent-recipients">
-                        <div class="recent-recipients-label">{{.t.share_recent_title}}</div>
-                        <div class="recent-recipients-row" id="share-recent-list" role="list"></div>
-                    </div>
-                    <div class="send-row">
-                        <div class="user-input-wrap" data-state="idle">
-                            <span class="user-input-lead" aria-hidden="true">
-                                <i data-lucide="search" class="user-input-lead-icon"></i>
-                                <span class="user-input-lead-avatar"></span>
-                            </span>
-                            <input type="text" class="user-input" id="share-recipient-input" placeholder="{{.t.share_recipient_placeholder}}" autocomplete="off" spellcheck="false" aria-describedby="share-recipient-status" aria-autocomplete="list" aria-controls="share-suggest-list" role="combobox" aria-expanded="false">
-                            <span class="user-input-status">
-                                <i data-lucide="loader-circle" class="user-input-status-icon is-searching" aria-hidden="true"></i>
-                                <i data-lucide="circle-check" class="user-input-status-icon is-found" aria-hidden="true"></i>
-                                <span class="user-input-status-icon is-not-found" tabindex="0" role="img" aria-label="{{.t.share_user_not_found}}" data-tooltip="{{.t.share_user_not_found}}">
-                                    <i data-lucide="circle-x" aria-hidden="true"></i>
+                    <ul class="lr-facts">
+                        <li><i data-lucide="clock" aria-hidden="true"></i><span id="upload-expiry-pill"></span></li>
+                    </ul>
+
+                    <div class="lr-more">
+                    {{if .authenticated}}
+                    <div class="lr-send">
+                        <div class="lr-label">{{.t.share_users_title}}</div>
+                        <div class="recent-recipients hidden" id="share-recent-recipients">
+                            <div class="recent-recipients-label">{{.t.share_recent_title}}</div>
+                            <div class="recent-recipients-row" id="share-recent-list" role="list"></div>
+                        </div>
+                        <div class="send-row">
+                            <div class="user-input-wrap" data-state="idle">
+                                <span class="user-input-lead" aria-hidden="true">
+                                    <i data-lucide="search" class="user-input-lead-icon"></i>
+                                    <span class="user-input-lead-avatar"></span>
                                 </span>
-                            </span>
-                            <ul class="suggest-list" id="share-suggest-list" role="listbox" aria-label="{{.t.share_user_suggestions}}"></ul>
+                                <input type="text" class="user-input" id="share-recipient-input" placeholder="{{.t.share_recipient_placeholder}}" autocomplete="off" spellcheck="false" aria-describedby="share-recipient-status" aria-autocomplete="list" aria-controls="share-suggest-list" role="combobox" aria-expanded="false">
+                                <span class="user-input-status">
+                                    <i data-lucide="loader-circle" class="user-input-status-icon is-searching" aria-hidden="true"></i>
+                                    <i data-lucide="circle-check" class="user-input-status-icon is-found" aria-hidden="true"></i>
+                                    <span class="user-input-status-icon is-not-found" tabindex="0" role="img" aria-label="{{.t.share_user_not_found}}" data-tooltip="{{.t.share_user_not_found}}">
+                                        <i data-lucide="circle-x" aria-hidden="true"></i>
+                                    </span>
+                                </span>
+                                <ul class="suggest-list" id="share-suggest-list" role="listbox" aria-label="{{.t.share_user_suggestions}}"></ul>
+                            </div>
+                            <button class="send-btn" id="share-recipient-send" type="button" disabled>
+                                <span class="send-btn-label">{{.t.share_send}}</span>
+                                <i data-lucide="loader-circle" class="send-btn-spinner" aria-hidden="true"></i>
+                            </button>
                         </div>
-                        <button class="send-btn" id="share-recipient-send" type="button" disabled>
-                            <span class="send-btn-label">{{.t.share_send}}</span>
-                            <i data-lucide="loader-circle" class="send-btn-spinner" aria-hidden="true"></i>
-                        </button>
+                        <p id="share-recipient-status" class="sr-only" aria-live="polite"></p>
+                        <div class="sent-chips" id="share-sent-chips"></div>
                     </div>
-                    <p id="share-recipient-status" class="sr-only" aria-live="polite"></p>
-                    <div class="sent-chips" id="share-sent-chips"></div>
-                </div>
-                {{else}}
-                <!-- AUTH NUDGE for unauthenticated users -->
-                <div class="card auth-nudge-card">
-                    <div class="auth-nudge-content">
-                        <i data-lucide="user-plus" class="auth-nudge-icon" aria-hidden="true"></i>
-                        <div class="auth-nudge-text-wrap">
-                            <strong>{{.t.auth_nudge_login}}</strong>
-                            <p>{{.t.link_auth_nudge}}</p>
-                        </div>
+                    {{else}}
+                    <a class="lr-login" href="{{.authLoginURL}}">{{.t.link_auth_nudge}} <i data-lucide="arrow-right" aria-hidden="true"></i></a>
+                    {{end}}
+
+                    <button id="share-another-file" class="lr-again" type="button">
+                        <i data-lucide="plus" aria-hidden="true"></i>
+                        <span>{{.t.share_another}}</span>
+                    </button>
                     </div>
-                    <a href="{{.authLoginURL}}" class="btn btn-accent auth-nudge-btn" style="margin-top: 12px; width: 100%;">{{.t.auth_nudge_login}}</a>
                 </div>
-                {{end}}
-
-                <!-- DONE BUTTON -->
-                <button id="share-another-file" class="done-btn" type="button">{{.t.share_another}}</button>
-
             </div>
 
         </div>
@@ -333,6 +276,7 @@
     <script src="/static/js/crypto.js"></script>
     <script src="/static/js/identity-migration.js"></script>
     <script src="/static/js/resilient-fetch.js"></script>
+    <script src="/static/js/drop-membrane.js"></script>
     <script src="/static/js/link-share.js"></script>
 
 </body>

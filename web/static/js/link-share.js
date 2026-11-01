@@ -31,13 +31,13 @@
     let finalizeEnvelopePayload = null;
     let authDeviceIdentity = null;
     let authIdentityKey = null;
-    let lastShareUrl = '';
     let uploadedFileID = '';
-    let idleCopyDone = false;
-    let idleCopyBannerShown = false;
 
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
+    const dropZoneHost = document.getElementById('drop-zone');
+    let dropZone = null;
+    // The row the dropzone shows for the file being uploaded: progress, cancel and retry go through it.
+    let uploadRow = null;
+    let uploadSignal = null;
     const finalizeBtn = document.getElementById('finalize-btn');
     const stageEntry = document.getElementById('stage-entry');
     const stageProcessing = document.getElementById('stage-processing');
@@ -47,26 +47,20 @@
     const progressVal = document.getElementById('progress-val');
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
-    const outExpiryLabel = document.getElementById('out-expiry-label');
-    const uploadedFileMeta = document.getElementById('uploaded-file-meta');
     const uploadFileName = document.getElementById('upload-file-name');
     const uploadFileSize = document.getElementById('upload-file-size');
-    const uploadFileType = document.getElementById('upload-file-type');
     const uploadExpiryPill = document.getElementById('upload-expiry-pill');
-    const uploadSubhead = document.getElementById('upload-subhead');
     const shareRecipientInput = document.getElementById('share-recipient-input');
     const shareRecipientSend = document.getElementById('share-recipient-send');
     const shareRecipientStatus = document.getElementById('share-recipient-status');
     const shareSuggestList = document.getElementById('share-suggest-list');
     const shareSentChips = document.getElementById('share-sent-chips');
-    const shareLinkInput = document.getElementById('share-link-input');
+    const shareLinkBar = document.getElementById('share-link-bar');
+    const shareLinkMain = document.getElementById('share-link-main');
+    const shareLinkKey = document.getElementById('share-link-key');
+    let shareUrl = '';
     const shareLinkCopy = document.getElementById('share-link-copy');
     const shareAnotherFile = document.getElementById('share-another-file');
-    const shareUrlModal = document.getElementById('share-url-modal');
-    const shareUrlText = document.getElementById('shareUrlText');
-    const shareUrlCopyBtn = document.getElementById('shareUrlCopyBtn');
-    const shareUrlNativeBtn = document.getElementById('shareUrlNativeBtn');
-    const shareUrlDiscardBtn = document.getElementById('shareUrlDiscardBtn');
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
@@ -79,12 +73,6 @@
     let suggestActiveIndex = -1;
     let lookupSeq = 0;
     const sentRecipientIds = new Set();
-
-    function escapeHtml(value) {
-        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        }[char]));
-    }
 
     function getCookieValue(name) {
         const value = `; ${document.cookie}`;
@@ -173,11 +161,7 @@
     }
 
     function setupEventListeners() {
-        dropZone.addEventListener('click', handleZoneClick);
-        dropZone.addEventListener('dragover', handleDragOver);
-        dropZone.addEventListener('dragleave', handleDragLeave);
-        dropZone.addEventListener('drop', handleDrop);
-        fileInput.addEventListener('change', handleFileSelect);
+        setupDropZone();
         finalizeBtn.addEventListener('click', handleFinalize);
         shareRecipientInput?.addEventListener('input', handleRecipientInput);
         shareRecipientInput?.addEventListener('keydown', handleRecipientKeydown);
@@ -188,36 +172,13 @@
             if (selectedRecipient) shareFileWithUser(selectedRecipient);
         });
         shareLinkCopy?.addEventListener('click', copyUploadedLink);
+        // One click selects the whole link, whichever way they want to copy it.
         shareAnotherFile?.addEventListener('click', resetUpload);
 
         // Close suggestions on click outside
         document.addEventListener('click', (e) => {
             if (shareSuggestList && !e.target.closest('.user-input-wrap')) {
                 closeSuggestions();
-            }
-        });
-
-        shareUrlModal?.addEventListener('click', (e) => {
-            if (e.target === shareUrlModal) hideShareUrlModal();
-        });
-
-        shareUrlCopyBtn?.addEventListener('click', async () => {
-            const url = shareUrlText?.textContent;
-            if (!url) return;
-            const ok = await copyToClipboard(url, true);
-            hideShareUrlModal();
-            if (ok) showToast(t('toast_link_copied'));
-        });
-
-        shareUrlDiscardBtn?.addEventListener('click', hideShareUrlModal);
-
-        shareUrlNativeBtn?.addEventListener('click', async () => {
-            const url = shareUrlText?.textContent;
-            if (!url || !navigator.share) return;
-            try {
-                await navigator.share({ url, title: t('link_share_title') });
-            } catch (error) {
-                // user cancelled the native share sheet or it failed silently; nothing to do
             }
         });
     }
@@ -560,17 +521,17 @@
     }
 
     async function copyUploadedLink() {
-        if (!shareLinkInput?.value) return;
-        const ok = await copyToClipboard(shareLinkInput.value, true);
+        if (!shareUrl) return;
+        const ok = await copyToClipboard(shareUrl, true);
         if (ok) {
             shareLinkCopy.setAttribute('aria-label', t('share_copied'));
             shareLinkCopy.classList.add('copied');
             // Flash the link field
-            shareLinkInput.classList.add('flash');
+            shareLinkBar?.classList.add('flash');
             setTimeout(() => {
                 shareLinkCopy.setAttribute('aria-label', t('share_copy'));
                 shareLinkCopy.classList.remove('copied');
-                shareLinkInput.classList.remove('flash');
+                shareLinkBar?.classList.remove('flash');
             }, 1800);
         }
     }
@@ -588,98 +549,52 @@
         }
     }
 
-    function handleZoneClick(e) {
-        if (dropZone.classList.contains('success')) {
-            if (lastShareUrl) {
-                showShareUrlModal(lastShareUrl);
-            }
-            return;
-        }
-        if (dropZone.classList.contains('uploading')) return;
-        fileInput.click();
+    function setupDropZone() {
+        dropZone = SendlyDropMembrane.create(dropZoneHost, {
+            title: t('link_drop_heading'),
+            hint: t('link_drop_subtext'),
+            mobileTitle: t('dropzone_mobile_title'),
+            mobileHint: t('dropzone_mobile_subtitle'),
+            multiple: false,
+            // A transfer is running: the zone says so instead of taking a second file.
+            locked: () => isUploading || isFinalizing,
+            validate: (file) => {
+                if (file.size > MAX_FILE_SIZE) return tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
+                if (file.size === 0) return t('link_cannot_upload_empty');
+                return '';
+            },
+            formatSize: (n) => SecureCrypto.formatFileSize(n),
+            t,
+            onUpload: (file, ctx) => processFile(file, ctx)
+        });
     }
 
-    function handleDragOver(e) { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; dropZone.classList.add('active', 'dragging'); }
-    function handleDragLeave(e) { e.preventDefault(); e.stopPropagation(); if (e.target === dropZone) dropZone.classList.remove('active', 'dragging'); }
-    function handleDrop(e) { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('active', 'dragging'); if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]); }
-    function handleFileSelect(e) { if (dropZone.classList.contains('uploading') || dropZone.classList.contains('success')) return; if (e.target.files.length > 0) processFile(e.target.files[0]); }
-
-    async function processFile(file) {
-        if (isUploading || isFinalizing) return;
-        if (file.size > MAX_FILE_SIZE) {
-            showFileSizeWarning();
-            return;
-        }
-        if (file.size === 0) {
-            setDropZoneState('error', t('link_cannot_upload_empty'));
-            showErrorBanner(t('link_cannot_upload_empty'));
-            return;
-        }
-
+    // Runs the upload for a file the dropzone accepted. The dropzone has already refused files that are
+    // empty or too large. Resolves when the upload is finished; a rejection shows as a failed row with Retry.
+    function processFile(file, ctx) {
+        if (isUploading || isFinalizing) return Promise.reject(new Error(t('dropzone_busy')));
         selectedFile = file;
-
-        const zoneHeading = dropZone.querySelector('h3');
-        const zoneSubtext = dropZone.querySelector('p');
-        setDropZoneState('uploading', selectedFile.name);
-        zoneHeading.textContent = selectedFile.name;
-        zoneSubtext.textContent = t('status_processing');
-
-        runProtocolInBackground();
+        uploadRow = ctx.row;
+        uploadSignal = ctx.signal;
+        return runProtocolInBackground();
     }
 
-    function showFileSizeWarning() {
-        const sub = dropZone.querySelector('p');
-        if (!sub) return;
-        setDropZoneState('warning');
-        sub.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
-        setTimeout(() => { if (dropZone.classList.contains('warning')) resetDropZoneState(); }, 3000);
-    }
-
-    function setDropZoneState(state, filename = selectedFile?.name) {
-        const icon = dropZone.querySelector('.drop-zone-icon');
-        const heading = dropZone.querySelector('h3');
-        const subtext = dropZone.querySelector('p');
-        const badge = dropZone.querySelector('.drop-zone-badge');
-        const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
-        const eta = dropZone.querySelector('#drop-zone-eta');
-        const pct = dropZone.querySelector('.drop-zone-pct');
-        dropZone.classList.remove('uploading', 'success', 'error', 'warning');
-        if (state !== 'idle') dropZone.classList.add(state);
-        if (progressFill && (state === 'idle' || state === 'uploading')) progressFill.style.width = '0';
-        if (pct) pct.textContent = state === 'uploading' ? '0%' : '';
-        if (eta && state !== 'uploading') eta.textContent = '';
-
-        if (state === 'uploading') {
-            icon?.setAttribute('data-lucide', 'loader-2');
-            heading.textContent = filename || '';
-            subtext.textContent = t('status_uploading');
-            if (eta) eta.textContent = t('upload_eta_calculating');
-        } else if (state === 'success') {
-            icon?.setAttribute('data-lucide', 'circle-check');
-            heading.textContent = t('status_complete');
-            subtext.textContent = filename || '';
-            if (badge) badge.textContent = t('status_complete');
-        } else if (state === 'error') {
-            icon?.setAttribute('data-lucide', 'frown');
-            heading.textContent = t('status_upload_failed');
-            subtext.textContent = filename || '';
-            if (badge) badge.textContent = t('status_upload_failed');
-        } else if (state === 'warning') {
-            icon?.setAttribute('data-lucide', 'triangle-alert');
-            heading.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
-            subtext.textContent = filename || t('drop_subtext');
-            if (badge) badge.textContent = tpl('link_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
+    function updateUploadProgress() {
+        if (totalChunks === 0) return;
+        const pct = Math.floor((uploadedChunks / totalChunks) * 100);
+        uploadRow?.progress(uploadedChunks / totalChunks);
+        if (uploadStartedAt && uploadedChunks > 0 && pct < 100) {
+            const elapsed = (Date.now() - uploadStartedAt) / 1000;
+            const progress = uploadedChunks / totalChunks;
+            const remaining = Math.ceil(elapsed * (1 - progress) / progress);
+            uploadRow?.note(tpl('status_eta', {time: formatUploadDuration(remaining)}));
         } else {
-            icon?.setAttribute('data-lucide', 'cloud-upload');
-            heading.textContent = t('drop_heading');
-            subtext.textContent = t('drop_subtext');
-            if (badge) badge.textContent = '';
+            uploadRow?.note('');
         }
-        if (window.lucide?.createIcons) lucide.createIcons();
-    }
 
-    function resetDropZoneState() {
-        setDropZoneState('idle');
+        processMain.textContent = t('status_uploading');
+        processSub.textContent = `${pct}%`;
+        if (progressVal) progressVal.textContent = `${pct}%`;
     }
 
     function handleFinalize() {
@@ -710,30 +625,6 @@
 
     function updateFinalizeButtonState() { finalizeBtn.disabled = isFinalizing; }
 
-    function updateUploadProgress() {
-        if (totalChunks === 0) return;
-        const pct = Math.floor((uploadedChunks / totalChunks) * 100);
-        const progressFill = dropZone.querySelector('.drop-zone-progress-fill');
-        const eta = dropZone.querySelector('#drop-zone-eta');
-        const pctLabel = dropZone.querySelector('.drop-zone-pct');
-        if (progressFill) progressFill.style.width = `${pct}%`;
-        if (pctLabel) pctLabel.textContent = `${pct}%`;
-        if (eta && uploadStartedAt && uploadedChunks > 0 && pct < 100) {
-            const elapsed = (Date.now() - uploadStartedAt) / 1000;
-            const progress = uploadedChunks / totalChunks;
-            const remaining = Math.ceil(elapsed * (1 - progress) / progress);
-            eta.textContent = tpl('status_eta', {time: formatUploadDuration(remaining)});
-        } else if (eta && pct >= 100) {
-            eta.textContent = '';
-        }
-
-        processMain.textContent = t('status_uploading');
-        processSub.textContent = `${pct}%`;
-        if (progressVal) progressVal.textContent = `${pct}%`;
-        const zoneSubtext = dropZone.querySelector('p');
-        if (zoneSubtext) zoneSubtext.textContent = t('status_uploading');
-    }
-
     function formatUploadDuration(seconds) {
         if (seconds < 60) return `${Math.max(1, seconds)}s`;
         return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -746,7 +637,7 @@
         uploadError = null;
         finalizeEnvelopePayload = null;
 
-        const zoneSubtext = dropZone.querySelector('p');
+        const signal = uploadSignal;
 
         try {
             generatedPassword = await SecureCrypto.generatePassword();
@@ -760,9 +651,8 @@
                 finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             }
 
-            zoneSubtext.textContent = t('status_uploading');
             totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
-            const initResponse = await initUpload(selectedFile.size, totalChunks);
+            const initResponse = await initUpload(selectedFile.size, totalChunks, signal);
             uploadSessionId = initResponse.session_id;
             uploadedChunks = 0;
 
@@ -771,13 +661,15 @@
                 generatedPassword,
                 CHUNK_SIZE,
                 async (chunkIndex, chunkData) => {
-                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
+                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData, signal);
                     uploadedChunks++;
                     updateUploadProgress();
                 },
-                { concurrency: PARALLEL_CHUNK_UPLOADS }
+                { concurrency: PARALLEL_CHUNK_UPLOADS, signal }
             );
 
+            // Every chunk is up: what remains is assembly on the server, which can't be cancelled from here.
+            uploadRow?.setCancelable(false);
             const completeResponse = await completeUpload();
             await waitForAssembly(uploadSessionId);
             pendingExpiresAt = completeResponse.pending_expires_at
@@ -792,37 +684,51 @@
             isFinalizing = true;
             await finalizeUpload();
         } catch (error) {
-            console.error('Upload pipeline failed:', error);
-            uploadError = error.message;
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
-            setDropZoneState('error', error.message);
+            if (signal?.aborted) {
+                // The user cancelled the row: drop the half-uploaded session and go quiet.
+                const sessionToCancel = uploadSessionId;
+                uploadSessionId = null;
+                if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
+                return;
+            }
+            console.error('Upload pipeline failed:', error);
+            uploadError = error.message;
             SendlyToast.fail(error, t('link_upload_failed'));
+            // The dropzone row shows the failure, with Retry.
+            throw error;
         }
     }
 
-    async function uploadOneChunk(sessionId, chunkIndex, chunkData) {
+    async function uploadOneChunk(sessionId, chunkIndex, chunkData, signal) {
         let lastError;
         for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
             if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
+            // Cancelled: stop here, don't retry, and don't start another request.
+            if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
             try {
                 const formData = new FormData();
                 formData.append('session_id', sessionId);
                 formData.append('chunk_index', chunkIndex.toString());
                 formData.append('chunk', new Blob([chunkData]));
-                const response = await SendlyNet.fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData });
+                const response = await SendlyNet.fetch('/api/upload/chunk', { method: 'POST', headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }, body: formData, signal });
                 if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, `Chunk ${chunkIndex + 1} failed`); }
                 return;
-            } catch (error) { lastError = error; }
+            } catch (error) {
+                if (error?.name === 'AbortError') throw error;
+                lastError = error;
+            }
         }
         throw lastError;
     }
 
-    async function initUpload(fileSize, totalChunks) {
+    async function initUpload(fileSize, totalChunks, signal) {
         const response = await SendlyNet.fetch('/api/upload/init', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-            body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE })
+            body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE }),
+            signal
         });
         if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to initialize'); }
         return response.json();
@@ -865,7 +771,7 @@
         } catch (error) {
             console.error('Finalize failed:', error);
             isFinalizing = false; updateFinalizeButtonState();
-            setDropZoneState('error', error.message);
+            uploadRow?.fail(error.message);
             SendlyToast.fail(error, t('toast_finalize_failed'));
         }
     }
@@ -875,21 +781,19 @@
         isFinalizing = false;
         if (response.file_id && generatedPassword) SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
-        lastShareUrl = fullShareUrl;
         uploadedFileID = response.file_id || '';
 
         // Populate file metadata
         if (uploadFileName) uploadFileName.textContent = selectedFile?.name || '';
         if (uploadFileSize) uploadFileSize.textContent = SecureCrypto.formatFileSize(selectedFile?.size || 0);
-        if (uploadFileType) {
-            const ext = selectedFile?.name?.split('.').pop()?.toUpperCase() || 'FILE';
-            uploadFileType.textContent = ext + ' document';
-        }
         if (uploadExpiryPill) uploadExpiryPill.textContent = tpl('link_expires_in', {retention: RETENTION_LABEL});
-        if (uploadSubhead) uploadSubhead.textContent = t('link_upload_subhead');
 
-        // Populate share link
-        if (shareLinkInput) shareLinkInput.value = fullShareUrl;
+        // The link reads as address and key: the part after the # stays in the browser, so it is shown dimmed.
+        shareUrl = fullShareUrl;
+        const hash = fullShareUrl.indexOf('#');
+        const address = hash < 0 ? fullShareUrl : fullShareUrl.slice(0, hash);
+        if (shareLinkMain) shareLinkMain.textContent = address.replace(/^https?:\/\//, '');
+        if (shareLinkKey) shareLinkKey.textContent = hash < 0 ? '' : fullShareUrl.slice(hash);
 
         // Refresh recent recipients so the tiles reflect the latest shares
         if (AUTHENTICATED) loadRecentShareRecipients();
@@ -899,41 +803,6 @@
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.remove('hidden');
-
-        // Trigger animations on stage output elements
-        requestAnimationFrame(() => {
-            stageOutput.querySelectorAll('.card').forEach((card, i) => {
-                card.style.animationDelay = `${0.30 + i * 0.08}s`;
-            });
-        });
-    }
-
-    function setupIdleCopy(text) {
-        idleCopyDone = false;
-        idleCopyBannerShown = false;
-
-        const tryCopy = () => {
-            if (idleCopyDone) return;
-            copyToClipboard(text, true).then(ok => {
-                if (ok) {
-                    idleCopyDone = true;
-                    const zoneSubtext = dropZone.querySelector('p');
-                    if (zoneSubtext) zoneSubtext.textContent = t('toast_link_copied_idle');
-                    showShareBanner();
-                    setTimeout(() => {
-                        idleCopyDone = false;
-                        document.addEventListener('pointerup', tryCopy, { once: true });
-                        document.addEventListener('keydown', tryCopy, { once: true });
-                    }, 4000);
-                } else {
-                    document.addEventListener('pointerup', tryCopy, { once: true });
-                    document.addEventListener('keydown', tryCopy, { once: true });
-                }
-            });
-        };
-
-        document.addEventListener('pointerup', tryCopy, { once: true });
-        document.addEventListener('keydown', tryCopy, { once: true });
     }
 
     async function copyToClipboard(text, silent = false) {
@@ -971,50 +840,16 @@
         return false;
     }
 
-    function showShareUrlModal(url) {
-        if (!shareUrlModal || !shareUrlText) return;
-        shareUrlText.textContent = url;
-        shareUrlCopyBtn.textContent = t('link_share_copy');
-        shareUrlCopyBtn.classList.remove('copied');
-        if (shareUrlNativeBtn) {
-            const canNativeShare = !!navigator.share && window.matchMedia('(max-width: 768px)').matches;
-            shareUrlNativeBtn.classList.toggle('hidden', !canNativeShare);
-        }
-        shareUrlModal.classList.remove('hidden');
-        shareUrlModal.offsetHeight;
-        shareUrlModal.classList.add('visible');
-        shareUrlModal.setAttribute('aria-hidden', 'false');
-        document.body.classList.add('tos-gate-open');
-        shareUrlCopyBtn.focus();
-    }
-
-    function hideShareUrlModal() {
-        if (!shareUrlModal) return;
-        shareUrlModal.classList.remove('visible');
-        setTimeout(() => shareUrlModal.classList.add('hidden'), 250);
-        shareUrlModal.setAttribute('aria-hidden', 'true');
-        document.body.classList.remove('tos-gate-open');
-    }
-
-    function showNotification(message, type) {
-        SendlyToast.show(message, { type });
-    }
-
-    function showShareBanner() {
-        showNotification(t('toast_link_copied_notification'), 'info');
-    }
-
     function showToast(message) {
         SendlyToast.success(message);
     }
 
     function resetUpload() {
         clearPendingCountdown();
-        selectedFile = null; generatedPassword = null; uploadedFileID = '';
+        selectedFile = null; generatedPassword = null; uploadedFileID = ''; shareUrl = '';
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;
-        idleCopyDone = false;
         // Per-file share state must not leak into the next upload.
         sentRecipientIds.clear();
         shareSentChips?.replaceChildren();
@@ -1027,16 +862,13 @@
             renderRecentRecipients();
         }
         if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
-        fileInput.value = '';
-
-        resetDropZoneState();
+        uploadRow = null; uploadSignal = null;
+        dropZone?.clear();
 
         stageEntry.classList.remove('hidden');
         stageProcessing.classList.add('hidden');
         stagePending.classList.add('hidden');
         stageOutput.classList.add('hidden');
-        const msg = document.getElementById('idle-copy-msg');
-        if (msg) msg.remove();
     }
 
     function startPendingCountdown() {

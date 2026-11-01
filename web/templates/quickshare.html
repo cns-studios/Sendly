@@ -71,6 +71,7 @@
     </script>
 
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/drop-membrane.css">
     <script src="/static/js/staging-notice.js" defer></script>
     <script src="/static/js/vendor/lucide-1.53.0.min.js"></script>
     <script src="/static/js/avatar.js"></script>
@@ -193,23 +194,12 @@
         <div class="session-view" id="sessionView">
             <div class="session-left">
                 <div class="approval-requests hidden" id="sessionApprovalRequests"></div>
-                <h2>{{.t.quickshare_session_title}}</h2>
-                <div class="file-list" id="fileList"></div>
-                <div id="fileListEmpty" class="recent-state">{{.t.quickshare_no_files}}</div>
+                <h2 class="people-heading">{{.t.quickshare_people}}</h2>
+                <div class="people-row session-people" id="sessionPeople"></div>
             </div>
 
             <div class="session-right">
-                <div class="drop-zone" id="dropZone">
-                    <div class="drop-zone-icon-wrap" aria-hidden="true">
-                        <span class="drop-zone-ring"></span>
-                        <span class="drop-zone-ring"></span>
-                        <i data-lucide="cloud-upload" class="drop-zone-icon"></i>
-                    </div>
-                    <i data-lucide="circle-fading-arrow-up" class="drop-zone-mobile-icon"></i>
-                    <span class="drop-zone-main-text" id="dropMainText">{{.t.quickshare_drop_text}}</span>
-                    <span class="drop-zone-sub-text" id="dropSubText"></span>
-                    <input type="file" id="fileInput" multiple>
-                </div>
+                <div id="dropZone"></div>
                 <div class="session-bottom-row">
                     <span class="connected-text" id="connectedText"></span>
                     <button class="blue-btn" id="leaveBtn">{{.t.quickshare_leave}}</button>
@@ -295,6 +285,7 @@
     <script src="/static/js/crypto.js"></script>
     <script src="/static/js/identity-migration.js"></script>
     <script src="/static/js/resilient-fetch.js"></script>
+    <script src="/static/js/drop-membrane.js"></script>
     <script src="/static/js/quick-share.js"></script>
 
 </body>

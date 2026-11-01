@@ -11,7 +11,6 @@
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
     const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
-    const MAX_FILE_SIZE = AUTHENTICATED ? (1.5 * 1024 * 1024 * 1024) : 786432000;
     const RETENTION = AUTHENTICATED ? '90d' : '7d';
     const RETENTION_LABEL = AUTHENTICATED ? '90 Days' : '7 Days';
     const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
@@ -21,7 +20,6 @@
     const PAGE_LOCALE = document.documentElement.lang || undefined;
 
     let totalChunks = 0;
-    let uploadedChunks = 0;
 
     let selectedFile = null;
     let generatedPassword = null;
@@ -61,8 +59,6 @@
     const processMain = document.getElementById('process-main');
     const processSub = document.getElementById('process-sub');
 
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
     const finalizeBtn = document.getElementById('finalize-btn');
     const fileDetails = document.getElementById('file-details');
     const statusText = document.getElementById('status-text');
@@ -1658,12 +1654,6 @@
      
 
     function setupEventListeners() {
-        dropZone?.addEventListener('click', () => fileInput?.click());
-        dropZone?.addEventListener('dragover', handleDragOver);
-        dropZone?.addEventListener('dragleave', handleDragLeave);
-        dropZone?.addEventListener('drop', handleDrop);
-        fileInput?.addEventListener('change', handleFileSelect);
-
         const resetVaultEl = document.getElementById('reset-vault');
         resetVaultEl?.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1753,79 +1743,6 @@
         });
     }
 
-    function handleDragOver(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.dataTransfer.dropEffect = 'copy';
-        dropZone.classList.add('active');
-    }
-
-    function handleDragLeave(e) {
-        e.preventDefault();
-        e.stopPropagation();
-         
-        if (e.target === dropZone) {
-            dropZone.classList.remove('active');
-        }
-    }
-
-    function handleDrop(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.remove('active');
-
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            processFile(files[0]);
-        }
-    }
-
-    function handleFileSelect(e) {
-        const files = e.target.files;
-        if (files.length > 0) {
-            processFile(files[0]);
-        }
-    }
-
-    async function processFile(file) {
-        if (isUploading || isFinalizing) return;
-
-        if (file.size > MAX_FILE_SIZE) {
-            showFileSizeWarning();
-            return;
-        }
-        if (file.size === 0) {
-            showErrorBanner(t('app_cannot_upload_empty'));
-            return;
-        }
-
-        selectedFile = file;
-        fileName.textContent = file.name;
-        fileSize.textContent = SecureCrypto.formatFileSize(file.size);
-
-        dropZone.classList.add('hidden');
-        fileDetails.classList.remove('hidden');
-        stageEntry.classList.add('hidden');
-        stageProcessing.classList.remove('hidden');
-        stagePending.classList.add('hidden');
-        stageOutput.classList.add('hidden');
-        statusText.textContent = t('status_uploading_short');
-        processMain.textContent = t('status_uploading_short');
-        processSub.textContent = '';
-
-        runProtocolInBackground();
-    }
-
-    function showFileSizeWarning() {
-        const sub = dropZone.querySelector('p');
-        if (sub) {
-            const original = sub.textContent;
-            sub.textContent = tpl('app_file_too_large', {size: SecureCrypto.formatFileSize(MAX_FILE_SIZE)});
-            sub.style.color = '#ff4444';
-            setTimeout(() => { sub.textContent = original; sub.style.color = ''; }, 3000);
-        }
-    }
-
     function handleFinalize() {
         if (isFinalizing) return;
 
@@ -1868,100 +1785,6 @@
     function updateUploadProgress() {
         processMain.textContent = t('status_uploading_short');
         processSub.textContent = '';
-    }
-
-    async function runProtocolInBackground() {
-        isUploading = true;
-        uploadComplete = false;
-        uploadError = null;
-        finalizeEnvelopePayload = null;
-
-        try {
-            generatedPassword = await SecureCrypto.generatePassword();
-            const dekBytes = new TextEncoder().encode(generatedPassword);
-
-            if (!AUTHENTICATED && activeTunnel?.id) {
-                
-                if (!ephemeralKeyPair) {
-                    const keyPair = await crypto.subtle.generateKey(
-                        {
-                            name: 'RSA-OAEP',
-                            modulusLength: 2048,
-                            publicExponent: new Uint8Array([1, 0, 1]),
-                            hash: 'SHA-256'
-                        },
-                        false,
-                        ['encrypt', 'decrypt']
-                    );
-                    const publicKeyJWK = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
-                    ephemeralKeyPair = { publicKeyJWK, privateKey: keyPair.privateKey };
-                }
-                const publicKey = await crypto.subtle.importKey(
-                    'jwk',
-                    ephemeralKeyPair.publicKeyJWK,
-                    { name: 'RSA-OAEP', hash: 'SHA-256' },
-                    false,
-                    ['encrypt']
-                );
-                const wrapped = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, publicKey, dekBytes);
-                finalizeEnvelopePayload = {
-                    wrapped_dek_b64: SecureCrypto.toBase64(new Uint8Array(wrapped)),
-                    dek_wrap_alg: 'RSA-OAEP-2048-v1',
-                    dek_wrap_version: 1
-                };
-            }
-
-            if (AUTHENTICATED) {
-                if (!authIdentityKey) {
-                    await ensureDeviceReady({ userAction: true });
-                }
-                if (!authIdentityKey) {
-                    throw new Error('Approve this device from a trusted device before uploading as an authenticated user');
-                }
-                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
-            }
-            totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
-            const initResponse = await initUpload(selectedFile.size, totalChunks);
-            uploadSessionId = initResponse.session_id;
-            uploadedChunks = 0;
-
-            await SecureCrypto.encryptFileChunked(
-                selectedFile,
-                generatedPassword,
-                CHUNK_SIZE,
-                async (chunkIndex, chunkData) => {
-                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
-                    uploadedChunks++;
-                },
-                { concurrency: PARALLEL_CHUNK_UPLOADS }
-            );
-
-            const completeResponse = await completeUpload();
-            await waitForAssembly(uploadSessionId);
-            pendingExpiresAt = completeResponse.pending_expires_at
-                ? new Date(completeResponse.pending_expires_at).getTime()
-                : null;
-            startPendingCountdown();
-
-            uploadComplete = true;
-            isUploading = false;
-            updateFinalizeButtonState();
-            if (!isFinalizing) {
-                handleFinalize();
-            }
-        } catch (error) {
-            console.error('Upload pipeline failed:', error);
-            uploadError = error.message;
-            isUploading = false;
-            uploadComplete = false;
-            isFinalizing = false;
-            updateFinalizeButtonState();
-            stageProcessing.classList.add('hidden');
-            stageEntry.classList.remove('hidden');
-            statusText.textContent = t('status_ready');
-            statusText.style.color = 'var(--accent)';
-            SendlyToast.fail(error, t('toast_upload_failed'));
-        }
     }
 
     async function waitForAssembly(sessionId, intervalMs = 1500, timeoutMs = 600000) {
@@ -2421,8 +2244,6 @@
             }).catch(e => console.error('Failed to cancel upload:', e));
         }
 
-        fileInput.value = '';
-        dropZone.classList.remove('hidden');
         fileDetails.classList.add('hidden');
         finalizeBtn.disabled = true;
         statusText.textContent = t('status_ready');
