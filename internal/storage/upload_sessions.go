@@ -9,7 +9,7 @@ import (
 	"sendly/internal/models"
 )
 
-// Upload sessions live in Postgres so that any replica can serve any request
+// upload sessions live in postgres so that any replica can serve any request
 // of an upload, and so that an upload survives the replica that started it.
 
 const uploadSessionColumns = `session_id, file_id, original_name, total_size, total_chunks, chunk_size,
@@ -25,7 +25,7 @@ func (p *Postgres) CreateUploadSession(ctx context.Context, s *models.UploadSess
 	return err
 }
 
-// GetUploadSession returns a live session. An expired one is reported as not
+// GetUploadSession returns a live session. an expired one is reported as not
 // found even before cleanup has removed it, except while a replica holds its
 // assembly lease.
 func (p *Postgres) GetUploadSession(ctx context.Context, sessionID string) (*models.UploadSession, error) {
@@ -43,7 +43,7 @@ func (p *Postgres) GetUploadSession(ctx context.Context, sessionID string) (*mod
 	return &s, nil
 }
 
-// RecordChunk notes that chunkIndex is on disk and extends the session. It
+// RecordChunk notes that chunkIndex is on disk and extends the session. it
 // is idempotent: a chunk sent again after a lost response is accepted.
 func (p *Postgres) RecordChunk(ctx context.Context, sessionID string, chunkIndex int, ttl time.Duration) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
@@ -76,7 +76,7 @@ func (p *Postgres) CountUploadedChunks(ctx context.Context, sessionID string) (i
 }
 
 // StartAssembly moves a fully uploaded session to assembling and gives it
-// pendingTTL to be finalized. Calling it again for a session that is already
+// pendingTTL to be finalized. calling it again for a session that is already
 // past that point returns the session unchanged, so a retried complete
 // request gets the same answer. A failed session may be started again.
 func (p *Postgres) StartAssembly(ctx context.Context, sessionID string, pendingTTL time.Duration) (*models.UploadSession, error) {
@@ -120,7 +120,7 @@ func (p *Postgres) StartAssembly(ctx context.Context, sessionID string, pendingT
 	return &s, tx.Commit()
 }
 
-// ClaimAssembly takes the assembly lease of a session for owner. It succeeds
+// ClaimAssembly takes the assembly lease of a session for owner. it succeeds
 // when the session is assembling and nobody else holds an unexpired lease.
 func (p *Postgres) ClaimAssembly(ctx context.Context, sessionID, owner string, lease time.Duration) (*models.UploadSession, error) {
 	var s models.UploadSession
@@ -136,7 +136,7 @@ func (p *Postgres) ClaimAssembly(ctx context.Context, sessionID, owner string, l
 	return &s, err
 }
 
-// RenewAssembly extends owner's lease. False means the lease was lost.
+// RenewAssembly extends owner's lease. false means the lease was lost.
 func (p *Postgres) RenewAssembly(ctx context.Context, sessionID, owner string, lease time.Duration) (bool, error) {
 	res, err := p.db.ExecContext(ctx, `
 		UPDATE upload_sessions SET assembly_lease_until = NOW() + make_interval(secs => $3)
@@ -149,7 +149,7 @@ func (p *Postgres) RenewAssembly(ctx context.Context, sessionID, owner string, l
 }
 
 // FinishAssembly marks the blob as complete, fenced on owner's lease, and
-// leaves at least minPending for finalize. False means the lease was lost.
+// leaves at least minPending for finalize. false means the lease was lost.
 func (p *Postgres) FinishAssembly(ctx context.Context, sessionID, owner string, minPending time.Duration) (bool, error) {
 	res, err := p.db.ExecContext(ctx, `
 		UPDATE upload_sessions
@@ -204,8 +204,8 @@ func (p *Postgres) DeleteUploadSession(ctx context.Context, sessionID string) er
 }
 
 // TakeExpiredUploadSessions deletes up to limit expired sessions and returns
-// them, so the caller can remove their chunks and unfinalized blobs. Rows
-// locked by another replica's cleanup are skipped. If the caller dies before
+// them, so the caller can remove their chunks and unfinalized blobs. rows
+// locked by another replica's cleanup are skipped. if the caller dies before
 // removing the files, the orphan sweep catches them.
 func (p *Postgres) TakeExpiredUploadSessions(ctx context.Context, limit int) ([]models.UploadSession, error) {
 	var sessions []models.UploadSession

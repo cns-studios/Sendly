@@ -1,5 +1,5 @@
-/* Transfers announcement card (homepage). Markup: web/templates/transfers-promo.html, behaviour: web/static/js/transfers-promo.js. */
-/* The mini cards mirror the real ones on /transfers; the demo loop (13s) stays paused until the card is on screen. */
+/* transfers announcement card (homepage). markup: web/templates/transfers-promo.html, behaviour: web/static/js/transfers-promo.js. */
+/* the mini cards mirror the real ones on /transfers; the demo loop (13s) stays paused until the card is on screen. */
 
 .tp-card {
     position: fixed;

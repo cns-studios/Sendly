@@ -71,7 +71,7 @@ func TestLiveRecordCNSProfileKeepsNewestObservation(t *testing.T) {
 	if u := mustGetUser(t, ctx, db, id); u.Status != models.UserStatusInactive || u.InactiveReason.String != models.InactiveReasonLocked || !u.DeactivatedAt.Valid {
 		t.Fatalf("expected locked: %+v", u)
 	}
-	// The directory knows nothing about locks and must not lift one.
+	// the directory knows nothing about locks and must not lift one.
 	if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{CNSUserID: id, Username: renamed, ObservedAt: time.Now()}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestLiveDeletionIsFinalAndErasesProfile(t *testing.T) {
 		t.Fatalf("deleted user still searchable: %+v", found)
 	}
 
-	// Nothing brings it back: not the user's own profile, not a webhook.
+	// nothing brings it back: not the user's own profile, not a webhook.
 	unlocked := false
 	if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{CNSUserID: id, Username: name, ObservedAt: time.Now().Add(time.Second)}, &unlocked); err != nil {
 		t.Fatal(err)
@@ -218,7 +218,7 @@ func TestLiveTakenUsernameLeavesTheOldHolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	// CNS let someone else take the name (the old holder renamed or was
-	// deleted, and Sendly missed it). Case differs: CNS compares names
+	// deleted, and sendly missed it). case differs: CNS compares names
 	// case-insensitively.
 	upper := "s" + name[1:]
 	if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{CNSUserID: newHolder, Username: upper, ObservedAt: time.Now()}, nil); err != nil {
@@ -244,7 +244,7 @@ func TestLiveTakenUsernameLeavesTheOldHolder(t *testing.T) {
 		t.Fatalf("expected an epoch row first in the re-check queue: %+v", due)
 	}
 
-	// The directory then confirms the old holder under their new name.
+	// the directory then confirms the old holder under their new name.
 	if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{CNSUserID: oldHolder, Username: name + "-new", ObservedAt: time.Now()}, nil); err != nil {
 		t.Fatal(err)
 	}

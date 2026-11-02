@@ -14,12 +14,12 @@ import (
 )
 
 // IdentityMigrationHandler moves accounts from before identity keys onto
-// them. Temporary: delete this file, storage/legacy_user_key.go,
+// them. temporary: delete this file, storage/legacy_user_key.go,
 // models/legacy_migration.go, static/js/identity-migration.js and its routes
 // and script tags once every account is migrated, then drop
 // user_key_envelopes and legacy_identity_escrow.
 //
-// Everything is decrypted and re-encrypted in the browser. A device holding
+// everything is decrypted and re-encrypted in the browser. A device holding
 // the account's legacy user key creates the identity key and stores it
 // encrypted with the user key (the escrow), so the account's other legacy
 // devices can pick it up without approval, and re-wraps the account's files
@@ -51,7 +51,7 @@ func (h *IdentityMigrationHandler) LegacyKey(c *gin.Context) {
 	})
 }
 
-// Start creates a legacy account's identity key from a device holding its
+// start creates a legacy account's identity key from a device holding its
 // legacy user key.
 func (h *IdentityMigrationHandler) Start(c *gin.Context) {
 	user, ok := requireUser(c)
@@ -100,7 +100,7 @@ func (h *IdentityMigrationHandler) Start(c *gin.Context) {
 		CNSUserID: user, IdentityKeyVersion: 1, WrappedPrivateKey: escrowed, WrapNonce: nonce, WrapAlg: req.EscrowWrapAlg,
 	}
 	if err := h.db.StartIdentityMigration(ctx, idKey, envelope, escrow); err != nil {
-		// Another legacy device created the key first; this one adopts it.
+		// another legacy device created the key first; this one adopts it.
 		if _, getErr := h.db.GetActiveUserIdentityKey(ctx, user); getErr == nil {
 			c.JSON(http.StatusConflict, models.ErrorResponse{Error: "The account already has an identity key", Code: "IDENTITY_KEY_EXISTS"})
 			return
@@ -111,7 +111,7 @@ func (h *IdentityMigrationHandler) Start(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"identity_key_version": 1})
 }
 
-// Escrow returns the identity key encrypted with the legacy user key, to a
+// escrow returns the identity key encrypted with the legacy user key, to a
 // device that holds the user key.
 func (h *IdentityMigrationHandler) Escrow(c *gin.Context) {
 	user, ok := requireUser(c)
@@ -135,7 +135,7 @@ func (h *IdentityMigrationHandler) Escrow(c *gin.Context) {
 	})
 }
 
-// Adopt stores a legacy device's own copy of the identity key, which it
+// adopt stores a legacy device's own copy of the identity key, which it
 // decrypted from the escrow.
 func (h *IdentityMigrationHandler) Adopt(c *gin.Context) {
 	user, ok := requireUser(c)
@@ -180,7 +180,7 @@ func (h *IdentityMigrationHandler) Adopt(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"stored": true})
 }
 
-// Files lists the caller's uploads whose key is still only wrapped with the
+// files lists the caller's uploads whose key is still only wrapped with the
 // legacy user key, to a trusted device.
 func (h *IdentityMigrationHandler) Files(c *gin.Context) {
 	user, ok := requireUser(c)
@@ -209,7 +209,7 @@ func (h *IdentityMigrationHandler) Files(c *gin.Context) {
 }
 
 // StoreFiles stores owner envelopes a trusted device re-wrapped from the
-// legacy user key for the active identity key. Files that already have one
+// legacy user key for the active identity key. files that already have one
 // are left alone.
 func (h *IdentityMigrationHandler) StoreFiles(c *gin.Context) {
 	user, ok := requireUser(c)

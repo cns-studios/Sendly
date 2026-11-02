@@ -48,7 +48,7 @@ func main() {
 	}
 	log.Println("Filesystem storage initialized")
 
-	// Claim storage before any cleanup runs: cleanup deletes whatever this
+	// claim storage before any cleanup runs: cleanup deletes whatever this
 	// database doesn't know, so it must never run against another
 	// instance's files.
 	instanceCtx, instanceCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -61,7 +61,7 @@ func main() {
 		log.Fatalf("Refusing to start: %v", err)
 	}
 
-	// Replicas share token refreshes and realtime events through Postgres.
+	// replicas share token refreshes and realtime events through postgres.
 	middleware.SetRefreshStore(db)
 	rt := realtime.NewHub(db)
 	listenCtx, stopListening := context.WithCancel(context.Background())
@@ -104,7 +104,7 @@ func main() {
 	}
 
 	router := gin.New()
-	// Only forwarding headers from configured proxies are believed; with no
+	// only forwarding headers from configured proxies are believed; with no
 	// TRUSTED_PROXIES, ClientIP is always the direct peer address.
 	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		log.Fatalf("Invalid TRUSTED_PROXIES: %v", err)
@@ -136,7 +136,7 @@ func main() {
 	androidHandler := handlers.NewAndroidHandler(cfg, db, fs, uploadService, tracker, rt)
 	recentUploadsHandler := handlers.NewRecentUploadsHandler(cfg, db, rt)
 	identityRescueHandler := handlers.NewIdentityRescueHandler(db)
-	// Temporary: moves accounts from before identity keys onto them.
+	// temporary: moves accounts from before identity keys onto them.
 	identityMigrationHandler := handlers.NewIdentityMigrationHandler(db)
 	recentUploadsHandler.SetAndroidHub(androidHandler.Hub())
 	androidHandler.SetDeviceHub(recentUploadsHandler.Hub())
@@ -178,7 +178,7 @@ func main() {
 	router.GET("/uploaded", pageHandler.Uploaded)
 	router.NoRoute(pageHandler.NotFound)
 
-	// CNS account events (renames, deletions). Signed by CNS, so it sits
+	// CNS account events (renames, deletions). signed by CNS, so it sits
 	// outside /api and its CSRF check.
 	cnsWebhookHandler := handlers.NewCNSWebhookHandler(cfg.CNSWebhookSecrets, db)
 	cnsWebhookHandler.SetSignOutNotifier(handlers.NewCNSSignOutNotifier(rt))
@@ -450,13 +450,13 @@ func main() {
 	<-quit
 	log.Println("Shutting down server...")
 
-	// By the time SIGTERM arrives, Kubernetes has already taken the pod out
-	// of the Service (the preStop delay covers the propagation), so only
+	// by the time SIGTERM arrives, kubernetes has already taken the pod out
+	// of the service (the preStop delay covers the propagation), so only
 	// requests that are already in flight remain.
 	deadline := time.Now().Add(cfg.ShutdownTimeout)
 	healthHandler.SetDraining()
 
-	// Hijacked WebSocket connections are not tracked by srv.Shutdown. Close
+	// hijacked WebSocket connections are not tracked by srv.shutdown. close
 	// them with "service restart" so clients reconnect to another replica.
 	rt.Shutdown()
 
@@ -466,7 +466,7 @@ func main() {
 		log.Printf("Server shutdown cut off in-flight requests: %v", err)
 	}
 
-	// Running assemblies get the rest of the grace period, then hand over to
+	// running assemblies get the rest of the grace period, then hand over to
 	// another replica.
 	uploadService.Stop(time.Until(deadline))
 	cleanup.Stop()

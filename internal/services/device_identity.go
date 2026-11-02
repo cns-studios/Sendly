@@ -16,7 +16,7 @@ import (
 )
 
 // DeviceIdentity centralizes registration, recovery, trust, and enrollment
-// state transitions shared by the web and Android APIs.
+// state transitions shared by the web and android APIs.
 type DeviceIdentity struct {
 	DB DeviceStore
 }
@@ -58,8 +58,8 @@ type DeviceRegistrationResult struct {
 	NeedsIdentityMigration bool
 }
 
-// Register records a device and reports whether it holds the account's
-// identity key. The identity key is the account's only root secret: it is
+// register records a device and reports whether it holds the account's
+// identity key. the identity key is the account's only root secret: it is
 // created by a brand-new account's first device, handed to further devices
 // through enrollment approval, and replaced by a new version on recovery.
 func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.DeviceRegisterRequest, recover bool) (*DeviceRegistrationResult, error) {
@@ -78,7 +78,7 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 	if kind != models.DeviceKindStandard && kind != models.DeviceKindApprover {
 		return nil, models.ErrInvalidDeviceKind
 	}
-	// The kind is fixed at first registration; a re-registration can't drop it.
+	// the kind is fixed at first registration; a re-registration can't drop it.
 	stored, err := s.DB.GetDeviceKind(ctx, userID, req.DeviceID)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 		PublicKeyJWK: key, KeyAlgorithm: req.KeyAlgorithm, KeyVersion: version, Kind: kind,
 	}
 
-	// The approver (CNS Accounts app) only ever receives the identity key
+	// the approver (CNS accounts app) only ever receives the identity key
 	// through an approval; it must never mint or replace it.
 	if kind == models.DeviceKindApprover && (recover || req.WrappedIdentityPrivateKeyB64 != "" || len(req.IdentityPublicKeyJWK) > 0) {
 		return nil, models.ErrApproverDeviceRestricted
@@ -124,7 +124,7 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 		return nil, err
 	}
 
-	// No identity key yet. An account from before identity keys has to be
+	// no identity key yet. an account from before identity keys has to be
 	// migrated by a device holding its legacy user key: letting any new
 	// device create the key would hand the account to whoever registers first.
 	legacy, err := s.DB.UserHasLegacyUserKey(ctx, userID)
@@ -147,7 +147,7 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 	}
 	idKey.KeyVersion, envelope.IdentityKeyVersion = 1, 1
 	if err := s.DB.CreateIdentityKeyWithDeviceEnvelope(ctx, idKey, envelope); err != nil {
-		// Another device of this account created it first; this one needs
+		// another device of this account created it first; this one needs
 		// that key, so it has to be approved like any other new device.
 		if active, getErr := s.DB.GetActiveUserIdentityKey(ctx, userID); getErr == nil {
 			result.ActiveIdentityKey = active
@@ -162,7 +162,7 @@ func (s *DeviceIdentity) Register(ctx context.Context, userID int64, req models.
 }
 
 // recover makes device the account's only trusted device, with a new identity
-// key version. Every other device is revoked, and files and transfers wrapped
+// key version. every other device is revoked, and files and transfers wrapped
 // for older versions stay locked until a device still holding such a version
 // re-wraps them.
 func (s *DeviceIdentity) recover(ctx context.Context, userID int64, device *models.UserDevice, req models.DeviceRegisterRequest) (*DeviceRegistrationResult, error) {
@@ -331,7 +331,7 @@ func (s *DeviceIdentity) Reject(ctx context.Context, userID int64, enrollmentID 
 }
 
 // CancelEnrollment withdraws the caller's own pending enrollment (the CNS
-// Accounts app's Abort while it waits for approval).
+// accounts app's abort while it waits for approval).
 func (s *DeviceIdentity) CancelEnrollment(ctx context.Context, userID int64, enrollmentID, requestDeviceID string) error {
 	owned, err := s.ownsDevice(ctx, userID, requestDeviceID)
 	if err != nil {
@@ -343,8 +343,8 @@ func (s *DeviceIdentity) CancelEnrollment(ctx context.Context, userID int64, enr
 	return s.DB.CancelEnrollment(ctx, userID, enrollmentID, requestDeviceID)
 }
 
-// RemoveApprover lets the CNS Accounts app disconnect itself from Sendly:
-// the approver device is revoked and its identity key copy deleted. Only
+// RemoveApprover lets the CNS accounts app disconnect itself from sendly:
+// the approver device is revoked and its identity key copy deleted. only
 // approver devices can be removed this way.
 func (s *DeviceIdentity) RemoveApprover(ctx context.Context, userID int64, deviceID string) error {
 	return s.DB.RemoveApproverDevice(ctx, userID, deviceID)

@@ -47,16 +47,16 @@ type TunnelParticipant struct {
 	// TokenHash is the SHA-256 (hex) of an anonymous participant's secret.
 	TokenHash  sql.NullString `db:"participant_token_hash" json:"-"`
 	ApprovedAt sql.NullTime   `db:"approved_at" json:"-"`
-	// Approved mirrors ApprovedAt for API consumers.
+	// approved mirrors ApprovedAt for API consumers.
 	Approved bool `db:"-" json:"approved"`
-	// Username and AvatarURL come from the users cache for signed-in
+	// username and AvatarURL come from the users cache for signed-in
 	// participants, so the session can show who is in it.
 	Username  string `db:"username"   json:"username,omitempty"`
 	AvatarURL string `db:"avatar_url" json:"avatar_url,omitempty"`
 }
 
 // TunnelJoin describes a join attempt. PresentedTokenHash is the hash of the
-// X-Participant-Token the caller sent, used when an anonymous caller re-joins
+// X-participant-token the caller sent, used when an anonymous caller re-joins
 // with a device ID that already has a participant row; NewTokenHash is stored
 // when an anonymous caller joins for the first time.
 type TunnelJoin struct {
@@ -94,7 +94,7 @@ type TunnelStartResponse struct {
 	Participants []TunnelParticipant `json:"participants,omitempty"`
 	HostToken    string              `json:"host_token,omitempty"`
 	// ParticipantToken is returned once to an anonymous joiner, who must send
-	// it as X-Participant-Token on later calls.
+	// it as X-participant-token on later calls.
 	ParticipantToken string `json:"participant_token,omitempty"`
 }
 

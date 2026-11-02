@@ -1,11 +1,11 @@
-// Drop zone · Membrane
+// drop zone · membrane
 //
-// A vanilla-JS port of the "Drop zone · Membrane" component from Hairline UI
-// (https://hairlineui.com/ui/drop-zone-membrane, MIT, © 2026 Hairline UI),
-// adapted to Sendly's colours and to touch screens. Styles live in
+// A vanilla-JS port of the "drop zone · membrane" component from hairline UI
+// (https://hairlineui.com/ui/drop-zone-membrane, MIT, © 2026 hairline UI),
+// adapted to sendly's colours and to touch screens. styles live in
 // /static/css/drop-membrane.css.
 //
-// The zone's border is a membrane: drag files over the page and the nearest
+// the zone's border is a membrane: drag files over the page and the nearest
 // stretch of line bends out to meet them, holds them, swallows them on drop and
 // hands each one on to a row underneath that carries its own progress hairline.
 //
@@ -23,22 +23,22 @@
 //   zone.sync(entries); zone.clear();
 //
 // onUpload returns a promise: resolve when done, throw to show the error with
-// Retry. Its signal is aborted when the person presses the row's X, and the
-// upload code is expected to stop sending. The row handle (ctx.row) can also
+// retry. its signal is aborted when the person presses the row's X, and the
+// upload code is expected to stop sending. the row handle (ctx.row) can also
 // settle things from outside the promise: row.fail(message),
 // row.setCancelable(false), row.adopt(fileId).
 //
 // zone.sync([{ id, name, size, type }]) turns a shared list of files (the same
 // for everyone in a session) into rows below the zone. A local upload that has
 // been given its file id with row.adopt() is the same row as its entry.
-// With onDownload set, finished rows swap the X for a download button.
+// with onDownload set, finished rows swap the X for a download button.
 (function () {
     'use strict';
 
-    // ── Membrane physics ────────────────────────────────────────────────
-    // The border is a ring of points round a rounded rectangle, each free to move along its outward
-    // normal. Every point is held to its goal by a spring and to its neighbours by tension, so a pull in
-    // one place makes a smooth tent and a release sends a ripple both ways round the edge. One frame loop
+    // ── membrane physics ────────────────────────────────────────────────
+    // the border is a ring of points round a rounded rectangle, each free to move along its outward
+    // normal. every point is held to its goal by a spring and to its neighbours by tension, so a pull in
+    // one place makes a smooth tent and a release sends a ripple both ways round the edge. one frame loop
     // integrates it and writes the path; it sleeps when the line is still, and a line at rest is drawn as
     // an exact rounded rectangle.
 
@@ -54,14 +54,14 @@
 
     const round = (n) => Math.round(n * 100) / 100;
 
-    // The exact rest shape, on half pixels so the line is crisp.
+    // the exact rest shape, on half pixels so the line is crisp.
     function restPath(w, h, radius) {
         const x0 = 0.5, y0 = 0.5, x1 = w - 0.5, y1 = h - 0.5;
         const r = Math.max(0, Math.min(radius - 0.5, (x1 - x0) / 2, (y1 - y0) / 2));
         return `M${x0 + r},${y0}H${x1 - r}A${r},${r} 0 0 1 ${x1},${y0 + r}V${y1 - r}A${r},${r} 0 0 1 ${x1 - r},${y1}H${x0 + r}A${r},${r} 0 0 1 ${x0},${y1 - r}V${y0 + r}A${r},${r} 0 0 1 ${x0 + r},${y0}Z`;
     }
 
-    // Points spaced evenly along the rounded rectangle, with their outward normals.
+    // points spaced evenly along the rounded rectangle, with their outward normals.
     function buildRing(w, h, radius) {
         const x0 = 0.5, y0 = 0.5, x1 = w - 0.5, y1 = h - 0.5;
         const r = Math.max(0, Math.min(radius - 0.5, (x1 - x0) / 2, (y1 - y0) / 2));
@@ -79,7 +79,7 @@
             const c = Math.cos(a), s = Math.sin(a);
             return [cx + c * r, cy + s * r, c, s];
         };
-        // Edges and corners clockwise from the top-left end of the top edge.
+        // edges and corners clockwise from the top-left end of the top edge.
         const parts = [
             { len: sw, at: (t) => [x0 + r + t * sw, y0, 0, -1] },
             { len: arc, at: (t) => corner(x1 - r, y0 + r, -Math.PI / 2 + (t * Math.PI) / 2) },
@@ -110,7 +110,7 @@
             if (!ring || !path) return;
             if (rest) { path.setAttribute('d', restPath(ring.w, ring.h, ring.radius)); return; }
             const { count: n, bx, by, nx, ny, u } = ring;
-            // Quadratic curves through the midpoints: smooth, and straight where the line is straight.
+            // quadratic curves through the midpoints: smooth, and straight where the line is straight.
             const px = (i) => bx[i] + nx[i] * u[i];
             const py = (i) => by[i] + ny[i] * u[i];
             let d = `M${round((px(n - 1) + px(0)) / 2)},${round((py(n - 1) + py(0)) / 2)}`;
@@ -129,7 +129,7 @@
             last = now;
             const { count: n, w, h, bx, by, nx, ny, u, v, goal, acc } = g;
 
-            // Goals: each force bends the stretch of line nearest it; where two overlap the stronger wins.
+            // goals: each force bends the stretch of line nearest it; where two overlap the stronger wins.
             goal.fill(0);
             let pointer = null;
             for (const f of forces.values()) {
@@ -149,7 +149,7 @@
                     want *= fall;
                     if (Math.abs(want) > Math.abs(goal[i])) goal[i] = want;
                 }
-                // Crossing into the zone releases the stretched line: kick it back so it snaps rather than eases.
+                // crossing into the zone releases the stretched line: kick it back so it snaps rather than eases.
                 if (f.kind === 'reach' && inside && !f.inside) {
                     for (let i = 0; i < n; i++) {
                         const dx = f.x - bx[i], dy = f.y - by[i];
@@ -160,7 +160,7 @@
             }
             if (swellPx) for (let i = 0; i < n; i++) goal[i] += swellPx;
 
-            // Integrate in fixed small steps; the tension is stiff.
+            // integrate in fixed small steps; the tension is stiff.
             for (let t = 0; t < dt - 1e-6; t += STEP) {
                 const h2 = Math.min(STEP, dt - t);
                 for (let i = 0; i < n; i++) {
@@ -181,7 +181,7 @@
             if (!moving && flat) { u.fill(0); v.fill(0); }
             draw(!moving && flat);
 
-            // The arrow watches a file outside, points into the zone once it is over it, and rests pointing up.
+            // the arrow watches a file outside, points into the zone once it is over it, and rests pointing up.
             let angle = 0, lean = 0;
             if (pointer) {
                 const cx = w / 2, cy = h / 2, dx = pointer.x - cx, dy = pointer.y - cy;
@@ -209,7 +209,7 @@
             if (!frame) frame = requestAnimationFrame(tick);
         }
 
-        // Build the ring from the box's size and rebuild it when the box resizes.
+        // build the ring from the box's size and rebuild it when the box resizes.
         function measure() {
             if (!box) return;
             const w = box.offsetWidth, h = box.offsetHeight, radius = getRadius();
@@ -238,7 +238,7 @@
                     window.addEventListener('resize', measure);
                 }
             },
-            // Reduced motion: no bending. Settle everything where it is.
+            // reduced motion: no bending. settle everything where it is.
             settle() {
                 forces.clear();
                 swellPx = 0;
@@ -246,7 +246,7 @@
                 draw(true);
                 if (arrow) arrow.style.transform = '';
             },
-            // Set, move or (with null) remove one force, in the box's own coordinates.
+            // set, move or (with null) remove one force, in the box's own coordinates.
             set(key, force) {
                 if (isReduced()) return;
                 const prev = forces.get(key);
@@ -257,7 +257,7 @@
                 else return;
                 kick();
             },
-            // Push the whole line out (positive) or in by a few pixels.
+            // push the whole line out (positive) or in by a few pixels.
             swell(px) {
                 if (swellPx === px) return;
                 swellPx = px;
@@ -268,13 +268,13 @@
         };
     }
 
-    // ── Text that changes the way it should ─────────────────────────────
-    // Ports of Hairline UI's "Text morph" and "Number roll" (MIT), which the original drop zone uses for its
-    // label and its percent. Both keep the real text for screen readers and only draw the motion.
+    // ── text that changes the way it should ─────────────────────────────
+    // ports of hairline UI's "text morph" and "number roll" (MIT), which the original drop zone uses for its
+    // label and its percent. both keep the real text for screen readers and only draw the motion.
 
     const EASE_OUT = 'cubic-bezier(0.16, 1, 0.3, 1)';
 
-    // Keep the letters two texts share (longest common subsequence); everything else is new.
+    // keep the letters two texts share (longest common subsequence); everything else is new.
     function matchGlyphs(previous, text, nextKey) {
         const a = previous.map((g) => g.char);
         const b = Array.from(text);
@@ -285,7 +285,7 @@
         for (let i = a.length - 1; i >= 0; i--) {
             for (let j = b.length - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
         }
-        // Too little in common reads as two different words: crossfade them instead.
+        // too little in common reads as two different words: crossfade them instead.
         if (dp[0][0] < Math.min(a.length, b.length) * 0.5) return fresh();
 
         const out = [];
@@ -299,7 +299,7 @@
     }
 
     /**
-     * Text that morphs: letters both texts share glide to their new place, new letters rise in out of a
+     * text that morphs: letters both texts share glide to their new place, new letters rise in out of a
      * blur one after another, letters that leave lift away and blur out where they stood, and the box
      * eases to its new width.
      */
@@ -316,7 +316,7 @@
         let keys = 0;
         const nextKey = () => ++keys;
 
-        // Words stay unbroken; lines may only wrap at spaces.
+        // words stay unbroken; lines may only wrap at spaces.
         function layout(list) {
             root.querySelectorAll('.dm-word').forEach((w) => w.remove());
             const words = [];
@@ -351,7 +351,7 @@
                 return;
             }
 
-            // 1. Note where every letter stands, then work out which letters stay.
+            // 1. note where every letter stands, then work out which letters stay.
             const box = root.getBoundingClientRect();
             const at = new Map();
             glyphs.forEach((g) => {
@@ -362,7 +362,7 @@
             const following = matchGlyphs(glyphs, next, nextKey);
             const kept = new Set(following.map((g) => g.key));
 
-            // 2. Letters that go lift away and blur out where they stood.
+            // 2. letters that go lift away and blur out where they stood.
             glyphs.filter((g) => !kept.has(g.key)).forEach((g) => {
                 const pos = at.get(g.key) || { x: 0, y: 0 };
                 const ghost = document.createElement('span');
@@ -379,7 +379,7 @@
                 out.onfinish = () => ghost.remove();
             });
 
-            // 3. The new letters go in place; the ones that stayed glide, the new ones rise out of a blur.
+            // 3. the new letters go in place; the ones that stayed glide, the new ones rise out of a blur.
             following.forEach((g) => { if (g.el) g.el.getAnimations().forEach((a) => a.cancel()); });
             glyphs.filter((g) => !kept.has(g.key)).forEach((g) => g.el.remove());
             layout(following);
@@ -402,7 +402,7 @@
                 }
             }
             if (Math.abs(previousWidth - after.width) > 0.5) {
-                // Hold the words on one line while the box is narrower than them, or they would wrap mid-morph.
+                // hold the words on one line while the box is narrower than them, or they would wrap mid-morph.
                 root.style.whiteSpace = 'nowrap';
                 const resize = root.animate([{ width: `${previousWidth}px` }, { width: `${after.width}px` }], { duration, easing: EASE_OUT });
                 resize.onfinish = resize.oncancel = () => { root.style.whiteSpace = ''; };
@@ -412,11 +412,11 @@
         return { set };
     }
 
-    const SETS = 5;                 // the strip repeats 0–9 five times so a roll never runs out of digits
+    const SETS = 5;                 // the strip repeats 0-9 five times so a roll never runs out of digits
     const MIDDLE = 20;
     const STRIP = Array.from({ length: SETS * 10 }, (_, i) => i % 10).join('\n');
 
-    // Digits are keyed by their place counted from the right, so the units column stays the units column;
+    // digits are keyed by their place counted from the right, so the units column stays the units column;
     // a symbol is keyed by how many of the same symbol sit to its right.
     function columnsOf(text) {
         const chars = Array.from(text);
@@ -435,8 +435,8 @@
         return out.reverse();
     }
 
-    // One digit: a column that rolls to its new value, in the direction the number moved. Going up, a 9
-    // rolls on to 0 instead of spinning back. The roll is blurred, most at the start, like a moving drum.
+    // one digit: a column that rolls to its new value, in the direction the number moved. going up, a 9
+    // rolls on to 0 instead of spinning back. the roll is blurred, most at the start, like a moving drum.
     function createDigit(digit, duration, isReduced) {
         const el = document.createElement('span');
         el.className = 'dm-digit';
@@ -456,7 +456,7 @@
         };
         place(pos, false);
 
-        // After a roll, quietly re-centre on the middle set so the next roll always has room.
+        // after a roll, quietly re-centre on the middle set so the next roll always has room.
         strip.addEventListener('transitionend', (e) => {
             if (e.propertyName !== 'transform') return;
             pos = MIDDLE + (((pos % 10) + 10) % 10);
@@ -470,7 +470,7 @@
             if (isReduced()) { pos = MIDDLE + next; place(pos, false); return; }
             const up = trend > 0 || (trend === 0 && next > showing);
             let target = up ? pos + ((next - showing + 10) % 10) : pos - ((showing - next + 10) % 10);
-            // Values arriving faster than a roll (a progress percent) never let it re-centre, so before it
+            // values arriving faster than a roll (a progress percent) never let it re-centre, so before it
             // runs off the strip, jump it back by whole sets mid-roll (it looks identical) and roll on from there.
             if (target < 10 || target > SETS * 10 - 11) {
                 const shift = Math.round((target - MIDDLE) / 10) * 10;
@@ -577,7 +577,7 @@
                 return created;
             });
 
-            // Only nodes that are new or out of place move: reparenting an element cancels its running roll.
+            // only nodes that are new or out of place move: reparenting an element cancels its running roll.
             let ref = null;
             for (let i = cols.length - 1; i >= 0; i--) {
                 const node = cols[i].node;
@@ -599,7 +599,7 @@
         return { set };
     }
 
-    // ── Component ────────────────────────────────────────────────────────
+    // ── component ────────────────────────────────────────────────────────
 
     const HOLD = 16;      // a file this close outside the zone is already held by the bulge, and drops into it
     const FLIGHT = 500;
@@ -607,7 +607,7 @@
 
     const fmt = (template, vars) => template.replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] !== undefined ? vars[k] : m));
 
-    // Lucide glyphs (ISC), inlined so rows can be built without re-running the icon replacer.
+    // lucide glyphs (ISC), inlined so rows can be built without re-running the icon replacer.
     const ICON = {
         arrowUp: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
         x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
@@ -622,7 +622,7 @@
         `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke || 1.75}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
     const fileGlyph = (type, cls) => icon(type.indexOf('image/') === 0 ? ICON.fileImage : type === 'application/pdf' || type.indexOf('text/') === 0 ? ICON.fileText : ICON.file, cls);
 
-    // The check draws itself: a 16-unit box so its path length can be normalised to 1.
+    // the check draws itself: a 16-unit box so its path length can be normalised to 1.
     const drawnCheck = (cls) =>
         `<svg class="${cls}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" pathLength="1" stroke-dasharray="1"/></svg>`;
 
@@ -642,7 +642,7 @@
             hint: '', mobileTitle: '', mobileHint: '', multiple: true,
             validate: null, locked: null, onUpload: null, onDownload: null,
         }, options);
-        // Every string the zone says comes from the page's translations as dropzone_<key in snake_case>.
+        // every string the zone says comes from the page's translations as dropzone_<key in snake_case>.
         const m = (key, vars) => fmt(o.t('dropzone_' + key.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase())), vars);
 
         const reducedQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -703,7 +703,7 @@
 
         const label = createTextMorph(labelEl, { isReduced: () => reduced });
 
-        // The zone looks locked while the page can't take a file; the page's state changes without telling us,
+        // the zone looks locked while the page can't take a file; the page's state changes without telling us,
         // so this is looked at on every render and whenever a row changes.
         function syncLocked() {
             if (isLocked()) host.setAttribute('data-locked', ''); else host.removeAttribute('data-locked');
@@ -749,7 +749,7 @@
         };
         const centre = () => ({ x: zone.offsetWidth / 2, y: zone.offsetHeight / 2 });
 
-        // Follow a drag: bend the line toward the file and update the label only when that changes. A zone
+        // follow a drag: bend the line toward the file and update the label only when that changes. A zone
         // that can't take a file right now (an upload is running) shrinks away and says why, instead of
         // ignoring the drag.
         function track(cx, cy, count) {
@@ -772,8 +772,8 @@
             if (drag) { drag = null; render(); }
         }
 
-        // ── Rows ──
-        // A row is one file. Its status is uploading, downloading, done or error. Rows start as local uploads;
+        // ── rows ──
+        // A row is one file. its status is uploading, downloading, done or error. rows start as local uploads;
         // sync() adds and removes rows for files that live elsewhere (a shared list), and a local upload that
         // finishes is matched to its entry by id (row.adopt) so it isn't listed twice.
         function paint(row) {
@@ -863,7 +863,7 @@
                 note: (text) => { if (live()) setRow(row, { note: text || '' }); },
                 fail: (message) => { if (live()) failed(row, message); },
                 setCancelable: (on) => { row.el.dataset.cancelable = on ? 'true' : 'false'; },
-                // The file now exists under this id in the shared list: its entry and this row are one.
+                // the file now exists under this id in the shared list: its entry and this row are one.
                 adopt: (fileId) => adopt(row, fileId),
             };
         }
@@ -871,7 +871,7 @@
         function adopt(row, fileId) {
             row.fileId = fileId;
             row.seen = false;
-            // The poll may have listed the file before the upload call returned: keep this row, drop the twin.
+            // the poll may have listed the file before the upload call returned: keep this row, drop the twin.
             rows.filter((r) => r !== row && r.fileId === fileId && !r.closing).forEach((r) => dropRow(r));
         }
 
@@ -949,15 +949,15 @@
         function remove(id) {
             const row = rows.find((r) => r.id === id);
             if (!row || row.closing) return;
-            // Cancelling an upload aborts it: the signal reaches the page's upload code, which stops sending.
+            // cancelling an upload aborts it: the signal reaches the page's upload code, which stops sending.
             if (row.controller) row.controller.abort();
             row.closing = true;
             row.el.classList.add('dm-closing');
             later(() => dropRow(row), reduced ? 0 : 420);
         }
 
-        // Make the rows that stand for shared files match `entries` ({ id, name, size, type? }, in order).
-        // Rows for uploads still in flight are left alone; a file that disappears from the list leaves too.
+        // make the rows that stand for shared files match `entries` ({ id, name, size, type? }, in order).
+        // rows for uploads still in flight are left alone; a file that disappears from the list leaves too.
         function sync(entries) {
             const list_ = Array.isArray(entries) ? entries : [];
             const ids = new Set(list_.map((e) => e.id));
@@ -973,7 +973,7 @@
                 ordered.push(row);
             });
             rows.filter((r) => r.seen && r.fileId && !ids.has(r.fileId) && !r.closing).forEach((r) => remove(r.id));
-            // Shared files in the list's order, then whatever is still local. Only move nodes that are out of place.
+            // shared files in the list's order, then whatever is still local. only move nodes that are out of place.
             const want = ordered.concat(rows.filter((r) => !r.closing && ordered.indexOf(r) < 0));
             const have = Array.from(list.children);
             if (want.some((r, i) => have.filter((n) => !n.classList.contains('dm-closing'))[i] !== r.el)) {
@@ -981,7 +981,7 @@
             }
         }
 
-        // ── Files arriving ──
+        // ── files arriving ──
         function take(files, at) {
             if (!files.length) return;
             if (isLocked()) {
@@ -1064,7 +1064,7 @@
             chips.set(row.id, { cancel: finish });
         }
 
-        // ── Events ──
+        // ── events ──
         zone.addEventListener('click', () => {
             if (isLocked()) { tell(m('busy'), true); return; }
             input.click();
@@ -1081,13 +1081,13 @@
             take(files, centre());
         });
 
-        // Files dragged in from the system. The whole window is the target, so the line can reach out
-        // before the file arrives and a drop anywhere on the page is taken. Every file drag is claimed
+        // files dragged in from the system. the whole window is the target, so the line can reach out
+        // before the file arrives and a drop anywhere on the page is taken. every file drag is claimed
         // (preventDefault) whether or not the zone can use it: an unclaimed drop makes the browser open the
         // file in a tab, which on a page with an upload running would also throw that upload away.
         //
-        // The drag ends on the last dragleave, on drop or dragend. dragover repeats while the pointer moves
-        // but not reliably while it is still (Firefox sends it every ~350ms, or not at all), so silence
+        // the drag ends on the last dragleave, on drop or dragend. dragover repeats while the pointer moves
+        // but not reliably while it is still (firefox sends it every ~350ms, or not at all), so silence
         // can't be taken to mean the drag left; it only arms a long watchdog for the case where the browser
         // loses the drag without telling us.
         let depth = 0;
@@ -1139,9 +1139,9 @@
         render();
 
         return {
-            /** Show the shared files in `entries` ({ id, name, size, type? }) as rows; see sync(). */
+            /** show the shared files in `entries` ({ id, name, size, type? }) as rows; see sync(). */
             sync,
-            /** Remove every row at once, aborting anything still uploading. */
+            /** remove every row at once, aborting anything still uploading. */
             clear() {
                 rows.slice().forEach(dropRow);
             },

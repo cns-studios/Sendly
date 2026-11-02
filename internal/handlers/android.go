@@ -21,7 +21,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// androidHub carries events to the Android app's sockets, on whichever
+// androidHub carries events to the android app's sockets, on whichever
 // replica they are connected: per user, per user's pending approvals, and
 // per enrollment a new device is waiting on.
 type androidHub struct {
@@ -343,7 +343,7 @@ func (h *AndroidHandler) UploadFinalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		// Files may only be added by the host or participants it approved.
+		// files may only be added by the host or participants it approved.
 		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
 		if authErr != nil {
 			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})
@@ -470,7 +470,7 @@ func (h *AndroidHandler) CancelEnrollment(c *gin.Context) {
 	}
 }
 
-// RemoveApproverDevice: the CNS Accounts app disconnects itself from Sendly.
+// RemoveApproverDevice: the CNS accounts app disconnects itself from sendly.
 func (h *AndroidHandler) RemoveApproverDevice(c *gin.Context) {
 	sharedRemoveApprover(c, h.db)
 }

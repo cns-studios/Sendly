@@ -30,7 +30,7 @@ func TestClaimStorageClaimsEmptyDirs(t *testing.T) {
 			t.Fatalf("marker in %s = %q, %v; want db-a", dir, owner, err)
 		}
 	}
-	// Claiming again with the same database is a no-op.
+	// claiming again with the same database is a no-op.
 	if err := fs.ClaimStorage("db-a", false); err != nil {
 		t.Fatalf("reclaim by owner: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestClaimStorageRejectsOtherInstance(t *testing.T) {
 		t.Fatalf("claim: %v", err)
 	}
 
-	// Adopting never overrides another database's marker.
+	// adopting never overrides another database's marker.
 	for _, adopt := range []bool{false, true} {
 		err := fs.ClaimStorage("db-b", adopt)
 		if err == nil || !strings.Contains(err.Error(), "another Sendly instance") {

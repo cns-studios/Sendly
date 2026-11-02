@@ -26,11 +26,11 @@ type Config struct {
 	PostgresSSLMode string
 
 	// InstanceName identifies this replica, for example in upload assembly
-	// leases. Defaults to POD_NAME, then the hostname.
+	// leases. defaults to POD_NAME, then the hostname.
 	InstanceName string
 	// ShutdownTimeout bounds the graceful shutdown after SIGTERM: in-flight
 	// requests and upload assemblies get this long before they are cut off
-	// (assemblies are then resumed by another replica). Keep the pod's
+	// (assemblies are then resumed by another replica). keep the pod's
 	// terminationGracePeriodSeconds above it plus any preStop delay.
 	ShutdownTimeout time.Duration
 
@@ -43,7 +43,7 @@ type Config struct {
 
 	BehindCloudflare bool
 	// TrustedProxies lists the proxy IPs/CIDRs whose forwarding headers
-	// (X-Forwarded-For, CF-Connecting-IP) are believed. Requests from any
+	// (X-forwarded-for, CF-connecting-IP) are believed. requests from any
 	// other peer are attributed to their direct remote address.
 	TrustedProxies []string
 
@@ -61,22 +61,22 @@ type Config struct {
 	CNSAuthDesktopClientID string
 	CNSAuthServiceKey      string
 	// CNSServiceAPIURL is CNS's service-to-service API gateway
-	// (GET /api/service/me, /api/data/{service}/*) — a different host from
+	// (GET /api/service/me, /api/data/{service}/*) - a different host from
 	// CNSAuthURL, which is the user-facing accounts surface (/api/me,
 	// /api/account/me, /api/auth/token/refresh) used for cookie-based
 	// browser auth.
 	CNSServiceAPIURL string
-	// CNSAPIURL is where Sendly's own server sends every API call to CNS
-	// (token check, refresh, code exchange, logout, push, directory). In the
-	// cluster it is the accounts-api Service, so these calls skip Cloudflare
-	// and accounts-web and can forward the user's IP. Empty falls back to
+	// CNSAPIURL is where sendly's own server sends every API call to CNS
+	// (token check, refresh, code exchange, logout, push, directory). in the
+	// cluster it is the accounts-api service, so these calls skip cloudflare
+	// and accounts-web and can forward the user's IP. empty falls back to
 	// CNSServiceAPIURL, then CNSAuthURL; read it through CNSAPIBaseURL.
 	CNSAPIURL      string
 	CNSServiceSlug string
 	// CNSWebhookSecrets verify CNS webhook deliveries (the whsec_ secret
-	// CNS shows when an admin sets the webhook URL). Several are accepted
+	// CNS shows when an admin sets the webhook URL). several are accepted
 	// so a new secret can be deployed before the old one stops being used.
-	// Empty disables the webhook endpoint.
+	// empty disables the webhook endpoint.
 	CNSWebhookSecrets []string
 	AuthMaxFileSize  int64
 	MigrationsDir    string
@@ -88,11 +88,11 @@ type Config struct {
 	// reconciliation job re-checks them against the CNS directory.
 	UserCacheRecheck time.Duration
 	// UserCacheMaxDeletionsPerRun caps how many users one reconciliation
-	// run may record as deleted from directory answers. Above it the run
+	// run may record as deleted from directory answers. above it the run
 	// deletes none, so a CNS fault can't erase the cache.
 	UserCacheMaxDeletionsPerRun int
 
-	// Retention periods; 0 disables the matching purge.
+	// retention periods; 0 disables the matching purge.
 	FileRecordRetention      time.Duration
 	UploadIPRetention        time.Duration
 	ReportRetention          time.Duration
@@ -207,7 +207,7 @@ func (c *Config) validate() error {
 	if c.UserCacheReconcileInterval <= 0 {
 		return fmt.Errorf("USER_CACHE_RECONCILE_INTERVAL_MINUTES must be positive")
 	}
-	// Otherwise users would age out of search before their re-check is due.
+	// otherwise users would age out of search before their re-check is due.
 	if c.UserCacheRecheck <= 0 || c.UserCacheRecheck >= c.UserCacheStaleAfter {
 		return fmt.Errorf("USER_CACHE_RECHECK_HOURS must be positive and shorter than USER_CACHE_STALE_AFTER_DAYS")
 	}
@@ -222,10 +222,10 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// cloudflareIPRanges are Cloudflare's published edge ranges
-// (https://www.cloudflare.com/ips/). They are the default trusted proxies
+// cloudflareIPRanges are cloudflare's published edge ranges
+// (https://www.cloudflare.com/ips/). they are the default trusted proxies
 // when BEHIND_CLOUDFLARE is set and TRUSTED_PROXIES is empty, i.e. when
-// Cloudflare connects to this server directly.
+// cloudflare connects to this server directly.
 var cloudflareIPRanges = []string{
 	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22",
 	"141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
@@ -333,7 +333,7 @@ func getEnvInt64(key string, defaultValue int64) int64 {
 	return defaultValue
 }
 
-// getEnvDays reads a retention period in days. Negative or invalid values
+// getEnvDays reads a retention period in days. negative or invalid values
 // fall back to the default so a typo can't silently disable a purge.
 func getEnvDays(key string, defaultDays int) time.Duration {
 	days := getEnvInt(key, defaultDays)

@@ -44,9 +44,9 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 	})
 }
 
-// LookupUsers searches Sendly's own local user cache by username, rather
+// LookupUsers searches sendly's own local user cache by username, rather
 // than CNS: CNS's directory resolves exact usernames and ids but has no
-// search, and the picker should only offer people who use Sendly anyway.
+// search, and the picker should only offer people who use sendly anyway.
 // UserCacheSyncMiddleware adds users as they authenticate; CNS webhooks and
 // the reconciliation job keep names current and drop deleted accounts (see
 // services.UserCache).

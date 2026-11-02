@@ -102,7 +102,7 @@ func (h *RecentUploadsHandler) RecentUploads(c *gin.Context) {
 
 // FileAccess hands a signed-in user their identity-wrapped copy of a file
 // key: their own upload's ('owner') or one sent to them in a transfer they
-// accepted ('share'). The key can only be opened with the identity key
+// accepted ('share'). the key can only be opened with the identity key
 // version it was wrapped for.
 func (h *RecentUploadsHandler) FileAccess(c *gin.Context) {
 	user := middleware.GetCNSUser(c)

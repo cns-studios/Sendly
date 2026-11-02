@@ -84,7 +84,7 @@ func findAvatarURL(value interface{}) string {
 	return ""
 }
 
-// CNSStatusError is a CNS answer other than success. Callers tell a rejected
+// CNSStatusError is a CNS answer other than success. callers tell a rejected
 // token (IsTokenRejected) apart from CNS being briefly unreachable, which
 // must never sign the user out.
 type CNSStatusError struct {
@@ -190,7 +190,7 @@ func IsDeadTokenError(err error) bool {
 }
 
 // RefreshStore lets replicas share the outcome of a token refresh;
-// implemented by *storage.Postgres.
+// implemented by *storage.postgres.
 type RefreshStore interface {
 	SharedRefresh(ctx context.Context, tokenID []byte, ttl time.Duration, refresh func() ([]byte, error)) ([]byte, bool, error)
 }
@@ -199,7 +199,7 @@ var refreshStore RefreshStore
 
 // SetRefreshStore makes token refreshes coordinate through store, so that
 // concurrent requests presenting the same refresh token on different
-// replicas redeem it with CNS only once. Without a store, refreshes are only
+// replicas redeem it with CNS only once. without a store, refreshes are only
 // coordinated within this process.
 func SetRefreshStore(store RefreshStore) {
 	refreshStore = store
@@ -232,14 +232,14 @@ func RefreshAccessToken(ctx context.Context, cfg *config.Config, refreshToken st
 	})
 	switch {
 	case fresh != nil:
-		// The token is redeemed: use the result even if storing it failed.
+		// the token is redeemed: use the result even if storing it failed.
 		return fresh, nil
 	case err != nil:
 		var tre *tokenRefreshError
 		if errors.As(err, &tre) {
 			return nil, err
 		}
-		// The store is unreachable and nothing was redeemed yet.
+		// the store is unreachable and nothing was redeemed yet.
 		log.Printf("Token refresh: shared store unavailable, refreshing locally: %v", err)
 		return refreshAccessTokenLocally(ctx, cfg, refreshToken)
 	}
@@ -326,7 +326,7 @@ func requestTokenRefresh(ctx context.Context, cfg *config.Config, refreshToken s
 	if err != nil {
 		return nil, err
 	}
-	// Repeating a refresh whose answer was lost is safe: CNS accepts the
+	// repeating a refresh whose answer was lost is safe: CNS accepts the
 	// just-rotated token again for 10 seconds.
 	resp, err := cnshttp.Do(ctx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
@@ -343,7 +343,7 @@ func requestTokenRefresh(ctx context.Context, cfg *config.Config, refreshToken s
 	}
 	defer resp.Body.Close()
 
-	// Room for the ID token next to the access and refresh tokens.
+	// room for the ID token next to the access and refresh tokens.
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
 	rawBody := strings.TrimSpace(string(raw))
 
@@ -378,7 +378,7 @@ func setCookieForAuthScope(c *gin.Context, name, value string, maxAge int, cfg *
 	domain := authCookieDomain(cfg)
 	c.SetCookie(name, value, maxAge, "/", domain, isSecure, true)
 	if domain != "" {
-		// Remove older host-only cookies created before domain scoping was consistent.
+		// remove older host-only cookies created before domain scoping was consistent.
 		c.SetCookie(name, "", -1, "/", "", isSecure, true)
 	}
 }
@@ -420,7 +420,7 @@ func ClearRefreshTokenCookie(c *gin.Context, cfg *config.Config) {
 }
 
 // refreshAccessToken attempts to refresh the access token using the refresh token cookie.
-// Returns the new access token on success, empty string on failure.
+// returns the new access token on success, empty string on failure.
 func refreshAccessToken(c *gin.Context, cfg *config.Config) (string, bool) {
 	refreshToken, err := c.Cookie("refresh_token")
 	if err != nil || refreshToken == "" {
@@ -432,8 +432,8 @@ func refreshAccessToken(c *gin.Context, cfg *config.Config) (string, bool) {
 
 	result, refreshErr := RefreshAccessToken(ctx, cfg, refreshToken)
 	if refreshErr != nil {
-		// Only treat the token as dead when the auth server says so (401/403).
-		// Transient failures (5xx, network) must not log the user out; the
+		// only treat the token as dead when the auth server says so (401/403).
+		// transient failures (5xx, network) must not log the user out; the
 		// next request simply retries. A dead token is cleared immediately so
 		// subsequent requests don't keep hammering the refresh endpoint.
 		if IsDeadTokenError(refreshErr) {
@@ -475,7 +475,7 @@ func CNSAuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 
 		user, err := ValidateCNSAccessToken(ctx, cfg, authToken)
 		if err != nil {
-			// Only a token CNS refused is refreshed or cleared. A network
+			// only a token CNS refused is refreshed or cleared. A network
 			// error or 5xx (CNS replaced mid-request, after one retry) leaves
 			// the cookies alone; this request is served signed out and the
 			// next one tries again.
@@ -519,7 +519,7 @@ func GetCNSUser(c *gin.Context) *CNSUser {
 }
 
 // GetCNSAccessToken returns the bearer token CNSAuthMiddleware just
-// validated the current user against. This may differ from the raw
+// validated the current user against. this may differ from the raw
 // "auth_token" request cookie if the middleware refreshed an expiring
 // token during this request; callers that need to make their own
 // authenticated CNS calls (e.g. UserCacheSyncMiddleware) must use this

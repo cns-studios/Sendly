@@ -21,7 +21,7 @@ import (
 // else CNS_SERVICE_API_URL):
 // GET /api/service/me (a scoped profile read) and /api/data/{service}/ (a
 // scoped per-service KV store), both authorized with this service's
-// X-Service-Key plus the caller's own bearer token. This is a different host
+// X-service-key plus the caller's own bearer token. this is a different host
 // from cfg.CNSAuthURL, which is the user-self-service surface
 // (/api/me, /api/account/me, /api/auth/token/refresh) that CNSAuthMiddleware
 // uses to validate that bearer token in the first place; that flow, and its
@@ -32,7 +32,7 @@ type CNSClient struct {
 }
 
 // serviceBase is where /api/service/me and /api/data live: CNS_API_URL when
-// set, else CNS_SERVICE_API_URL. Empty disables those calls.
+// set, else CNS_SERVICE_API_URL. empty disables those calls.
 func (c *CNSClient) serviceBase() string {
 	for _, u := range []string{c.cfg.CNSAPIURL, c.cfg.CNSServiceAPIURL} {
 		if u = strings.TrimSpace(u); u != "" {
@@ -98,7 +98,7 @@ func (c *CNSClient) GetServiceProfile(ctx context.Context, accessToken string) (
 
 // PatchServiceData merges data into this service's per-user KV blob on CNS
 // (PATCH /api/data/{service}/), so CNS stays aware of this service's own
-// view of the user (status, tier, etc). Errors here never fail the caller's
+// view of the user (status, tier, etc). errors here never fail the caller's
 // request; see UserCache.SyncIfStale.
 func (c *CNSClient) PatchServiceData(ctx context.Context, accessToken string, data map[string]any) error {
 	if c.serviceBase() == "" || c.cfg.CNSAuthServiceKey == "" {
@@ -155,13 +155,13 @@ var (
 const cnsDirectoryBatchMax = 100
 
 // DirectoryConfigured reports whether the users:read directory can be called.
-// It lives on the CNS API (config.CNSAPIBaseURL), like /api/service/push;
+// it lives on the CNS API (config.CNSAPIBaseURL), like /api/service/push;
 // the accounts site at CNS_AUTH_URL does not serve it.
 func (c *CNSClient) DirectoryConfigured() bool {
 	return c.cfg.CNSAPIBaseURL() != "" && strings.TrimSpace(c.cfg.CNSAuthServiceKey) != ""
 }
 
-// GetPublicUsers looks up to cnsDirectoryBatchMax users by id. Users CNS
+// GetPublicUsers looks up to cnsDirectoryBatchMax users by id. users CNS
 // doesn't return are deleted or never existed; confirm with GetPublicUser
 // before acting on that.
 func (c *CNSClient) GetPublicUsers(ctx context.Context, ids []int64) (map[int64]CNSPublicProfile, error) {
@@ -236,7 +236,7 @@ func (c *CNSClient) directoryGet(ctx context.Context, path string, out any) erro
 	case http.StatusTooManyRequests:
 		return ErrCNSRateLimited
 	case http.StatusNotFound:
-		// Anything between here and CNS (a proxy, a wrong base URL) can
+		// anything between here and CNS (a proxy, a wrong base URL) can
 		// answer 404 too; only CNS's own error envelope means "no such user".
 		var envelope struct {
 			Error struct {

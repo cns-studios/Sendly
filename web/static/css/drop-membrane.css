@@ -1,6 +1,6 @@
-/* Drop zone · Membrane
-   Styles for /static/js/drop-membrane.js (a port of Hairline UI's "Drop zone · Membrane", MIT).
-   Colours are Sendly's: green accent, light grey hairlines, red for refusals. */
+/* drop zone · membrane
+   styles for /static/js/drop-membrane.js (a port of hairline UI's "drop zone · membrane", MIT).
+   colours are sendly's: green accent, light grey hairlines, red for refusals. */
 
 .dm {
     --dm-border: #C8C8C8;
@@ -33,7 +33,7 @@
     box-sizing: border-box;
 }
 
-/* ── The zone ── */
+/* ── the zone ── */
 .dm-zone {
     appearance: none;
     -webkit-appearance: none;
@@ -119,7 +119,7 @@
     fill: var(--dm-refuse-fill);
 }
 
-/* The badge: an arrow that turns to watch the file, a cross for refusals, a check for additions. */
+/* the badge: an arrow that turns to watch the file, a cross for refusals, a check for additions. */
 .dm-badge {
     position: relative;
     display: flex;
@@ -225,7 +225,7 @@
     border: 0;
 }
 
-/* ── Text that morphs and numbers that roll ── */
+/* ── text that morphs and numbers that roll ── */
 .dm-morph {
     position: relative;
     display: inline-block;
@@ -282,7 +282,7 @@
     will-change: transform;
 }
 
-/* ── Rows: each file's own hairline is its progress bar ── */
+/* ── rows: each file's own hairline is its progress bar ── */
 .dm-rows {
     margin: 12px 0 0;
     padding: 0;
@@ -399,7 +399,7 @@
     color: var(--dm-danger);
 }
 
-/* The percent unfolds beside the size while the file is uploading. */
+/* the percent unfolds beside the size while the file is uploading. */
 .dm-pct-wrap {
     display: inline-grid;
     grid-template-columns: 0fr;
@@ -628,7 +628,7 @@
     white-space: nowrap;
 }
 
-/* ── Touch screens and narrow windows: taller zone, bigger type, thumb-sized buttons ── */
+/* ── touch screens and narrow windows: taller zone, bigger type, thumb-sized buttons ── */
 @media (max-width: 768px) {
     .dm {
         --dm-radius: 24px;
@@ -685,7 +685,7 @@
         height: 18px;
     }
 
-    /* Make room for the file name: while uploading, the percentage replaces the size. */
+    /* make room for the file name: while uploading, the percentage replaces the size. */
     .dm-row[data-status="uploading"] .dm-size,
     .dm-row[data-status="uploading"] .dm-dot,
     .dm-row[data-status="downloading"] .dm-size,

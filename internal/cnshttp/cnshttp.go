@@ -1,9 +1,9 @@
-// Package cnshttp sends Sendly's server-to-server requests to CNS accounts.
+// package cnshttp sends sendly's server-to-server requests to CNS accounts.
 //
 // CNS runs as several replicas that are replaced at any time. A request that
 // lands on a replica as it goes away fails with a refused or reset connection,
 // or with a 502/503/504 from the proxy in front of it; the same request sent
-// again reaches another replica. Do repeats such a request once, so a rolling
+// again reaches another replica. do repeats such a request once, so a rolling
 // update or a rescheduled pod never shows up as a signed-out user.
 package cnshttp
 
@@ -20,10 +20,10 @@ const retryDelay = 250 * time.Millisecond
 
 type clientIPKey struct{}
 
-// WithClientIP records the end user's IP on ctx. Do forwards it to CNS as
-// CF-Connecting-IP, which CNS believes only from trusted peers (the cluster
+// WithClientIP records the end user's IP on ctx. do forwards it to CNS as
+// CF-connecting-IP, which CNS believes only from trusted peers (the cluster
 // network), so its per-IP rate limits count each user instead of lumping
-// every Sendly user into the address of the Sendly pod.
+// every sendly user into the address of the sendly pod.
 func WithClientIP(ctx context.Context, ip string) context.Context {
 	if parsed := net.ParseIP(ip); parsed != nil {
 		return context.WithValue(ctx, clientIPKey{}, parsed.String())
@@ -36,7 +36,7 @@ func clientIP(ctx context.Context) string {
 	return ip
 }
 
-// Do sends the request build returns, and sends a fresh one once more when
+// do sends the request build returns, and sends a fresh one once more when
 // the first did not reach a working replica. build is called per attempt, so
 // it must create a new request (and body) each time.
 //

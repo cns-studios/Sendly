@@ -1,7 +1,7 @@
-/* ── Fonts ── */
+/* ── fonts ── */
 @import url('/static/css/fonts.css');
 
-/* ── Reset ── */
+/* ── reset ── */
 * {
     margin: 0;
     padding: 0;
@@ -63,7 +63,7 @@ body.page-index {
     100% { background-position: -200% 0; }
 }
 
-/* ── Header ── */
+/* ── header ── */
 .header-wrapper {
     position: sticky;
     top: 0;
@@ -181,7 +181,7 @@ body.page-index {
     color: #fff;
 }
 
-/* ── Account Menu (new dropdown with avatar) ── */
+/* ── account menu (new dropdown with avatar) ── */
 .account-menu-trigger {
     background: #fff !important;
     color: #1a1a1f !important;
@@ -341,14 +341,14 @@ body.page-index {
     color: #333;
 }
 
-/* ── Mobile-only elements: never rendered on desktop ── */
+/* ── mobile-only elements: never rendered on desktop ── */
 .mobile-menu-btn,
 .mobile-menu,
 .home-mobile-actions {
     display: none;
 }
 
-/* Mobile adjustments for account menu */
+/* mobile adjustments for account menu */
 @media (max-width: 768px) {
     .account-menu {
         right: 0;
@@ -372,11 +372,11 @@ body.page-index {
         flex-wrap: wrap;
     }
 
-    /* ── Bigger tap targets for the small file-row action icons ── */
+    /* ── bigger tap targets for the small file-row action icons ── */
 
 }
 
-/* ── Footer ── */
+/* ── footer ── */
 .footer {
     background-color: #E5E5E5;
     padding: 14px 40px;
@@ -398,7 +398,7 @@ body.page-index {
     opacity: 0.7;
 }
 
-/* ── Main content (base) ── */
+/* ── main content (base) ── */
 .main-content {
     flex: 1;
     position: relative;
@@ -406,7 +406,7 @@ body.page-index {
     flex-direction: column;
 }
 
-/* ── File list / entries (shared) ── */
+/* ── file list / entries (shared) ── */
 
 .progress-circle {
     display: inline-block;
@@ -443,7 +443,7 @@ body.page-index {
     text-overflow: ellipsis;
 }
 
-/* ── Buttons (quickshare) ── */
+/* ── buttons (quickshare) ── */
 .start-btn,
 .blue-btn {
     width: 117px;
@@ -472,7 +472,7 @@ body.page-index {
     pointer-events: none;
 }
 
-/* ── Code squares (quickshare) ── */
+/* ── code squares (quickshare) ── */
 .code-squares {
     display: flex;
     gap: 14px;
@@ -493,7 +493,7 @@ body.page-index {
     color: #000000;
 }
 
-/* ── People section (quickshare) ── */
+/* ── people section (quickshare) ── */
 .people-heading {
     font-family: 'Arimo', sans-serif;
     font-weight: 600;
@@ -565,7 +565,7 @@ body.page-index {
     outline-offset: 3px;
 }
 
-/* Avatars fill the circle whatever size it has on this screen. */
+/* avatars fill the circle whatever size it has on this screen. */
 .person-circle > img,
 .person-circle > span:not(.person-guest-icon) {
     width: 100% !important;
@@ -586,7 +586,7 @@ body.page-index {
     color: #8E8E93;
 }
 
-/* Quick share: host approves joiners, comparing key fingerprints */
+/* quick share: host approves joiners, comparing key fingerprints */
 .approval-requests {
     margin-top: 24px;
     margin-bottom: 16px;
@@ -684,7 +684,7 @@ body.page-index {
     color: #000000;
 }
 
-/* ── Join code squares (quickshare) ── */
+/* ── join code squares (quickshare) ── */
 .join-code-squares {
     display: flex;
     gap: 14px;
@@ -740,7 +740,7 @@ body.page-index {
     border-color: #007AFF;
 }
 
-/* ── Utility ── */
+/* ── utility ── */
 .sr-only {
     position: absolute !important;
     width: 1px;
@@ -761,7 +761,7 @@ body.page-index {
    PAGE: index.html
    ═══════════════════════════════════════════ */
 
-/* ── Index page: flat header (no pill bar) ── */
+/* ── index page: flat header (no pill bar) ── */
 body.page-index .header-wrapper {
     position: static;
     padding: 44px 76px 0;
@@ -796,7 +796,7 @@ body.page-index .login-btn {
     margin-left: auto;
 }
 
-/* ── Star background decoration ── */
+/* ── star background decoration ── */
 body.page-index .star-bg {
     position: fixed;
     bottom: 0;
@@ -824,7 +824,7 @@ body.page-index .star-reveal svg {
     display: block;
 }
 
-/* ── Header: Recent files link ── */
+/* ── header: recent files link ── */
 .recent-files-link {
     display: inline-flex;
     align-items: center;
@@ -847,7 +847,7 @@ body.page-index .star-reveal svg {
     opacity: 0.7;
 }
 
-/* ── Hero Section ── */
+/* ── hero section ── */
 body.page-index .hero-section {
     text-align: center;
     padding-top: 40px;
@@ -877,7 +877,7 @@ body.page-index .hero-subtitle {
     line-height: 1.4;
 }
 
-/* ── Action Cards ── */
+/* ── action cards ── */
 body.page-index .action-cards {
     display: flex;
     justify-content: center;
@@ -1546,7 +1546,7 @@ body.page-shared .page-shared-footer {
     margin-top: auto;
 }
 
-/* ── TOS Overlay ── */
+/* ── TOS overlay ── */
 .tos-overlay {
     position: fixed;
     inset: 0;
@@ -1647,7 +1647,7 @@ body.page-shared .page-shared-footer {
     background: #b5b5b5;
 }
 
-/* Device approval dialog */
+/* device approval dialog */
 .device-approval-title {
     margin: 0 0 12px;
     padding-right: 36px;
@@ -1740,9 +1740,9 @@ body.tos-gate-open {
 
 }
 
-/* ── Share URL card (link share) ── */
+/* ── share URL card (link share) ── */
 
-/* ── Browser Old Nudge ── */
+/* ── browser old nudge ── */
 .browser-old-nudge {
     background: #681111;
     color: #fff;
@@ -1753,7 +1753,7 @@ body.tos-gate-open {
     line-height: 1.5;
 }
 
-/* ── Toasts (toast.js) ── */
+/* ── toasts (toast.js) ── */
 .toast-stack {
     position: fixed;
     top: calc(14px + env(safe-area-inset-top, 0px));
@@ -1948,7 +1948,7 @@ body.tos-gate-open {
     from { opacity: 0; }
 }
 
-/* ── Buttons ── */
+/* ── buttons ── */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -2034,7 +2034,7 @@ body.tos-gate-open {
     color: #fff;
 }
 
-/* ── Link Page: Upload Flow ── */
+/* ── link page: upload flow ── */
 
 body.page-link .link-content-wrapper {
     width: 100%;
@@ -2058,7 +2058,7 @@ body.page-link #file-details {
     animation: slideInRight 0.3s ease;
 }
 
-/* ── Link page layout ── */
+/* ── link page layout ── */
 
 body.page-link .main-content {
     flex: 1;
@@ -2076,13 +2076,13 @@ body.page-link .link-content-wrapper {
     align-items: center;
 }
 
-/* Stage visibility */
+/* stage visibility */
 body.page-link .form-section {
     width: 100%;
     align-items: center;
 }
 
-/* Link result: no card. The link is the page; everything else is quiet and set apart by space. */
+/* link result: no card. the link is the page; everything else is quiet and set apart by space. */
 body.page-link .lr {
     width: 100%;
     max-width: 580px;
@@ -2093,7 +2093,7 @@ body.page-link .lr {
     text-align: center;
 }
 
-/* Entrance: each part rises in after the one above it. */
+/* entrance: each part rises in after the one above it. */
 body.page-link .lr > *,
 body.page-link .lr-more > * {
     animation: lrIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
@@ -2109,7 +2109,7 @@ body.page-link .lr > :nth-child(6) { animation-delay: 0.36s; }
     to { opacity: 1; transform: none; filter: blur(0); }
 }
 
-/* The file, sealed: a sheet with a check on its corner */
+/* the file, sealed: a sheet with a check on its corner */
 body.page-link .lr-seal {
     position: relative;
     display: flex;
@@ -2193,7 +2193,7 @@ body.page-link .lr-file-size {
     white-space: nowrap;
 }
 
-/* The link: one pill with the copy action inside it */
+/* the link: one pill with the copy action inside it */
 body.page-link .lr-bar {
     display: flex;
     align-items: center;
@@ -2292,7 +2292,7 @@ body.page-link .lr-copy-done { opacity: 0; transform: translateY(6px) scale(0.9)
 body.page-link .lr-copy.copied .lr-copy-default { opacity: 0; transform: translateY(-6px) scale(0.9); }
 body.page-link .lr-copy.copied .lr-copy-done { opacity: 1; transform: translateY(0) scale(1); }
 
-/* What to know about the link, as plain lines */
+/* what to know about the link, as plain lines */
 body.page-link .lr-facts {
     list-style: none;
     margin: 22px 0 0;
@@ -2319,7 +2319,7 @@ body.page-link .lr-facts svg {
     color: #9A9AA0;
 }
 
-/* Everything after the link: send, sign in, start over */
+/* everything after the link: send, sign in, start over */
 body.page-link .lr-more {
     width: 100%;
     margin-top: 72px;
@@ -2402,7 +2402,7 @@ body.page-link .lr-again:focus-visible {
     outline-offset: 2px;
 }
 
-/* Phone: the link sits on its own line above a full-width Copy; the rest follows the thumb */
+/* phone: the link sits on its own line above a full-width copy; the rest follows the thumb */
 @media (max-width: 768px) {
     body.page-link .main-content {
         padding: 36px 20px 56px;
@@ -2500,7 +2500,7 @@ body.page-link .lr-again:focus-visible {
     }
 }
 
-/* Headline & subhead */
+/* headline & subhead */
 body.page-link .headline {
     font-family: 'TASA Orbiter', sans-serif;
     font-weight: 800;
@@ -2529,7 +2529,7 @@ body.page-link .subhead {
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Card stack */
+/* card stack */
 body.page-link .card {
     width: 100%;
     background: #FFFFFF;
@@ -2553,11 +2553,11 @@ body.page-link .card:nth-of-type(2) { animation-delay: 0.38s; }
 body.page-link .card:nth-of-type(3) { animation-delay: 0.46s; }
 body.page-link .card:nth-of-type(4) { animation-delay: 0.54s; }
 
-/* File metadata row */
+/* file metadata row */
 
-/* Share link card */
+/* share link card */
 
-/* Send to user card */
+/* send to user card */
 body.page-link .send-row {
     display: flex;
     gap: 8px;
@@ -2587,8 +2587,8 @@ body.page-link .user-input:focus {
     background: #fff;
 }
 
-/* Leading slot: search icon, swapped for the recipient's avatar once one is
-   selected. Trailing slot: a single status icon for the current data-state
+/* leading slot: search icon, swapped for the recipient's avatar once one is
+   selected. trailing slot: a single status icon for the current data-state
    on .user-input-wrap (searching / found / not-found). */
 body.page-link .user-input-lead,
 body.page-link .user-input-status {
@@ -2660,8 +2660,8 @@ body.page-link .user-input-wrap[data-state="found"] .user-input { border-color: 
 body.page-link .user-input-wrap[data-state="not-found"] .user-input { border-color: #FFB3AE; }
 body.page-link .user-input:disabled { opacity: 0.6; }
 
-/* "User not found" tooltip. Anchored to the <span> wrapper, not the lucide
-   <svg>: Firefox does not render ::after generated content on SVG elements. */
+/* "user not found" tooltip. anchored to the <span> wrapper, not the lucide
+   <svg>: firefox does not render ::after generated content on SVG elements. */
 body.page-link .user-input-status-icon.is-not-found::after {
     content: attr(data-tooltip);
     position: absolute;
@@ -2692,7 +2692,7 @@ body.page-link .user-input-status-icon.is-not-found:focus-visible::after {
     transform: translateY(0);
 }
 
-/* Recent recipients: avatar tiles with the username beneath */
+/* recent recipients: avatar tiles with the username beneath */
 body.page-link .recent-recipients { margin-bottom: 14px; }
 
 body.page-link .recent-recipients-label {
@@ -2879,7 +2879,7 @@ body.page-link .sent-chip .chip-avatar { display: flex; }
 
 body.page-link .sent-chip svg { width: 12px; height: 12px; }
 
-/* Done button */
+/* done button */
 body.page-link .done-btn {
     margin-top: 24px;
     background: transparent;
@@ -2895,9 +2895,9 @@ body.page-link .done-btn {
 
 body.page-link .done-btn:hover { opacity: 0.9 !important; }
 
-/* Auth nudge card */
+/* auth nudge card */
 
-/* Responsive */
+/* responsive */
 @media (max-width: 620px) {
     .header { min-width: 0; width: 92%; }
     .quicklinks a:not(.login-btn) { display: none; }
@@ -2913,7 +2913,7 @@ body.page-link .done-btn:hover { opacity: 0.9 !important; }
     * { animation-duration: 0.01ms !important; animation-delay: 0.01ms !important; }
 }
 
-/* Send button: label swaps for a spinner while a share is in flight */
+/* send button: label swaps for a spinner while a share is in flight */
 body.page-link .send-btn {
     position: relative;
     display: flex;
@@ -3118,7 +3118,7 @@ body.page-link .lock-hint {
     color: #999;
 }
 
-/* ── Processing Container ── */
+/* ── processing container ── */
 body.page-link .processing-container {
     display: flex;
     flex-direction: column;
@@ -3192,7 +3192,7 @@ body.page-link .progress-sub {
     letter-spacing: 0.05em;
 }
 
-/* ── Quick Share: Session View ── */
+/* ── quick share: session view ── */
 
 body.page-quickshare .session-left h2 {
     font-family: 'Arimo', sans-serif;
@@ -3202,7 +3202,7 @@ body.page-quickshare .session-left h2 {
     margin-bottom: 16px;
 }
 
-/* Who is in the session, beside the dropzone. */
+/* who is in the session, beside the dropzone. */
 body.page-quickshare .session-left .people-heading {
     margin-top: 0;
 }
@@ -3213,7 +3213,7 @@ body.page-quickshare .session-people {
     gap: 24px 22px;
 }
 
-/* ── Download Activity Overlay ── */
+/* ── download activity overlay ── */
 .download-activity-overlay {
     position: fixed;
     inset: 0;
@@ -3285,7 +3285,7 @@ body.page-quickshare .session-people {
     font-weight: 400;
 }
 
-/* ── Recent Uploads ── */
+/* ── recent uploads ── */
 .recent-uploads {
     border: 1px solid #ccc;
     background: rgba(255, 255, 255, 0.85);
@@ -3441,7 +3441,7 @@ body.page-quickshare .session-people {
     cursor: not-allowed;
 }
 
-/* ── Tunnel Controls ── */
+/* ── tunnel controls ── */
 .tunnel-controls-grid {
     display: grid;
     gap: 0.8rem;
@@ -3530,7 +3530,7 @@ body.page-quickshare .session-people {
     border-radius: 6px;
 }
 
-/* ── Legal Pages ── */
+/* ── legal pages ── */
 .legal-document {
     max-width: 100%;
     margin: 0 auto;
@@ -3576,7 +3576,7 @@ body.page-quickshare .session-people {
     margin-bottom: 2rem;
 }
 
-/* ── Responsive ── */
+/* ── responsive ── */
 @media (max-width: 768px) {
     body.page-link .link-content-wrapper {
         padding: 24px 16px;
@@ -3808,7 +3808,7 @@ body.page-uploaded .shared-content-wrapper {
     font-size: 16px;
 }
 
-/* ── Account menu: transfers badge ── */
+/* ── account menu: transfers badge ── */
 .account-menu-avatar { position: relative; }
 .account-menu-dot {
     position: absolute;
@@ -3822,7 +3822,7 @@ body.page-uploaded .shared-content-wrapper {
 }
 .account-menu-dot[hidden],
 .account-menu-badge[hidden] { display: none; }
-/* Same dot on the mobile avatar button, kept inside its clipped circle. */
+/* same dot on the mobile avatar button, kept inside its clipped circle. */
 .mobile-menu-btn { position: relative; }
 .mobile-menu-btn > .account-menu-dot {
     top: 5px;
@@ -3846,7 +3846,7 @@ body.page-uploaded .shared-content-wrapper {
     flex-shrink: 0;
 }
 
-/* ── Transfers page (reuses the link page's card styles via .page-link) ── */
+/* ── transfers page (reuses the link page's card styles via .page-link) ── */
 body.page-transfers .main-content { align-items: flex-start; }
 body.page-transfers .transfers-wrapper { max-width: 620px; align-items: stretch; }
 body.page-transfers .headline,
@@ -3885,7 +3885,7 @@ body.page-transfers .transfers-count {
 }
 body.page-transfers .transfers-list .card { margin-top: 12px; }
 
-/* History direction filter (All / Received / Sent) */
+/* history direction filter (all / received / sent) */
 body.page-transfers .transfers-filter {
     margin-left: auto;
     display: inline-flex;
@@ -3919,14 +3919,41 @@ body.page-transfers .transfers-filter-btn[aria-checked="true"] {
 }
 body.page-transfers .transfers-filter-btn:focus-visible { outline: 2px solid #007AFF; outline-offset: 1px; }
 
-/* Transfer card */
+/* transfer card */
 body.page-transfers .transfer-card {
     position: relative;
     overflow: hidden;
     transition: box-shadow 0.25s ease, transform 0.25s ease, opacity 0.25s ease, height 0.28s ease, margin 0.28s ease, padding 0.28s ease;
 }
 body.page-transfers .transfer-card .file-icon { position: relative; width: 44px; height: 44px; }
-/* Direction badge on the file icon: arrow in for received, out for sent */
+body.page-transfers .transfer-card .file-row { display: flex; align-items: center; gap: 14px; }
+body.page-transfers .transfer-card .file-icon {
+    border-radius: 10px;
+    background: #F0F4FF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+body.page-transfers .transfer-card .file-icon > svg { width: 20px; height: 20px; color: #007AFF; }
+body.page-transfers .transfer-card .file-meta { min-width: 0; flex: 1; }
+body.page-transfers .transfer-card .file-meta-name {
+    font-family: 'Arimo', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+body.page-transfers .transfer-card .file-meta-sub {
+    font-family: 'Arimo', sans-serif;
+    font-size: 12.5px;
+    color: #7A7A7A;
+    margin-top: 2px;
+}
+body.page-transfers .transfer-card .file-meta-sub .dot { margin: 0 6px; opacity: 0.6; }
+/* direction badge on the file icon: arrow in for received, out for sent */
 body.page-transfers .transfer-direction {
     position: absolute;
     right: -5px;
@@ -4034,7 +4061,7 @@ body.page-transfers .transfer-status.is-declined { color: #8A8A8E; background: #
 body.page-transfers .transfer-status.is-expired { color: #A15C00; background: #FFF4E0; }
 body.page-transfers .transfer-status.is-awaiting { color: #0060D1; background: #EAF2FF; }
 
-/* Download progress: thin bar along the card's bottom edge */
+/* download progress: thin bar along the card's bottom edge */
 body.page-transfers .transfer-progress {
     position: absolute;
     left: 0;
@@ -4053,7 +4080,7 @@ body.page-transfers .transfer-progress-fill {
     transition: width 0.2s ease;
 }
 
-/* Empty / error states */
+/* empty / error states */
 body.page-transfers .transfers-empty {
     margin-top: 12px;
     padding: 28px 20px;
@@ -4088,7 +4115,7 @@ body.page-transfers .transfers-retry {
 body.page-transfers .transfers-more { display: block; margin: 16px auto 0; opacity: 1; animation: none; }
 body.page-transfers .transfers-more.hidden { display: none; }
 
-/* Device not approved notice */
+/* device not approved notice */
 body.page-transfers .transfers-notice {
     display: flex;
     align-items: center;
@@ -4110,7 +4137,7 @@ body.page-transfers .transfers-notice-link {
     text-decoration: none;
 }
 
-/* Loading skeletons */
+/* loading skeletons */
 body.page-transfers .transfer-skeleton { pointer-events: none; }
 body.page-transfers .sk {
     border-radius: 6px;
@@ -4380,8 +4407,8 @@ body.page-transfers .sk-line.medium { width: 45%; }
 }
 .uploaded-locked svg { width: 13px; height: 13px; }
 
-/* Why a file is locked. Drawn on the card, not the badge: the meta line
-   clips overflow. Same look as the "user not found" tooltip on /link. */
+/* why a file is locked. drawn on the card, not the badge: the meta line
+   clips overflow. same look as the "user not found" tooltip on /link. */
 .uploaded-card.is-locked::after {
     content: attr(data-locked-tip);
     position: absolute;
@@ -4643,7 +4670,7 @@ body.page-transfers .sk-line.medium { width: 45%; }
         overflow-x: hidden;
     }
 
-    /* ── Header: always a single row — logo, (login), menu button ── */
+    /* ── header: always a single row - logo, (login), menu button ── */
     .header-wrapper,
     body.page-shared .header-wrapper {
         padding: 12px 12px 6px;
@@ -4740,7 +4767,7 @@ body.page-transfers .sk-line.medium { width: 45%; }
         background: #E4E3E3;
     }
 
-    /* ── Menu sheet (one menu for guests and logged-in users) ── */
+    /* ── menu sheet (one menu for guests and logged-in users) ── */
     .mobile-menu.open {
         display: flex;
         flex-direction: column;
@@ -4913,12 +4940,12 @@ body.page-transfers .sk-line.medium { width: 45%; }
         color: #6E6E73;
     }
 
-    /* ── Footer: legal links only on mobile (the rest live in the menu) ── */
+    /* ── footer: legal links only on mobile (the rest live in the menu) ── */
     .footer a:not([href="/tos"]):not([href="/privacy"]) {
         display: none;
     }
 
-    /* ── Home: hero on top, the star rising from the bottom, actions on the star ── */
+    /* ── home: hero on top, the star rising from the bottom, actions on the star ── */
     body.page-index {
         min-height: 100dvh;
     }
@@ -5163,7 +5190,7 @@ body.page-transfers .sk-line.medium { width: 45%; }
     }
 }
 
-/* ── Mobile upload surfaces & QuickShare controls: sized for thumbs ── */
+/* ── mobile upload surfaces & QuickShare controls: sized for thumbs ── */
 @media (max-width: 768px) {
 
     .start-btn,
@@ -5205,10 +5232,10 @@ body.page-transfers .sk-line.medium { width: 45%; }
     }
 }
 
-/* ── Mobile dialogs ── */
+/* ── mobile dialogs ── */
 @media (max-width: 768px) {
 
-    /* ── Dialogs become bottom sheets ── */
+    /* ── dialogs become bottom sheets ── */
     .tos-overlay {
         align-items: flex-end;
         padding: 0;
@@ -5416,7 +5443,7 @@ body.page-transfers .sk-line.medium { width: 45%; }
 
 }
 
-/* smooth Quick Share expand where the browser can animate to height:auto */
+/* smooth quick share expand where the browser can animate to height:auto */
 @supports (interpolate-size: allow-keywords) {
     @media (max-width: 768px) and (prefers-reduced-motion: no-preference) {
         .home-action-group {
@@ -5435,7 +5462,7 @@ body.page-transfers .sk-line.medium { width: 45%; }
     }
 }
 
-/* ── Quick share: joiner status, declined screen, host approvals ── */
+/* ── quick share: joiner status, declined screen, host approvals ── */
 .qs-status {
     display: flex;
     margin-top: 28px;
@@ -5492,7 +5519,7 @@ body.page-quickshare .declined-view {
     align-items: flex-start;
 }
 
-/* Wide screens: approvals / the joiner's status sit in the empty space on
+/* wide screens: approvals / the joiner's status sit in the empty space on
    the right; narrower screens stack them below the people. */
 @media (min-width: 1100px) {
     body.page-quickshare .create-view.active,
@@ -5622,8 +5649,8 @@ body.page-quickshare .declined-view.active {
     }
 }
 
-/* ── Transfers: signed-out landing (web/templates/transfers-guest.html) ── */
-/* The demo cards loop every 13s (keyframes tg-*, copied from the homepage transfers promo and extended).
+/* ── transfers: signed-out landing (web/templates/transfers-guest.html) ── */
+/* the demo cards loop every 13s (keyframes tg-*, copied from the homepage transfers promo and extended).
    transfers-guest.js adds .is-playing to #tg-demo while it is on screen. */
 
 body.page-transfers-guest .main-content {
@@ -5653,7 +5680,7 @@ body.page-transfers-guest .tg-demo {
     grid-area: demo;
 }
 
-/* Staggered entrance */
+/* staggered entrance */
 body.page-transfers-guest .tg-s {
     animation: tg-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
     animation-delay: calc(var(--i) * 70ms + 80ms);
@@ -5667,7 +5694,7 @@ body.page-transfers-guest .tg-s {
     }
 }
 
-/* ── Copy ── */
+/* ── copy ── */
 body.page-transfers-guest .tg-title {
     margin: 0;
     font-family: 'TASA Orbiter', sans-serif;
@@ -5755,7 +5782,7 @@ body.page-transfers-guest .tg-cta:hover svg {
     transform: translateX(4px);
 }
 
-/* Three points under the button; the icons draw themselves in */
+/* three points under the button; the icons draw themselves in */
 body.page-transfers-guest .tg-points {
     grid-area: points;
     align-self: start;
@@ -5817,7 +5844,7 @@ body.page-transfers-guest .tg-points p {
     color: #6E6E73;
 }
 
-/* ── Demo stage ── */
+/* ── demo stage ── */
 /* transfers-guest.js sets --rx/--ry (tilt) and --px/--py (parallax) from the pointer */
 body.page-transfers-guest .tg-stage {
     position: relative;
@@ -6182,7 +6209,7 @@ body.page-transfers-guest .tg-prog i {
     transform: scaleX(0);
 }
 
-/* The cursor sits inside the button it clicks, so it lines up in every language. */
+/* the cursor sits inside the button it clicks, so it lines up in every language. */
 body.page-transfers-guest .tg-btn svg.tg-cursor {
     position: absolute;
     left: 50%;
@@ -6195,7 +6222,7 @@ body.page-transfers-guest .tg-btn svg.tg-cursor {
     z-index: 5;
 }
 
-/* Confetti when the transfer is accepted */
+/* confetti when the transfer is accepted */
 body.page-transfers-guest .tg-sparks {
     position: absolute;
     right: 46px;
@@ -6238,7 +6265,7 @@ body.page-transfers-guest .tg-sparks i:nth-child(6) { --tx: 12px; --ty: 30px; ba
     }
 }
 
-/* Floating "encrypted" chip */
+/* floating "encrypted" chip */
 body.page-transfers-guest .tg-chip {
     position: absolute;
     left: 50%;
@@ -6269,7 +6296,7 @@ body.page-transfers-guest .tg-chip svg {
     50% { transform: translateY(-8px) rotate(1.5deg); }
 }
 
-/* Step captions under the stage, synced with the card loop */
+/* step captions under the stage, synced with the card loop */
 body.page-transfers-guest .tg-steps {
     margin: 22px 6px 0;
 }
@@ -6315,7 +6342,7 @@ body.page-transfers-guest .tg-captions .tg-cap1 {
     opacity: 1;
 }
 
-/* ── Demo timing ── */
+/* ── demo timing ── */
 body.page-transfers-guest .tg-mini,
 body.page-transfers-guest .tg-mini *,
 body.page-transfers-guest .tg-bar-count,
@@ -6365,7 +6392,7 @@ body.page-transfers-guest .tg-n2 { animation-name: tg-n2; }
 body.page-transfers-guest .tg-n1 { animation-name: tg-n1; opacity: 0; }
 body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
 
-/* Cursor paths, relative to the button they click */
+/* cursor paths, relative to the button they click */
 @keyframes tg-cur1 {
     0%, 5% {
         opacity: 0;
@@ -6424,8 +6451,8 @@ body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
     }
 }
 
-/* Each step owns the stretch of the loop where its card is in front:
-   declined 0–22.4%, accepted 22.4–55.4%, sent 55.4–97% */
+/* each step owns the stretch of the loop where its card is in front:
+   declined 0-22.4%, accepted 22.4-55.4%, sent 55.4-97% */
 @keyframes tg-track1 {
     0% { transform: scaleX(0); }
     22.4% { transform: scaleX(1); }
@@ -6462,7 +6489,7 @@ body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
     98%, 100% { opacity: 0; transform: translateY(-6px); }
 }
 
-/* Pending counter: 2 → 1 (declined) → 0 (accepted) → back to 2 when the loop restarts */
+/* pending counter: 2 → 1 (declined) → 0 (accepted) → back to 2 when the loop restarts */
 @keyframes tg-bump {
     0%, 17.2%, 19.6%, 39.1%, 41.5%, 100% { transform: none; }
     18.2%, 40.1% { transform: scale(1.12); }
@@ -6828,7 +6855,7 @@ body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
     }
 }
 
-/* Big screens: give the demo more room */
+/* big screens: give the demo more room */
 @media (min-width: 1600px) {
     body.page-transfers-guest .tg-layout {
         grid-template-columns: minmax(0, 1fr) minmax(0, 620px);
@@ -6858,7 +6885,7 @@ body.page-transfers-guest .tg-n0 { animation-name: tg-n0; opacity: 0; }
     }
 }
 
-/* Sticky CTA (mobile only, shown once the main button scrolls away) */
+/* sticky CTA (mobile only, shown once the main button scrolls away) */
 body.page-transfers-guest .tg-sticky {
     display: none;
 }
@@ -7009,7 +7036,7 @@ body.page-transfers-guest .tg-sticky {
     }
 }
 
-/* Narrow phones: drop the "from"/"to" label and the check icon so the buttons fit */
+/* narrow phones: drop the "from"/"to" label and the check icon so the buttons fit */
 @media (max-width: 400px) {
     body.page-transfers-guest .tg-who-lbl,
     body.page-transfers-guest .tg-accept > svg:not(.tg-cursor) {

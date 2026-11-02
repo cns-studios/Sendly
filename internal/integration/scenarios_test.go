@@ -8,8 +8,8 @@ import (
 	"sendly/internal/models"
 )
 
-// These contract scenarios exercise the wire-level decisions that can be
-// validated without a live Postgres deployment. The handler integration
+// these contract scenarios exercise the wire-level decisions that can be
+// validated without a live postgres deployment. the handler integration
 // paths are kept explicit so missing coverage is visible rather than silently
 // treated as passing.
 type scenarioHarness struct {

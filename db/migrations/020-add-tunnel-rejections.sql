@@ -1,5 +1,5 @@
--- Joiners a quick share host declined; they can't join that session again.
--- Signed-in users are matched by account, guests by device ID (a guest who
+-- joiners a quick share host declined; they can't join that session again.
+-- signed-in users are matched by account, guests by device ID (a guest who
 -- clears their browser gets a new device ID, so this only stops casual
 -- rejoining for guests).
 CREATE TABLE IF NOT EXISTS tunnel_rejections (

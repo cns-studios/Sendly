@@ -35,7 +35,7 @@
 
     const dropZoneHost = document.getElementById('drop-zone');
     let dropZone = null;
-    // The row the dropzone shows for the file being uploaded: progress, cancel and retry go through it.
+    // the row the dropzone shows for the file being uploaded: progress, cancel and retry go through it.
     let uploadRow = null;
     let uploadSignal = null;
     const finalizeBtn = document.getElementById('finalize-btn');
@@ -134,10 +134,10 @@
         }
     }
 
-    // This page has no approval dialog: ask for approval (the server returns
-    // the pending request if there already is one) and keep a notice up. An
+    // this page has no approval dialog: ask for approval (the server returns
+    // the pending request if there already is one) and keep a notice up. an
     // account from before identity keys is approved by one of its older
-    // devices, once that device has opened Sendly and updated the account.
+    // devices, once that device has opened sendly and updated the account.
     async function requestDeviceApproval(payload) {
         const legacy = !!payload?.needs_identity_migration;
         if (!payload?.needs_enrollment && !legacy) {
@@ -172,10 +172,10 @@
             if (selectedRecipient) shareFileWithUser(selectedRecipient);
         });
         shareLinkCopy?.addEventListener('click', copyUploadedLink);
-        // One click selects the whole link, whichever way they want to copy it.
+        // one click selects the whole link, whichever way they want to copy it.
         shareAnotherFile?.addEventListener('click', resetUpload);
 
-        // Close suggestions on click outside
+        // close suggestions on click outside
         document.addEventListener('click', (e) => {
             if (shareSuggestList && !e.target.closest('.user-input-wrap')) {
                 closeSuggestions();
@@ -191,7 +191,7 @@
         return shareRecipientInput?.closest('.user-input-wrap') || null;
     }
 
-    // The input has four visual states, driven by data-state on its wrapper:
+    // the input has four visual states, driven by data-state on its wrapper:
     // idle (search icon), searching (spinner), found (check + avatar) and
     // not-found (red x with tooltip).
     function setRecipientInputState(state) {
@@ -223,7 +223,7 @@
         shareRecipientInput?.removeAttribute('aria-activedescendant');
     }
 
-    // Suggestions merge the user's recent recipients (instant, local) with
+    // suggestions merge the user's recent recipients (instant, local) with
     // server lookup results, recent ones first.
     function suggestionMatches(query) {
         const q = query.trim().toLowerCase();
@@ -338,7 +338,7 @@
             return;
         }
 
-        // Exact match among recent recipients: select immediately, no lookup.
+        // exact match among recent recipients: select immediately, no lookup.
         const recentExact = recentRecipients.find(u => u.username.toLowerCase() === query.toLowerCase());
         if (recentExact) {
             selectRecipient(recentExact);
@@ -432,7 +432,7 @@
             shareInFlight = false;
             shareRecipientSend.classList.remove('is-loading');
             shareRecipientInput.disabled = false;
-            // Keep a failed recipient selected so the user can simply retry.
+            // keep a failed recipient selected so the user can simply retry.
             shareRecipientSend.disabled = !selectedRecipient;
         }
     }
@@ -468,7 +468,7 @@
         shareSentChips.appendChild(chip);
     }
 
-    // Recent recipients render as avatar tiles (name beneath) above the
+    // recent recipients render as avatar tiles (name beneath) above the
     // search input; clicking one selects that user as the recipient.
     function renderRecentRecipients() {
         const box = document.getElementById('share-recent-recipients');
@@ -526,7 +526,7 @@
         if (ok) {
             shareLinkCopy.setAttribute('aria-label', t('share_copied'));
             shareLinkCopy.classList.add('copied');
-            // Flash the link field
+            // flash the link field
             shareLinkBar?.classList.add('flash');
             setTimeout(() => {
                 shareLinkCopy.setAttribute('aria-label', t('share_copy'));
@@ -569,8 +569,8 @@
         });
     }
 
-    // Runs the upload for a file the dropzone accepted. The dropzone has already refused files that are
-    // empty or too large. Resolves when the upload is finished; a rejection shows as a failed row with Retry.
+    // runs the upload for a file the dropzone accepted. the dropzone has already refused files that are
+    // empty or too large. resolves when the upload is finished; a rejection shows as a failed row with retry.
     function processFile(file, ctx) {
         if (isUploading || isFinalizing) return Promise.reject(new Error(t('dropzone_busy')));
         selectedFile = file;
@@ -668,7 +668,7 @@
                 { concurrency: PARALLEL_CHUNK_UPLOADS, signal }
             );
 
-            // Every chunk is up: what remains is assembly on the server, which can't be cancelled from here.
+            // every chunk is up: what remains is assembly on the server, which can't be cancelled from here.
             uploadRow?.setCancelable(false);
             const completeResponse = await completeUpload();
             await waitForAssembly(uploadSessionId);
@@ -687,7 +687,7 @@
             isUploading = false; uploadComplete = false; isFinalizing = false;
             updateFinalizeButtonState();
             if (signal?.aborted) {
-                // The user cancelled the row: drop the half-uploaded session and go quiet.
+                // the user cancelled the row: drop the half-uploaded session and go quiet.
                 const sessionToCancel = uploadSessionId;
                 uploadSessionId = null;
                 if (sessionToCancel) fetch('/api/upload/cancel', { method: 'DELETE', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') }, body: JSON.stringify({ session_id: sessionToCancel }) }).catch(() => {});
@@ -696,7 +696,7 @@
             console.error('Upload pipeline failed:', error);
             uploadError = error.message;
             SendlyToast.fail(error, t('link_upload_failed'));
-            // The dropzone row shows the failure, with Retry.
+            // the dropzone row shows the failure, with retry.
             throw error;
         }
     }
@@ -705,7 +705,7 @@
         let lastError;
         for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
             if (attempt > 0) await new Promise(r => setTimeout(r, 2000 * attempt));
-            // Cancelled: stop here, don't retry, and don't start another request.
+            // cancelled: stop here, don't retry, and don't start another request.
             if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError');
             try {
                 const formData = new FormData();
@@ -783,19 +783,19 @@
         const fullShareUrl = `${response.share_url}#${generatedPassword}`;
         uploadedFileID = response.file_id || '';
 
-        // Populate file metadata
+        // populate file metadata
         if (uploadFileName) uploadFileName.textContent = selectedFile?.name || '';
         if (uploadFileSize) uploadFileSize.textContent = SecureCrypto.formatFileSize(selectedFile?.size || 0);
         if (uploadExpiryPill) uploadExpiryPill.textContent = tpl('link_expires_in', {retention: RETENTION_LABEL});
 
-        // The link reads as address and key: the part after the # stays in the browser, so it is shown dimmed.
+        // the link reads as address and key: the part after the # stays in the browser, so it is shown dimmed.
         shareUrl = fullShareUrl;
         const hash = fullShareUrl.indexOf('#');
         const address = hash < 0 ? fullShareUrl : fullShareUrl.slice(0, hash);
         if (shareLinkMain) shareLinkMain.textContent = address.replace(/^https?:\/\//, '');
         if (shareLinkKey) shareLinkKey.textContent = hash < 0 ? '' : fullShareUrl.slice(hash);
 
-        // Refresh recent recipients so the tiles reflect the latest shares
+        // refresh recent recipients so the tiles reflect the latest shares
         if (AUTHENTICATED) loadRecentShareRecipients();
 
         uploadSessionId = null;
@@ -850,7 +850,7 @@
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;
-        // Per-file share state must not leak into the next upload.
+        // per-file share state must not leak into the next upload.
         sentRecipientIds.clear();
         shareSentChips?.replaceChildren();
         if (shareRecipientInput) {

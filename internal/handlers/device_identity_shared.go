@@ -183,8 +183,8 @@ func sharedCancelEnrollment(c *gin.Context, db services.DeviceStore) bool {
 	return true
 }
 
-// sharedRemoveApprover lets the CNS Accounts app remove its own (approver)
-// device. Other devices can't be removed this way.
+// sharedRemoveApprover lets the CNS accounts app remove its own (approver)
+// device. other devices can't be removed this way.
 func sharedRemoveApprover(c *gin.Context, db services.DeviceStore) bool {
 	user := middleware.GetCNSUser(c)
 	if user == nil {

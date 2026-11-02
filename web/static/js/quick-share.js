@@ -29,8 +29,8 @@
     let ephemeralKeyPair = null;
     let myDeviceId = '';
     let hostToken = '';
-    // Issued when joining as a guest; proves this participant on later calls.
-    // Kept in memory only: every page load joins afresh.
+    // issued when joining as a guest; proves this participant on later calls.
+    // kept in memory only: every page load joins afresh.
     let participantToken = '';
     let joinCodeInput = '';
 
@@ -47,7 +47,7 @@
     const sessionPeople = document.getElementById('sessionPeople');
     const dropZoneHost = document.getElementById('dropZone');
     let dropZone = null;
-    // Files go up one after another: each one's row waits its turn here.
+    // files go up one after another: each one's row waits its turn here.
     let uploadQueue = Promise.resolve();
     const connectedText = document.getElementById('connectedText');
     const codeSquares = document.querySelectorAll('#codeSquares .code-square');
@@ -71,7 +71,7 @@
     const startConfirmCancel = document.getElementById('start-confirm-cancel');
     const fingerprintCache = new Map();
     let approvalRenderKey = null;
-    // Join requests the host has already been told about.
+    // join requests the host has already been told about.
     const announcedRequests = new Set();
     const baseTitle = document.title;
     const pageLoading = document.getElementById('page-loading');
@@ -152,7 +152,7 @@
         return '';
     }
 
-    // Tunnel JSON carries sql.Null* values as {Int64, Valid} objects.
+    // tunnel JSON carries sql.null* values as {Int64, valid} objects.
     function extractUserID(participant) {
         if (!participant) return 0;
         const userID = participant.cns_user_id;
@@ -302,7 +302,7 @@
         return icon;
     }
 
-    // Short fingerprint of a participant's public key. The host compares it
+    // short fingerprint of a participant's public key. the host compares it
     // with the one shown on the joiner's screen before letting them in, so a
     // swapped key (by the server or anyone else) is noticed.
     function keyFingerprint(jwk) {
@@ -351,7 +351,7 @@
         return participants.filter((p) => !p.approved && !isHostParticipant(p));
     }
 
-    // Tells the host about new join requests, also in the tab title so they
+    // tells the host about new join requests, also in the tab title so they
     // are noticed while the tab is in the background.
     function announceRequests(pending) {
         pending.forEach((participant) => {
@@ -433,7 +433,7 @@
         renderJoinStatus();
     }
 
-    // The joiner's status card: waiting to be let in (with the code the host
+    // the joiner's status card: waiting to be let in (with the code the host
     // compares), then let in and waiting for the host to start.
     function renderJoinStatus() {
         if (!approvalStatus) return;
@@ -491,7 +491,7 @@
     }
 
     function renderParticipants(items) {
-        // The invite screen has its own row; once the session runs the same people show beside the dropzone.
+        // the invite screen has its own row; once the session runs the same people show beside the dropzone.
         const containers = [isHost ? peopleRow : queuePeopleRow, sessionPeople].filter(Boolean);
         if (!containers.length) return;
 
@@ -518,7 +518,7 @@
             }
 
             sorted.forEach(p => {
-                // You are marked by a blue ring, people still waiting are greyed out.
+                // you are marked by a blue ring, people still waiting are greyed out.
                 const isSelf = p === self || (!!myCurrentDeviceID && extractDeviceID(p) === myCurrentDeviceID);
                 const isPending = !p.approved && !isHostParticipant(p);
                 const name = getParticipantName(p);
@@ -547,7 +547,7 @@
         renderApprovals();
     }
 
-    // The session's files are the same for everyone in it: the server's list is what the dropzone shows
+    // the session's files are the same for everyone in it: the server's list is what the dropzone shows
     // below itself, with each file's download button.
     function renderTunnelFiles(files) {
         if (!dropZone) return;
@@ -642,7 +642,7 @@
         return null;
     }
 
-    // Downloads and decrypts one session file; onProgress gets 0..1.
+    // downloads and decrypts one session file; onProgress gets 0..1.
     async function downloadTunnelFile(fileId, fileName, onProgress) {
         const updateProgress = (pct) => {
             onProgress?.(Math.min(100, Math.max(0, pct)) / 100);
@@ -718,7 +718,7 @@
 
             const data = await res.json();
             const guestParticipants = Array.isArray(data.participants) ? data.participants : [];
-            // Only participants the host let in get the session key.
+            // only participants the host let in get the session key.
             const pending = guestParticipants.filter(p => p.approved && !p.has_envelope);
 
             if (pending.length === 0) return;
@@ -827,7 +827,7 @@
             if (response.status === 409 && !AUTHENTICATED) {
                 const conflict = await response.clone().json().catch(() => ({}));
                 if (conflict.code === 'PARTICIPANT_CONFLICT') {
-                    // This guest device already joined earlier (e.g. before a
+                    // this guest device already joined earlier (e.g. before a
                     // reload) and its participant token is gone; join as a new
                     // guest device instead.
                     resetGuestDeviceId();
@@ -869,7 +869,7 @@
         }
     }
 
-    // Asks before starting while people are still waiting to be let in.
+    // asks before starting while people are still waiting to be let in.
     function requestStart() {
         if (!activeTunnel?.id || !isHost) return;
         const waiting = pendingRequests().length;
@@ -1067,7 +1067,7 @@
         });
     }
 
-    // Uploads one file into the session. Rejects on failure so its dropzone row shows the error with Retry.
+    // uploads one file into the session. rejects on failure so its dropzone row shows the error with retry.
     async function processFileForTunnel(file, ctx) {
         if (!activeTunnel?.id) throw new Error(t('toast_upload_failed'));
 
@@ -1096,7 +1096,7 @@
             let envelopePayload = {};
 
             if (AUTHENTICATED) {
-                // Everyone in the session decrypts with the session password;
+                // everyone in the session decrypts with the session password;
                 // the uploader also keeps its own copy under its identity key.
                 if (!authIdentityKey) {
                     throw new Error(t('toast_device_quickshare_approve'));
@@ -1148,7 +1148,7 @@
                         if (attempt > 0) {
                             await new Promise(r => setTimeout(r, 2000 * attempt));
                         }
-                        // Cancelled: stop here, don't retry, and don't start another request.
+                        // cancelled: stop here, don't retry, and don't start another request.
                         if (ctx.signal.aborted) throw new DOMException('Upload cancelled', 'AbortError');
                         try {
                             const formData = new FormData();
@@ -1182,7 +1182,7 @@
                 { concurrency: PARALLEL_CHUNK_UPLOADS, signal: ctx.signal }
             );
 
-            // Every chunk is up: what remains is assembly on the server, which can't be cancelled from here.
+            // every chunk is up: what remains is assembly on the server, which can't be cancelled from here.
             ctx.row.setCancelable(false);
 
             await SendlyNet.fetch('/api/upload/complete', {
@@ -1223,14 +1223,14 @@
             const finalizeData = await finalizeRes.json();
             if (finalizeData.file_id) {
                 SecureCrypto.cacheFileKey(finalizeData.file_id, password);
-                // From here on the file is the session's: its row and its entry in the shared list are one.
+                // from here on the file is the session's: its row and its entry in the shared list are one.
                 ctx.row.adopt(finalizeData.file_id);
             }
 
             await refreshTunnelState();
         } catch (error) {
             if (ctx.signal.aborted) {
-                // The user cancelled the row: drop the half-uploaded session and go quiet.
+                // the user cancelled the row: drop the half-uploaded session and go quiet.
                 if (sessionId) {
                     fetch('/api/upload/cancel', { method: 'DELETE', headers: buildHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ session_id: sessionId }) }).catch(() => {});
                 }

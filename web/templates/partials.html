@@ -1,4 +1,4 @@
-{{/* Shared header account menu. Rendered in every page header via
+{{/* shared header account menu. rendered in every page header via
      {{template "account_menu" .}}; behaviour lives in /static/js/account-menu.js. */}}
 {{define "account_menu"}}
 {{if .authenticated}}
@@ -44,7 +44,7 @@
 {{end}}
 {{end}}
 
-{{/* Mobile header button and slide-in menu. The button goes in the header
+{{/* mobile header button and slide-in menu. the button goes in the header
      next to the account menu, the menu right after the header wrapper;
      behaviour lives in /static/js/mobile-menu.js. */}}
 {{define "mobile_menu_button"}}

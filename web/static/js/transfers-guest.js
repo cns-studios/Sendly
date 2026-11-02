@@ -1,5 +1,5 @@
-// Signed-out /transfers landing (web/templates/transfers-guest.html).
-// Runs the demo loop only while it is on screen, tilts it towards the pointer,
+// signed-out /transfers landing (web/templates/transfers-guest.html).
+// runs the demo loop only while it is on screen, tilts it towards the pointer,
 // and on phones shows a sticky sign-up button once the main one has scrolled out of view.
 (function(){
     var demo=document.getElementById('tg-demo');

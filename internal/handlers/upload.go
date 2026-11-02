@@ -192,7 +192,7 @@ func (h *UploadHandler) Finalize(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Tunnel is not active", Code: "TUNNEL_NOT_ACTIVE"})
 			return
 		}
-		// Files may only be added by the host or participants it approved.
+		// files may only be added by the host or participants it approved.
 		caller, authErr := authorizeTunnelCaller(c, h.db, tunnel)
 		if authErr != nil {
 			c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to authorize tunnel access", Code: "TUNNEL_AUTH_FAILED"})

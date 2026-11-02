@@ -9,8 +9,8 @@ import (
 	"sendly/internal/storage"
 )
 
-// Two replicas, each with its own LISTEN connection: an event published on
-// one reaches a socket connected to the other through Postgres.
+// two replicas, each with its own LISTEN connection: an event published on
+// one reaches a socket connected to the other through postgres.
 func TestLiveEventsCrossReplicasThroughPostgres(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
 		t.Skip("set SENDLY_LIVE_INTEGRATION=1 to run against live Postgres")

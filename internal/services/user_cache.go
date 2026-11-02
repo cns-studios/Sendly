@@ -13,7 +13,7 @@ import (
 )
 
 // UserCacheStore is the local persistence this service needs for the CNS
-// user cache; implemented by *storage.Postgres.
+// user cache; implemented by *storage.postgres.
 type UserCacheStore interface {
 	GetUser(ctx context.Context, cnsUserID int64) (*models.User, error)
 	RecordCNSProfile(ctx context.Context, profile models.CNSUserProfile, locked *bool) error
@@ -35,20 +35,20 @@ const (
 	reconcileJobName      = "user-cache-reconcile"
 )
 
-// UserCache keeps the local Postgres cache of CNS users (users table) in
-// step with CNS. Four things write to it:
+// UserCache keeps the local postgres cache of CNS users (users table) in
+// step with CNS. four things write to it:
 //
 //   - SyncIfStale, from request handling once a bearer token has been
 //     validated, refreshes the user's own row from GET /api/service/me when
-//     it is missing or older than cfg.UserCacheTTL. This is the only source
+//     it is missing or older than cfg.UserCacheTTL. this is the only source
 //     that knows whether the account is locked.
 //   - CNS webhooks (handlers.CNSWebhookHandler): user.updated for renames and
-//     avatar changes, user.deleted for deletions. They arrive within seconds,
-//     but only for users with a live Sendly session, and can be lost.
-//   - The reconciliation job re-checks every row against the users:read
-//     directory once per cfg.UserCacheRecheck. This catches whatever the
+//     avatar changes, user.deleted for deletions. they arrive within seconds,
+//     but only for users with a live sendly session, and can be lost.
+//   - the reconciliation job re-checks every row against the users:read
+//     directory once per cfg.UserCacheRecheck. this catches whatever the
 //     webhooks missed, including users who signed out long ago.
-//   - When CNS hasn't confirmed a row for cfg.UserCacheStaleAfter (the
+//   - when CNS hasn't confirmed a row for cfg.UserCacheStaleAfter (the
 //     directory is unreachable or the key lacks users:read), the job marks
 //     it inactive so it leaves recipient search until CNS confirms it again.
 //
@@ -73,7 +73,7 @@ func NewUserCache(cfg *config.Config, db UserCacheStore, cns *CNSClient) *UserCa
 
 // SyncIfStale refreshes the local row for cnsUserID from the user's own CNS
 // service profile if it's missing or last confirmed more than
-// cfg.UserCacheTTL ago. Best-effort: any failure is logged and swallowed so
+// cfg.UserCacheTTL ago. best-effort: any failure is logged and swallowed so
 // a CNS or DB hiccup never fails the caller's real request, which has
 // already been authenticated by the time this runs.
 func (uc *UserCache) SyncIfStale(ctx context.Context, cnsUserID int64, accessToken string) {
@@ -89,7 +89,7 @@ func (uc *UserCache) SyncIfStale(ctx context.Context, cnsUserID int64, accessTok
 	syncCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	// Taken before the request: a webhook CNS created while it was in
+	// taken before the request: a webhook CNS created while it was in
 	// flight may carry newer data and must still win.
 	observedAt := time.Now()
 	profile, err := uc.cns.GetServiceProfile(syncCtx, accessToken)
@@ -117,7 +117,7 @@ func (uc *UserCache) SyncIfStale(ctx context.Context, cnsUserID int64, accessTok
 		"status":         status,
 		"last_synced_at": time.Now().UTC().Format(time.RFC3339),
 	}); err != nil {
-		// Best-effort mirror only; Postgres is the source of truth this
+		// best-effort mirror only; postgres is the source of truth this
 		// service reads from, so a failed CNS-side write is not fatal.
 		log.Printf("user cache: failed to patch cns service data for cns_user_id=%d: %v", cnsUserID, err)
 	}
@@ -133,7 +133,7 @@ func (uc *UserCache) Stop() {
 	uc.wg.Wait()
 }
 
-// run checks every minute whether reconciliation is due. Every replica
+// run checks every minute whether reconciliation is due. every replica
 // checks, but only one runs it per cfg.UserCacheReconcileInterval.
 func (uc *UserCache) run() {
 	defer uc.wg.Done()
@@ -189,7 +189,7 @@ type DirectoryResult struct {
 	Skipped   bool // the directory isn't configured
 	Confirmed int  // rows CNS returned, profile refreshed
 	Deleted   int  // rows CNS confirmed deleted, now tombstones
-	// Missing counts rows the batch lookup didn't return. When it exceeds
+	// missing counts rows the batch lookup didn't return. when it exceeds
 	// the deletion limit nothing is deleted (MassDeletionHeld).
 	Missing          int
 	MassDeletionHeld bool
@@ -216,10 +216,10 @@ func (r DirectoryResult) log() {
 // syncedBefore against the users:read directory: found users get
 // their current profile, users CNS says are gone become tombstones. A user
 // counts as gone only when a single lookup returns CNS's not_found; the
-// batch lookup just leaves them out, which a CNS fault could also do. If
+// batch lookup just leaves them out, which a CNS fault could also do. if
 // more than maxDeletions users are missing in one pass, none are deleted
-// (a negative maxDeletions means no limit). Any CNS error ends the pass;
-// the rows it didn't reach go first next time. One pass covers at most
+// (a negative maxDeletions means no limit). any CNS error ends the pass;
+// the rows it didn't reach go first next time. one pass covers at most
 // directoryMaxBatches batches.
 func (uc *UserCache) VerifyWithDirectory(ctx context.Context, syncedBefore time.Time, maxDeletions int) DirectoryResult {
 	var result DirectoryResult

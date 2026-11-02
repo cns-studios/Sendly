@@ -15,7 +15,7 @@ import (
 	"sendly/internal/storage"
 )
 
-// The CNS Accounts app as a Sendly approver device, against the real schema:
+// the CNS accounts app as a sendly approver device, against the real schema:
 // the kind is stored once and can't be dropped, the device can withdraw its
 // own enrollment, remove itself (and only itself), and never mint or recover
 // the identity key.

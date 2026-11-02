@@ -117,7 +117,7 @@
     let activePendingEnrollment = null;
     let pendingEnrollmentBusy = false;
     let pendingEnrollmentMode = 'idle';
-    // Closed by the user, so they can use the rest of the page (log out, say). The waiting
+    // closed by the user, so they can use the rest of the page (log out, say). the waiting
     // modal stays closed until something that needs this device trusted opens it again; a
     // closed request from another device stays closed until a new one arrives.
     let waitingModalDismissed = false;
@@ -127,9 +127,9 @@
     let pendingEnrollmentRefreshTimer = null;
     let pendingEnrollmentSocketEverOpened = false;
     let isDeviceUntrusted = false;
-    // The account predates identity keys and this device can't migrate it:
+    // the account predates identity keys and this device can't migrate it:
     // it waits for approval from an older device, which migrates the account
-    // when it next opens Sendly.
+    // when it next opens sendly.
     let awaitingLegacyApproval = false;
     let initialDeviceReady = null;
     const recentFileStates = new Map();
@@ -499,7 +499,7 @@
     function showWaitingEnrollment(item, count = 1) {
         pendingEnrollmentMode = 'waiting';
         activePendingEnrollment = item;
-        // Still waiting (and finishing once approved), just not in the user's way.
+        // still waiting (and finishing once approved), just not in the user's way.
         if (waitingModalDismissed) return;
         if (!deviceApprovalTitle || !deviceApprovalMessage || !deviceApprovalMeta || !deviceApprovalModal) {
             return;
@@ -801,12 +801,12 @@
 
         const eventType = payload?.type || '';
         if (eventType === 'signed_out') {
-            // The account was disconnected from Sendly in CNS. The cookies are
+            // the account was disconnected from sendly in CNS. the cookies are
             // dead already; a reload shows the signed-out page.
             window.location.reload();
             return;
         }
-        // The same socket carries transfer events for the account menu.
+        // the same socket carries transfer events for the account menu.
         if (!eventType.startsWith('device_enrollment_')) {
             return;
         }
@@ -1286,7 +1286,7 @@
         if (!Array.isArray(items) || !items.length) {
             return;
         }
-        // Let the initial device registration finish first, otherwise every item
+        // let the initial device registration finish first, otherwise every item
         // would kick off its own registration request.
         await initialDeviceReady;
         if (isDeviceUntrusted) return;
@@ -1360,8 +1360,8 @@
         const shareUrl = item.dataset.shareUrl;
         if (!fileId || !shareUrl) return;
 
-        // Clipboard writes must happen close to the click. If the key is not cached yet,
-        // hand the clipboard a promise (Safari/Chrome) instead of awaiting network first.
+        // clipboard writes must happen close to the click. if the key is not cached yet,
+        // hand the clipboard a promise (safari/chrome) instead of awaiting network first.
         const linkPromise = getOwnedFilePassphrase(fileId).then((passphrase) => `${shareUrl}#${passphrase}`);
         let copied = false;
         if (!SecureCrypto.getCachedFileKey(fileId) && window.ClipboardItem && navigator.clipboard?.write) {
@@ -1517,7 +1517,7 @@
         return error;
     }
 
-    // Returns a file's passphrase: the signed-in owner's (or an accepted
+    // returns a file's passphrase: the signed-in owner's (or an accepted
     // transfer's) copy, opened with this device's identity key, or, for a
     // quick share guest's upload, the copy wrapped for this page's throwaway key.
     async function getOwnedFilePassphrase(fileId, tunnelId = '') {
@@ -1562,7 +1562,7 @@
             headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
         });
         if (response.status === 404) {
-            // Listed as ours, but there is no key for our identity: it was
+            // listed as ours, but there is no key for our identity: it was
             // wrapped before the account's last recovery or migration.
             throw lockedFileError();
         }

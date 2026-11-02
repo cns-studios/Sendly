@@ -51,7 +51,7 @@ func TestLiveUploadSessionLifecycle(t *testing.T) {
 	if err != nil || started.State != models.UploadStateAssembling {
 		t.Fatalf("StartAssembly = %+v, %v", started, err)
 	}
-	// Repeating complete leaves the session as it is.
+	// repeating complete leaves the session as it is.
 	again, err := db.StartAssembly(ctx, s.SessionID, time.Minute)
 	if err != nil || again.State != models.UploadStateAssembling || !again.ExpiresAt.Equal(started.ExpiresAt) {
 		t.Fatalf("repeated StartAssembly = %+v, %v", again, err)
@@ -60,7 +60,7 @@ func TestLiveUploadSessionLifecycle(t *testing.T) {
 		t.Fatalf("chunk after complete: err = %v, want ErrUploadNotAccepting", err)
 	}
 
-	// Only one replica gets the lease.
+	// only one replica gets the lease.
 	if got, err := db.ClaimAssembly(ctx, s.SessionID, "pod-a", time.Minute); err != nil || got == nil {
 		t.Fatalf("pod-a claim = %v, %v", got, err)
 	}
@@ -107,7 +107,7 @@ func TestLiveExpiredUploadSessionsAreTakenOnce(t *testing.T) {
 		pq.Array([]string{expired.SessionID, leased.SessionID})); err != nil {
 		t.Fatal(err)
 	}
-	// An assembly in progress outlives its expiry while its lease holds.
+	// an assembly in progress outlives its expiry while its lease holds.
 	if _, err := db.db.ExecContext(ctx, `UPDATE upload_sessions SET state = 'assembling', assembly_owner = 'pod-a', assembly_lease_until = NOW() + INTERVAL '1 minute' WHERE session_id = $1`, leased.SessionID); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestLiveExpiredUploadSessionsAreTakenOnce(t *testing.T) {
 		t.Fatalf("expired session lookup: err = %v, want ErrSessionNotFound", err)
 	}
 
-	// Two replicas cleaning up at once never take the same session.
+	// two replicas cleaning up at once never take the same session.
 	var mu sync.Mutex
 	taken := map[string]int{}
 	var wg sync.WaitGroup

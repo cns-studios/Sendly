@@ -22,7 +22,7 @@ const (
 	uploadPendingTTL = 10 * time.Minute
 
 	// A replica assembling an upload holds a lease on it and renews it
-	// regularly. If the replica dies, the lease runs out and another replica
+	// regularly. if the replica dies, the lease runs out and another replica
 	// resumes the assembly from the chunks, which are kept until it is done.
 	assemblyLease       = 30 * time.Second
 	assemblyRenewEvery  = 10 * time.Second
@@ -40,11 +40,11 @@ type Upload struct {
 	stopChan chan struct{}
 	wg       sync.WaitGroup
 
-	// Assemblies run under assemblyCtx so a shutdown can interrupt them.
+	// assemblies run under assemblyCtx so a shutdown can interrupt them.
 	assemblyCtx    context.Context
 	stopAssemblies context.CancelFunc
 	assemblies     sync.WaitGroup
-	// running holds the sessions this replica is assembling right now. The
+	// running holds the sessions this replica is assembling right now. the
 	// lease alone can't tell: a restarted pod keeps its name, so the lease
 	// owner matches this replica either way.
 	runningMu sync.Mutex
@@ -82,8 +82,8 @@ func NewUpload(cfg *config.Config, db *storage.Postgres, fs *storage.Filesystem,
 	}
 }
 
-// Start runs the background loops: resuming assemblies that lost their
-// replica, and removing expired upload sessions. Every replica runs both;
+// start runs the background loops: resuming assemblies that lost their
+// replica, and removing expired upload sessions. every replica runs both;
 // leases and row locks keep them from doing the same work twice.
 func (u *Upload) Start() {
 	u.wg.Add(2)
@@ -91,8 +91,8 @@ func (u *Upload) Start() {
 	go u.runLoop(time.Minute, u.cleanupExpiredSessions)
 }
 
-// Stop ends the background loops and gives running assemblies until drain
-// to finish. Whatever is still running then is interrupted and its lease
+// stop ends the background loops and gives running assemblies until drain
+// to finish. whatever is still running then is interrupted and its lease
 // released, so another replica picks it up at once.
 func (u *Upload) Stop(drain time.Duration) {
 	close(u.stopChan)
@@ -216,7 +216,7 @@ func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, 
 	}, nil
 }
 
-// UploadChunk stores one chunk. Sending a chunk again (a client retrying
+// UploadChunk stores one chunk. sending a chunk again (a client retrying
 // after a lost response, possibly to another replica) replaces it.
 func (u *Upload) UploadChunk(ctx context.Context, sessionID string, chunkIndex int, data io.Reader) error {
 
@@ -247,7 +247,7 @@ func (u *Upload) UploadChunk(ctx context.Context, sessionID string, chunkIndex i
 }
 
 // CompleteUpload starts assembling the blob in the background; the client
-// polls GetAssemblyStatus. Repeating it is harmless and returns the same
+// polls GetAssemblyStatus. repeating it is harmless and returns the same
 // answer, so a client may retry it after a lost response.
 func (u *Upload) CompleteUpload(ctx context.Context, sessionID string) (*models.UploadCompleteResponse, error) {
 
@@ -268,7 +268,7 @@ func (u *Upload) CompleteUpload(ctx context.Context, sessionID string) (*models.
 }
 
 // startAssembly assembles the session in the background if this replica can
-// take its lease. It returns at once; without the lease it does nothing.
+// take its lease. it returns at once; without the lease it does nothing.
 func (u *Upload) startAssembly(sessionID string) {
 	u.runningMu.Lock()
 	if u.running[sessionID] {
@@ -304,7 +304,7 @@ func (u *Upload) assemble(session *models.UploadSession) {
 	ctx, cancel := context.WithCancel(u.assemblyCtx)
 	defer cancel()
 
-	// Keep the lease while working; losing it means another replica has
+	// keep the lease while working; losing it means another replica has
 	// taken over, so stop.
 	go func() {
 		ticker := time.NewTicker(assemblyRenewEvery)
@@ -316,7 +316,7 @@ func (u *Upload) assemble(session *models.UploadSession) {
 			case <-ticker.C:
 				ok, err := u.db.RenewAssembly(ctx, session.SessionID, u.owner, assemblyLease)
 				if err != nil {
-					// The database may be failing over: keep going, the fenced
+					// the database may be failing over: keep going, the fenced
 					// update at the end decides whether this run counts.
 					log.Printf("Renewing assembly lease of session %s failed: %v", session.SessionID, err)
 					continue
@@ -332,7 +332,7 @@ func (u *Upload) assemble(session *models.UploadSession) {
 
 	err := u.fs.AssembleChunks(ctx, session.SessionID, session.FileID, session.TotalChunks)
 
-	// The outcome is recorded even while shutting down, so it must not use
+	// the outcome is recorded even while shutting down, so it must not use
 	// the cancelled context; retry it so a database failover is waited out.
 	record := func(what string, fn func(context.Context) error) {
 		deadline := time.Now().Add(2 * time.Minute)
@@ -364,7 +364,7 @@ func (u *Upload) assemble(session *models.UploadSession) {
 			log.Printf("Assembly complete for session %s file %s", session.SessionID, session.FileID)
 		}
 	case ctx.Err() != nil:
-		// Interrupted by shutdown or a lost lease: let another replica redo it.
+		// interrupted by shutdown or a lost lease: let another replica redo it.
 		record("lease release", func(ctx context.Context) error {
 			return u.db.ReleaseAssembly(ctx, session.SessionID, u.owner)
 		})
@@ -477,7 +477,7 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 		}
 	}
 
-	// Guests' quick share uploads keep a key wrapped for their throwaway
+	// guests' quick share uploads keep a key wrapped for their throwaway
 	// participant key; signed-in uploaders keep only their identity-wrapped one.
 	var envelope *models.FileKeyEnvelope
 	if opts != nil && opts.OwnerCNSUserID == nil && len(opts.WrappedDEK) > 0 {
@@ -523,7 +523,7 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 	}
 
 	if err := u.db.CreateFileWithEnvelope(ctx, file, envelope, identityEnvelope); err != nil {
-		// Two finalize requests of the same upload raced; the first one won.
+		// two finalize requests of the same upload raced; the first one won.
 		if existing, getErr := u.db.GetFileForAdmin(ctx, session.FileID); getErr == nil {
 			return u.finalizeResponse(existing), nil
 		}
@@ -532,7 +532,7 @@ func (u *Upload) FinalizeUploadWithOptions(ctx context.Context, sessionID, durat
 
 	u.tracker.RecordUpload(ctx, actualSize, session.UploaderIP)
 
-	// The session stays until it expires so that a repeated finalize can be
+	// the session stays until it expires so that a repeated finalize can be
 	// answered; cleanup removes it then.
 	if err := u.db.MarkUploadFinalized(ctx, sessionID); err != nil {
 		log.Printf("Warning: failed to mark session %s finalized: %v", sessionID, err)

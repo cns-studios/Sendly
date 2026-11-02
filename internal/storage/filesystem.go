@@ -61,7 +61,7 @@ func (fs *Filesystem) SaveChunk(sessionID string, chunkIndex int, data io.Reader
 		return 0, err
 	}
 
-	// Written under a temporary name and renamed into place: a replica killed
+	// written under a temporary name and renamed into place: a replica killed
 	// mid-write leaves no partial chunk_N behind, and a retried chunk simply
 	// replaces the earlier copy.
 	tmp, err := os.CreateTemp(dir, fmt.Sprintf(".chunk_%d.tmp-*", chunkIndex))
@@ -119,9 +119,9 @@ func (fs *Filesystem) DeleteChunks(sessionID string) error {
 	return os.RemoveAll(dir)
 }
 
-// AssembleChunks joins the chunks of a session into the file's blob. The blob
+// AssembleChunks joins the chunks of a session into the file's blob. the blob
 // is built under a temporary name and renamed into place, so it either exists
-// complete or not at all. The chunks are left in place: the caller deletes
+// complete or not at all. the chunks are left in place: the caller deletes
 // them once the database records the blob, so an assembly interrupted at any
 // point can be run again from the start by any replica.
 func (fs *Filesystem) AssembleChunks(ctx context.Context, sessionID, fileID string, totalChunks int) error {
@@ -230,7 +230,7 @@ func (fs *Filesystem) GetAllFileIDs() ([]string, error) {
 
 	fileIDs := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		// Dotfiles are assemblies in progress and health probes, not blobs.
+		// dotfiles are assemblies in progress and health probes, not blobs.
 		if !entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
 			fileIDs = append(fileIDs, entry.Name())
 		}
@@ -273,7 +273,7 @@ func (fs *Filesystem) GetTotalSize() (int64, error) {
 }
 
 // CleanupOrphanedChunks deletes chunk directories of sessions that are not in
-// activeSessions and were last touched more than minAge ago. The age guard
+// activeSessions and were last touched more than minAge ago. the age guard
 // covers a session created on another replica after activeSessions was read.
 func (fs *Filesystem) CleanupOrphanedChunks(activeSessions map[string]bool, minAge time.Duration) (int, error) {
 	sessionIDs, err := fs.GetAllSessionIDs()

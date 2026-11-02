@@ -1,5 +1,5 @@
--- Anonymous quick share participants are authenticated by a random secret
--- issued when they join; only its SHA-256 (hex) is stored. Signed-in
+-- anonymous quick share participants are authenticated by a random secret
+-- issued when they join; only its SHA-256 (hex) is stored. signed-in
 -- participants are authenticated by their CNS user instead and leave this
 -- NULL. A participant row can only be re-joined (e.g. to replace the key)
 -- by its owner.

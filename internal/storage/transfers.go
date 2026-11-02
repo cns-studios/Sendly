@@ -10,7 +10,7 @@ import (
 
 // CreateTransfer records a pending transfer together with the recipient's
 // key envelope (the DEK wrapped client-side for the recipient's identity
-// key). Both rows are written atomically; a file can only be transferred to
+// key). both rows are written atomically; a file can only be transferred to
 // a given recipient once, so an existing (file, recipient) pair returns
 // ErrTransferExists, even if that earlier transfer was declined.
 func (p *Postgres) CreateTransfer(ctx context.Context, transfer *models.Transfer, envelope *models.FileAccessKeyEnvelope) error {
@@ -150,9 +150,9 @@ func (p *Postgres) GetAcceptedTransfer(ctx context.Context, recipientUserID int6
 	return &transfer, nil
 }
 
-// RespondToTransfer accepts or declines a pending transfer. Declining also
+// RespondToTransfer accepts or declines a pending transfer. declining also
 // deletes the recipient's key envelope, so the server can no longer hand
-// them the wrapped DEK; the transfer row stays as history. Only the
+// them the wrapped DEK; the transfer row stays as history. only the
 // recipient can answer, and only once.
 func (p *Postgres) RespondToTransfer(ctx context.Context, recipientUserID int64, fileID string, accept bool) (*models.Transfer, error) {
 	tx, err := p.db.BeginTxx(ctx, nil)

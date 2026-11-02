@@ -1,9 +1,9 @@
-// Transfers page: files other users sent to the signed-in user, and a
+// transfers page: files other users sent to the signed-in user, and a
 // history of transfers in both directions (received and sent).
 //
-// End-to-end encryption: the server only ever returns the file key wrapped
+// end-to-end encryption: the server only ever returns the file key wrapped
 // for this user's identity key, and only after the transfer is accepted.
-// It is unwrapped here with the identity private key held on this device,
+// it is unwrapped here with the identity private key held on this device,
 // then the encrypted blob is downloaded and decrypted in the browser.
 (function () {
     'use strict';
@@ -34,13 +34,13 @@
     let historyPage = 0;
     let historyTotalPages = 0;
     let historyDirection = 'all';
-    // Bumped on every page-1 history load so a slow response for a filter
+    // bumped on every page-1 history load so a slow response for a filter
     // the user already switched away from is dropped.
     let historyRequest = 0;
     let historyReloadTimer = null;
     let device = null; // { deviceId, identityKey } once this device is ready
     const busy = new Set();
-    // Accepted transfers whose file key can no longer be unwrapped here: they
+    // accepted transfers whose file key can no longer be unwrapped here: they
     // were wrapped for an identity key this account replaced when it was
     // recovered on a device that never held the old key.
     const lockedFiles = new Set();
@@ -68,12 +68,12 @@
         return payload;
     }
 
-    // ── Notifications (toast.js) ──
+    // ── notifications (toast.js) ──
     function notify(message, type = 'success') {
         SendlyToast.show(message, { type: type === 'error' ? 'error' : 'success' });
     }
 
-    // ── Formatting ──
+    // ── formatting ──
     function relativeTime(date) {
         const seconds = (new Date(date).getTime() - Date.now()) / 1000;
         const units = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
@@ -104,7 +104,7 @@
         return i;
     }
 
-    // ── Rendering ──
+    // ── rendering ──
     function skeleton(list, count) {
         list.setAttribute('aria-busy', 'true');
         list.replaceChildren(...Array.from({ length: count }, () => {
@@ -136,7 +136,7 @@
 
     const isSent = (item) => item.direction === 'sent';
 
-    // The other party: who sent a received transfer, who got a sent one.
+    // the other party: who sent a received transfer, who got a sent one.
     function peerOf(item) {
         return isSent(item)
             ? { username: item.recipient_username, avatarURL: item.recipient_avatar_url }
@@ -147,7 +147,7 @@
         return peer.username ? `@${peer.username}` : t('transfers_unknown_user');
     }
 
-    // Sent transfers only report what the recipient did with them; the
+    // sent transfers only report what the recipient did with them; the
     // sender has no key to check or file to download here.
     function sentStatusPill(item) {
         if (item.status === 'accepted') return el('div', 'transfer-status is-accepted', t('transfers_status_accepted'));
@@ -224,7 +224,7 @@
 
         const actions = el('div', 'transfer-actions');
         if (isSent(item)) {
-            // Nothing to act on: the recipient accepts or declines.
+            // nothing to act on: the recipient accepts or declines.
         } else if (item.status === 'pending') {
             const decline = actionButton('transfer-btn is-decline', 'x', t('transfers_decline'));
             decline.title = t('transfers_decline_hint');
@@ -233,7 +233,7 @@
             accept.addEventListener('click', () => handleAccept(item, card, accept));
             actions.append(decline, accept);
         } else if (item.status === 'accepted' && item.available) {
-            // Locked files can still be reported: the recipient may have
+            // locked files can still be reported: the recipient may have
             // seen them before the account was recovered.
             if (item.reported) {
                 const reported = el('span', 'transfer-reported');
@@ -299,7 +299,7 @@
         window.lucide?.createIcons?.();
     }
 
-    // ── Loading ──
+    // ── loading ──
     async function loadPending() {
         try {
             const payload = await api(`/api/me/transfers?view=pending&per_page=50`);
@@ -336,7 +336,7 @@
         }
     }
 
-    // Collapse a card out of the pending list before re-rendering.
+    // collapse a card out of the pending list before re-rendering.
     function removeCard(card) {
         return new Promise(resolve => {
             card.style.height = `${card.offsetHeight}px`;
@@ -357,7 +357,7 @@
         window.SendlyTransfers?.refreshCount?.();
     }
 
-    // ── Actions ──
+    // ── actions ──
     async function handleAccept(item, card, button) {
         if (busy.has(item.file_id)) return;
         busy.add(item.file_id);
@@ -378,7 +378,7 @@
         }
     }
 
-    // Declining revokes the key for good, so it takes a second, confirming click.
+    // declining revokes the key for good, so it takes a second, confirming click.
     async function handleDecline(item, card, button) {
         if (busy.has(item.file_id)) return;
         if (!button.classList.contains('is-confirming')) {
@@ -411,7 +411,7 @@
         }
     }
 
-    // Register this device once, even if several callers ask at the same time.
+    // register this device once, even if several callers ask at the same time.
     let devicePromise = null;
     function ensureDevice() {
         if (device) return Promise.resolve(device);
@@ -449,14 +449,14 @@
         return error;
     }
 
-    // Unwrap the file key locally with this device's identity private key.
+    // unwrap the file key locally with this device's identity private key.
     async function fileKeyFor(item) {
         const cached = SecureCrypto.getCachedFileKey(item.file_id);
         if (cached) return cached;
         const { identityKey } = await ensureDevice();
         const access = await api(`/api/me/files/${encodeURIComponent(item.file_id)}/access`);
         if (!access.file_access_key_envelope?.wrapped_dek_b64) throw new Error(t('transfers_key_unavailable'));
-        // Sent to an identity key version from before the account's last recovery.
+        // sent to an identity key version from before the account's last recovery.
         if (access.identity_key_version !== identityKey.keyVersion) throw lockedError();
         let dek;
         try {
@@ -465,7 +465,7 @@
                 identityPrivateKeyJWK: identityKey.privateKeyJWK
             });
         } catch (_) {
-            // Wrapped for an identity key this device does not hold.
+            // wrapped for an identity key this device does not hold.
             throw lockedError();
         }
         const passphrase = new TextDecoder().decode(dek);
@@ -525,7 +525,7 @@
         }
     }
 
-    // ── Reporting (accepted transfers only; the server enforces it too) ──
+    // ── reporting (accepted transfers only; the server enforces it too) ──
     let reportTarget = null;
 
     function openReportModal(item) {
@@ -558,7 +558,7 @@
             closeReportModal();
             markReported(item);
             notify(t('transfers_report_toast'));
-            // Enough reports remove the file; pick that up.
+            // enough reports remove the file; pick that up.
             scheduleHistoryReload();
         } catch (error) {
             if (error.code === 'ALREADY_REPORTED') {
@@ -594,7 +594,7 @@
         renderHistory();
     }
 
-    // Find accepted transfers this device can no longer decrypt, so they show
+    // find accepted transfers this device can no longer decrypt, so they show
     // as locked instead of offering a download that is bound to fail.
     async function checkLockedTransfers() {
         const candidates = historyItems.filter(item => !isSent(item) && item.status === 'accepted' && item.available
@@ -615,7 +615,7 @@
         loadHistory(1);
     }
 
-    // ── History direction filter (a radio group with roving focus) ──
+    // ── history direction filter (a radio group with roving focus) ──
     function readSavedDirection() {
         try {
             const saved = localStorage.getItem(DIRECTION_STORAGE_KEY);
@@ -666,8 +666,8 @@
         });
     }
 
-    // Reload the first history page soon, e.g. after a live update. Items
-    // loaded through "Load more" are dropped; the newest activity is on top.
+    // reload the first history page soon, e.g. after a live update. items
+    // loaded through "load more" are dropped; the newest activity is on top.
     function scheduleHistoryReload() {
         clearTimeout(historyReloadTimer);
         historyReloadTimer = setTimeout(() => loadHistory(1), 250);
@@ -683,13 +683,13 @@
         refreshAll();
         historyMore.addEventListener('click', () => loadHistory(historyPage + 1));
 
-        // One of this user's sent transfers was created or answered (possibly
+        // one of this user's sent transfers was created or answered (possibly
         // from another tab or device): refresh the history if it shows sent.
         window.addEventListener('sendly:sent-transfers-updated', () => {
             if (historyDirection !== 'received') scheduleHistoryReload();
         });
 
-        // The account menu owns the live socket and re-broadcasts count
+        // the account menu owns the live socket and re-broadcasts count
         // changes; reload the pending list when a new transfer arrives.
         window.addEventListener('sendly:transfers-updated', (e) => {
             const count = e.detail?.count;

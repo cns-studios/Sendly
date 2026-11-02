@@ -1,6 +1,6 @@
-// Shared page bootstrap. Replaces the inline scripts that previously lived in
+// shared page bootstrap. replaces the inline scripts that previously lived in
 // every template so the site can run under a strict script-src 'self' CSP.
-// Must be loaded (synchronously) at the end of <body>, before app scripts, so
+// must be loaded (synchronously) at the end of <body>, before app scripts, so
 // window.CONFIG is available to them.
 (function () {
     'use strict';
@@ -63,7 +63,7 @@
         if (old) nudge.classList.remove('hidden');
     }
 
-    // Replaces the inline onerror handlers on avatar images: error events do
+    // replaces the inline onerror handlers on avatar images: error events do
     // not bubble, so listen in the capture phase.
     document.addEventListener('error', function (e) {
         var img = e.target;

@@ -9,12 +9,12 @@ import (
 	"github.com/lib/pq"
 )
 
-// Retention purges hard-delete rows in batches. Each method deletes at most
+// retention purges hard-delete rows in batches. each method deletes at most
 // batchSize rows per statement and returns how many it deleted, so callers
-// loop until it returns less than batchSize. All of them are idempotent.
+// loop until it returns less than batchSize. all of them are idempotent.
 
 // PurgeDeletedFiles hard-deletes files soft-deleted before cutoff together
-// with the rows that depend on them. Live files are never selected.
+// with the rows that depend on them. live files are never selected.
 func (p *Postgres) PurgeDeletedFiles(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -73,7 +73,7 @@ func (p *Postgres) PurgeUploadIPs(ctx context.Context, cutoff time.Time, batchSi
 }
 
 // PurgeClosedReports deletes reports created before cutoff whose file is no
-// longer live (deleted, expired or already gone). Reports on live files are
+// longer live (deleted, expired or already gone). reports on live files are
 // kept, as moderation may still be pending.
 func (p *Postgres) PurgeClosedReports(ctx context.Context, cutoff, now time.Time, batchSize int) (int64, error) {
 	res, err := p.db.ExecContext(ctx, `
@@ -95,7 +95,7 @@ func (p *Postgres) PurgeClosedReports(ctx context.Context, cutoff, now time.Time
 	return res.RowsAffected()
 }
 
-// PurgeTunnelRejections deletes rejections created before cutoff. Those of
+// PurgeTunnelRejections deletes rejections created before cutoff. those of
 // tunnels that are still open are kept, because they keep a rejected guest out.
 func (p *Postgres) PurgeTunnelRejections(ctx context.Context, cutoff, now time.Time, batchSize int) (int64, error) {
 	res, err := p.db.ExecContext(ctx, `

@@ -32,21 +32,21 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// TestLiveCNSUserSync runs Sendly's user cache against a real CNS accounts
-// service: Sendly's auth middleware and cache sync, CNS's webhook deliveries
-// to Sendly's webhook route, and the users:read directory sweep.
+// TestLiveCNSUserSync runs sendly's user cache against a real CNS accounts
+// service: sendly's auth middleware and cache sync, CNS's webhook deliveries
+// to sendly's webhook route, and the users:read directory sweep.
 //
-// It needs a local accounts-api whose "sendly" OAuth client has its webhook
+// it needs a local accounts-api whose "sendly" OAuth client has its webhook
 // pointed at http://<CNSLOCAL_WEBHOOK_ADDR>/webhooks/cns, plus:
 //
 //	CNSLOCAL_URL             accounts-api base URL
-//	CNSLOCAL_DB_DSN          its Postgres (read only, for signup codes)
+//	CNSLOCAL_DB_DSN          its postgres (read only, for signup codes)
 //	CNSLOCAL_SERVICE_KEY     service key named sendly with users:read
 //	CNSLOCAL_NOSCOPE_KEY     service key without users:read
 //	CNSLOCAL_WEBHOOK_SECRET  the sendly client's webhook secret
 //	CNSLOCAL_WEBHOOK_ADDR    host:port to listen on for webhooks
 //
-// and SENDLY_LIVE_INTEGRATION=1 with Sendly's POSTGRES_* settings.
+// and SENDLY_LIVE_INTEGRATION=1 with sendly's POSTGRES_* settings.
 func TestLiveCNSUserSync(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" || os.Getenv("CNSLOCAL_URL") == "" {
 		t.Skip("set SENDLY_LIVE_INTEGRATION=1 and CNSLOCAL_URL to run against a local CNS")
@@ -101,14 +101,14 @@ func TestLiveCNSUserSync(t *testing.T) {
 	defer server.Close()
 
 	cns := &cnsLocal{t: t, base: cfg.CNSAuthURL, db: cnsDB}
-	// The shared test database also holds made-up users from other live
-	// tests, which CNS doesn't know; the sweep may delete them all. The
+	// the shared test database also holds made-up users from other live
+	// tests, which CNS doesn't know; the sweep may delete them all. the
 	// mass-deletion limit has its own unit tests.
 	sweep := func() services.DirectoryResult { return userCache.VerifyWithDirectory(context.Background(), time.Now(), -1) }
 	ctx := context.Background()
 	const pw = "sendly sync check pw 1"
 
-	// signIn opens a Sendly session and makes one request with it, which is
+	// signIn opens a sendly session and makes one request with it, which is
 	// how the cache learns about a user.
 	signIn := func(username string) cnsTokens {
 		t.Helper()
@@ -236,8 +236,8 @@ func TestLiveCNSUserSync(t *testing.T) {
 	})
 
 	t.Run("directory sweep records deletions no webhook reported", func(t *testing.T) {
-		// Known to Sendly, but never signed in through Sendly's OAuth client,
-		// so CNS has no reason to tell Sendly about it.
+		// known to sendly, but never signed in through sendly's OAuth client,
+		// so CNS has no reason to tell sendly about it.
 		name := cns.username("e")
 		id := cns.signup(name, pw)
 		if err := db.RecordCNSProfile(ctx, models.CNSUserProfile{CNSUserID: id, Username: name, ObservedAt: time.Now().Add(-48 * time.Hour)}, nil); err != nil {
@@ -343,7 +343,7 @@ func (c *cnsLocal) signup(username, password string) int64 {
 	return id
 }
 
-// sendlyLogin runs the authorization code flow for Sendly's OAuth client.
+// sendlyLogin runs the authorization code flow for sendly's OAuth client.
 func (c *cnsLocal) sendlyLogin(username, password string) cnsTokens {
 	c.t.Helper()
 	verifierBytes := make([]byte, 32)
@@ -409,7 +409,7 @@ func (c *cnsLocal) logoutSendly(tokens cnsTokens) {
 	}
 }
 
-// sendlyRequest calls Sendly's router with a session's cookies.
+// sendlyRequest calls sendly's router with a session's cookies.
 func sendlyRequest(router http.Handler, tokens cnsTokens, path string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.AddCookie(&http.Cookie{Name: "auth_token", Value: tokens.AccessToken})

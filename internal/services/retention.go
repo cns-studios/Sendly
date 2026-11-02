@@ -10,7 +10,7 @@ import (
 
 const (
 	retentionBatchSize = 500
-	// Bounds one cycle's work; a backlog drains over the following cycles.
+	// bounds one cycle's work; a backlog drains over the following cycles.
 	retentionMaxBatches = 100
 )
 
@@ -32,7 +32,7 @@ type RetentionResult struct {
 
 // RunRetention hard-deletes rows that are past their retention period. A zero
 // period disables that purge. A failing purge is logged and the others still
-// run. Only counts are logged.
+// run. only counts are logged.
 func RunRetention(ctx context.Context, cfg *config.Config, store RetentionStore, now time.Time) RetentionResult {
 	var result RetentionResult
 

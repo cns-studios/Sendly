@@ -340,7 +340,7 @@ func TestDeviceIdentityLifecycle(t *testing.T) {
 	})
 }
 
-// An account from before identity keys must be migrated by a device holding
+// an account from before identity keys must be migrated by a device holding
 // its legacy user key; no device may create the identity key on its own.
 func TestLegacyAccountNeedsMigration(t *testing.T) {
 	ctx := context.Background()
@@ -360,14 +360,14 @@ func TestLegacyAccountNeedsMigration(t *testing.T) {
 	}
 }
 
-// Two devices of a brand-new account registering at once: only one creates
+// two devices of a brand-new account registering at once: only one creates
 // the identity key; the other has to be approved.
 func TestConcurrentFirstDevices(t *testing.T) {
 	ctx := context.Background()
 	store := newMemoryDeviceStore()
 	service := &DeviceIdentity{DB: store}
 	store.identityKeys["1:1"] = models.UserIdentityKey{CNSUserID: 1, KeyVersion: 1, Status: "active", PublicKeyJWK: json.RawMessage(`{"kty":"RSA","n":"winner","e":"AQAB"}`)}
-	// The first device's key appeared between this device's lookup and its
+	// the first device's key appeared between this device's lookup and its
 	// insert; simulate by calling the insert path directly.
 	err := store.CreateIdentityKeyWithDeviceEnvelope(ctx, &models.UserIdentityKey{CNSUserID: 1, KeyVersion: 1, Status: "active"}, &models.UserIdentityKeyDeviceEnvelope{CNSUserID: 1, DeviceID: "loser"})
 	if err == nil {
@@ -379,7 +379,7 @@ func TestConcurrentFirstDevices(t *testing.T) {
 	}
 }
 
-// The CNS Accounts app registers as an approver: it gets the identity key only
+// the CNS accounts app registers as an approver: it gets the identity key only
 // through an approval, can never create or recover it, can withdraw its own
 // enrollment and remove itself, and can't remove other devices.
 func TestApproverDevice(t *testing.T) {

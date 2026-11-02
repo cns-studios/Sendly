@@ -71,7 +71,7 @@ func (r *StatsReporter) Stop() {
 	r.wg.Wait()
 }
 
-// run checks regularly whether a report is due. Every replica checks, but
+// run checks regularly whether a report is due. every replica checks, but
 // only one reports per StatsReportInterval.
 func (r *StatsReporter) run() {
 	defer r.wg.Done()

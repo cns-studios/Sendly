@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-// SetAccountLocale stores the language a signed-in user picked on Sendly as
+// SetAccountLocale stores the language a signed-in user picked on sendly as
 // their CNS account language (PUT /api/me/locale), so every CNS service and
 // email follows it. CNS only accepts this from first-party apps; for any other
 // client it answers 403, and the caller just keeps the language locally.

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Transfer statuses. A transfer starts pending; the recipient accepts it
+// transfer statuses. A transfer starts pending; the recipient accepts it
 // (which unlocks their key envelope) or declines it (which deletes it).
 const (
 	TransferStatusPending  = "pending"
@@ -13,14 +13,14 @@ const (
 	TransferStatusDeclined = "declined"
 )
 
-// Transfer directions, relative to the user listing their transfers.
+// transfer directions, relative to the user listing their transfers.
 const (
 	TransferDirectionAll      = "all"
 	TransferDirectionReceived = "received"
 	TransferDirectionSent     = "sent"
 )
 
-// Transfer is one user-to-user send of a file (file_transfers). It carries
+// transfer is one user-to-user send of a file (file_transfers). it carries
 // no key material: the recipient's wrapped DEK lives in
 // file_access_key_envelopes with access_kind = 'share'.
 type Transfer struct {
@@ -53,7 +53,7 @@ type TransferListItem struct {
 	RecipientUserID    int64        `db:"recipient_user_id" json:"recipient_user_id"`
 	RecipientUsername  string       `db:"recipient_username" json:"recipient_username"`
 	RecipientAvatarURL string       `db:"recipient_avatar_url" json:"recipient_avatar_url"`
-	// Reported is true when the listing user has reported this file.
+	// reported is true when the listing user has reported this file.
 	Reported bool `db:"reported" json:"reported"`
 }
 

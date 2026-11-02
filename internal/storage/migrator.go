@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// migrationLockKey is the Postgres advisory lock held while migrating.
+// migrationLockKey is the postgres advisory lock held while migrating.
 const migrationLockKey int64 = 0x53454e444c59 // "SENDLY"
 
 type migrationFile struct {
@@ -28,7 +28,7 @@ func (p *Postgres) RunMigrations(ctx context.Context, migrationDir string) error
 		return fmt.Errorf("migration directory is required")
 	}
 
-	// Serialize concurrent runners (several instances starting at once, or
+	// serialize concurrent runners (several instances starting at once, or
 	// parallel test packages): without the lock both see a migration as
 	// pending and the second fails on the schema_migrations primary key.
 	conn, err := p.db.Connx(ctx)

@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// Types for migrating accounts from the legacy AES user key to identity keys.
-// Remove together with the identity migration (handlers/identity_migration.go).
+// types for migrating accounts from the legacy AES user key to identity keys.
+// remove together with the identity migration (handlers/identity_migration.go).
 
 // LegacyIdentityEscrow is an account's identity private key, encrypted in the
 // browser with the account's legacy user key (AES-GCM).
@@ -73,7 +73,7 @@ type LegacyFileKeyItem struct {
 
 type LegacyFileKeysResponse struct {
 	Items []LegacyFileKeyItem `json:"items"`
-	// Remaining counts the files still to migrate after this page.
+	// remaining counts the files still to migrate after this page.
 	Remaining int `json:"remaining"`
 }
 

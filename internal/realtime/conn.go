@@ -10,7 +10,7 @@ import (
 
 const (
 	writeWait = 10 * time.Second
-	// Pings keep idle sockets alive through proxies (Cloudflare closes them
+	// pings keep idle sockets alive through proxies (cloudflare closes them
 	// after 100 seconds of silence) and expose dead peers.
 	pingEvery = 25 * time.Second
 	pongWait  = 60 * time.Second
@@ -20,7 +20,7 @@ const (
 	maxRead    = 64 << 10
 )
 
-// Conn is one client socket. All writes go through its own goroutine, so
+// conn is one client socket. all writes go through its own goroutine, so
 // events, snapshots and pings never interleave on the wire.
 type Conn struct {
 	ws       *websocket.Conn
@@ -52,7 +52,7 @@ func (c *Conn) send(data []byte) {
 	case c.out <- data:
 	case <-c.done:
 	default:
-		// The client isn't reading; drop it rather than block everyone else.
+		// the client isn't reading; drop it rather than block everyone else.
 		c.closeWith(websocket.ClosePolicyViolation, "too slow")
 	}
 }

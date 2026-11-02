@@ -211,8 +211,8 @@ func TestLiveAuthenticatedOwnerUploadAccessAndRecentListing(t *testing.T) {
 		t.Fatalf("identity-wrapped DEK failed to decrypt uploaded file: err=%v plaintext=%q", err, decrypted)
 	}
 
-	// The account has an identity key, so any further device, web or
-	// Android, has to be approved by a device holding it.
+	// the account has an identity key, so any further device, web or
+	// android, has to be approved by a device holding it.
 	register := func(deviceID string) []byte {
 		body, _ := json.Marshal(models.DeviceRegisterRequest{
 			DeviceID: deviceID, DeviceLabel: deviceID,
@@ -302,7 +302,7 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	}
 	guestHeaders := map[string]string{"X-Device-ID": guestDevice, "X-Participant-Token": joined.ParticipantToken}
 
-	// Someone else re-joining with the guest's (visible) device ID must not
+	// someone else re-joining with the guest's (visible) device ID must not
 	// be able to replace its public key.
 	hijackBody, _ := json.Marshal(models.TunnelJoinRequest{
 		Code: started.Tunnel.Code, DeviceID: guestDevice,
@@ -312,7 +312,7 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("join with another participant's device ID status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	// Non-members get nothing: tunnel state, envelopes, or leaving for others.
+	// non-members get nothing: tunnel state, envelopes, or leaving for others.
 	outsider := map[string]string{"X-Device-ID": guestDevice}
 	for _, probe := range []struct{ method, path string }{
 		{http.MethodGet, "/api/me/tunnels/" + started.Tunnel.ID},
@@ -329,7 +329,7 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 		t.Fatalf("member tunnel state status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	confirmBody, _ := json.Marshal(models.TunnelConfirmRequest{DeviceID: "00000000-0000-4000-8000-000000000011"})
-	// The host's device ID is visible to participants; it must not be
+	// the host's device ID is visible to participants; it must not be
 	// enough to act as the host without the host token.
 	rec = request(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json")
 	if rec.Code != http.StatusForbidden {
@@ -350,13 +350,13 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("guest confirm without participant token status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	// Only the host starts a quick share.
+	// only the host starts a quick share.
 	rec = requestWithHeaders(router, http.MethodPost, "/api/me/tunnels/"+started.Tunnel.ID+"/confirm", confirmBody, "application/json", guestHeaders)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("guest joiner confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// The guest joined but is not approved yet: no key envelope may be
+	// the guest joined but is not approved yet: no key envelope may be
 	// pushed for it and it cannot see the tunnel's files.
 	envelopeBody, _ := json.Marshal(models.TunnelPushEnvelopeRequest{
 		ParticipantDeviceID: guestDevice, WrappedDEKB64: base64.StdEncoding.EncodeToString([]byte("session-key")),
@@ -452,9 +452,9 @@ func TestLiveUnauthenticatedTunnelGuestUploadAccessAndExpiration(t *testing.T) {
 	}
 }
 
-// Signed-in quick share participants keep only their own identity-wrapped
+// signed-in quick share participants keep only their own identity-wrapped
 // copy of an upload's key; everyone in the session decrypts with the host's
-// session password. Any approved signed-in participant may upload, not just
+// session password. any approved signed-in participant may upload, not just
 // the host and the first joiner.
 func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
@@ -551,7 +551,7 @@ func TestLiveSignedInTunnelUploadsKeepOnlyTheOwnerIdentityKey(t *testing.T) {
 		t.Fatalf("confirm status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// Any approved participant may upload, not only the first joiner.
+	// any approved participant may upload, not only the first joiner.
 	initBody, _ := json.Marshal(models.UploadInitRequest{FileName: "session.txt", FileSize: 5, TotalChunks: 1, ChunkSize: 5, TunnelID: started.Tunnel.ID})
 	rec = requestAs(router, second, http.MethodPost, "/api/upload/init", initBody, "application/json")
 	if rec.Code != http.StatusOK {

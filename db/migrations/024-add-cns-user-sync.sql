@@ -1,14 +1,14 @@
--- Keeps the CNS user cache current from CNS webhooks and the users:read
+-- keeps the CNS user cache current from CNS webhooks and the users:read
 -- directory, instead of only when a user signs in again.
 --
--- status gains 'deleted': CNS confirmed the account is gone. It is final:
+-- status gains 'deleted': CNS confirmed the account is gone. it is final:
 -- username and avatar are erased, and no later sync, webhook or directory
--- answer brings the row back. The row stays as a tombstone so an event that
+-- answer brings the row back. the row stays as a tombstone so an event that
 -- arrives out of order can't recreate the user.
 --
 -- inactive_reason says why a row is inactive: 'locked' (CNS reported the
 -- account locked) or 'stale' (not confirmed against CNS for
--- USER_CACHE_STALE_AFTER_DAYS). Only 'stale' rows come back on their own
+-- USER_CACHE_STALE_AFTER_DAYS). only 'stale' rows come back on their own
 -- when the directory or a webhook confirms the account still exists.
 --
 -- profile_observed_at is when the cached username and avatar were true on
@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_users_lower_username ON users (LOWER(username));
 CREATE INDEX IF NOT EXISTS idx_users_last_synced_live ON users (last_synced_at)
     WHERE status <> 'deleted';
 
--- Webhook event ids already applied. CNS retries a delivery for about a day
+-- webhook event ids already applied. CNS retries a delivery for about a day
 -- and keeps the event id across retries, so ids are kept for a week.
 CREATE TABLE IF NOT EXISTS cns_webhook_events (
     event_id TEXT PRIMARY KEY,

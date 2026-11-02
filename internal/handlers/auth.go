@@ -112,7 +112,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
-	// Set cookie domain to allow subdomains when not localhost
+	// set cookie domain to allow subdomains when not localhost
 	cookieDomain := authCookieDomain(h.cfg)
 
 	c.SetSameSite(http.SameSiteLaxMode)
@@ -130,7 +130,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	val.Add("code_challenge_method", "S256")
 	val.Add("state", state)
 	val.Add("scope", "openid profile")
-	// The CNS login page opens in the language the visitor is already reading.
+	// the CNS login page opens in the language the visitor is already reading.
 	val.Add("ui_locales", middleware.GetLocale(c))
 
 	c.Redirect(http.StatusFound, authURL+"?"+val.Encode())
@@ -143,7 +143,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 
 	isSecure := strings.HasPrefix(h.cfg.BaseURL, "https")
 
-	// Set cookie domain to allow subdomains when not localhost
+	// set cookie domain to allow subdomains when not localhost
 	cookieDomain := authCookieDomain(h.cfg)
 
 	if authErr != "" {
@@ -193,7 +193,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	c.SetCookie("pkce_verifier", "", -1, "/", cookieDomain, isSecure, true)
 	c.SetCookie("pkce_state", "", -1, "/", cookieDomain, isSecure, true)
 
-	// Clear any existing auth cookies before setting new ones to prevent session fixation
+	// clear any existing auth cookies before setting new ones to prevent session fixation
 	c.SetCookie("auth_token", "", -1, "/", cookieDomain, isSecure, true)
 	c.SetCookie("refresh_token", "", -1, "/", cookieDomain, isSecure, true)
 	c.SetCookie("auth_expires_at", "", -1, "/", cookieDomain, isSecure, true)
@@ -220,7 +220,7 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 	if result.RefreshToken != "" {
 		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
-	// The account's language takes over after sign-in. Without one, CNS
+	// the account's language takes over after sign-in. without one, CNS
 	// stores the language the login page was shown in.
 	middleware.ApplyAccountLocale(c, result.IDToken)
 
@@ -228,9 +228,9 @@ func (h *AuthHandler) Callback(c *gin.Context) {
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// Best-effort call to CNS Auth to revoke the refresh token family server-side.
-	// This ensures the session is fully invalidated, not just the local cookies cleared.
-	// If CNS Auth is unreachable or returns an error, we log it but still proceed with
+	// best-effort call to CNS auth to revoke the refresh token family server-side.
+	// this ensures the session is fully invalidated, not just the local cookies cleared.
+	// if CNS auth is unreachable or returns an error, we log it but still proceed with
 	// local logout so the user is never blocked from logging out.
 	if base := h.cfg.CNSAPIBaseURL(); base != "" {
 		authToken, err := c.Cookie("auth_token")
@@ -238,7 +238,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 			defer cancel()
 
-			// Logout always answers 204, so repeating it is harmless.
+			// logout always answers 204, so repeating it is harmless.
 			resp, err := cnshttp.Do(ctx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/api/auth/logout", nil)
 				if err != nil {
@@ -246,7 +246,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 				}
 				req.Header.Set("Authorization", "Bearer "+authToken)
 				req.Header.Set("Content-Type", "application/json")
-				// Include client_id if configured (for proper token revocation scoping)
+				// include client_id if configured (for proper token revocation scoping)
 				if h.cfg.CNSAuthClientID != "" {
 					q := req.URL.Query()
 					q.Set("client_id", h.cfg.CNSAuthClientID)
@@ -255,7 +255,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 				return req, nil
 			})
 			if err != nil {
-				// Log but don't block local logout
+				// log but don't block local logout
 				fmt.Printf("CNS Auth logout call failed: %v\n", err)
 			} else {
 				resp.Body.Close()
@@ -266,7 +266,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		}
 	}
 
-	// Clear both host-only and domain-scoped cookies regardless of upstream outcome.
+	// clear both host-only and domain-scoped cookies regardless of upstream outcome.
 	clearAuthCookies(c, h.cfg)
 	c.Redirect(http.StatusFound, "/")
 }
@@ -288,7 +288,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	result, err := middleware.RefreshAccessToken(ctx, h.cfg, refreshToken)
 	if err != nil {
-		// Clear the dead refresh token so the browser stops presenting it,
+		// clear the dead refresh token so the browser stops presenting it,
 		// but only when the auth server confirms it is invalid (401/403) and
 		// not for transient upstream failures.
 		if middleware.IsDeadTokenError(err) {
@@ -308,7 +308,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if result.RefreshToken != "" {
 		c.SetCookie("refresh_token", result.RefreshToken, 3600*24*30, "/", cookieDomain, isSecure, true)
 	}
-	// A language change made elsewhere reaches Sendly with the next refresh.
+	// A language change made elsewhere reaches sendly with the next refresh.
 	middleware.ApplyAccountLocale(c, result.IDToken)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -327,7 +327,7 @@ func generateChallenge(verifier string) string {
 }
 
 func (h *AuthHandler) exchangeToken(parent context.Context, code, verifier, clientID, redirectURI, state string) (*tokenExchangeResult, error) {
-	// Detached from the request so a client hanging up mid-exchange does not
+	// detached from the request so a client hanging up mid-exchange does not
 	// waste the one-time code, but keeping its values (the user's IP).
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 10*time.Second)
 	defer cancel()
@@ -369,7 +369,7 @@ func (h *AuthHandler) exchangeToken(parent context.Context, code, verifier, clie
 }
 
 func doTokenRequest(ctx context.Context, tokenURL, contentType string, body []byte) (*tokenExchangeResult, int, string, error) {
-	// Repeating is harmless: the code is single-use, so a repeat of an
+	// repeating is harmless: the code is single-use, so a repeat of an
 	// exchange CNS already did fails just as the lost answer would have.
 	resp, err := cnshttp.Do(ctx, http.DefaultClient, true, func(ctx context.Context) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
@@ -386,7 +386,7 @@ func doTokenRequest(ctx context.Context, tokenURL, contentType string, body []by
 	}
 	defer resp.Body.Close()
 
-	// Room for the ID token next to the access and refresh tokens.
+	// room for the ID token next to the access and refresh tokens.
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
 	rawBody := strings.TrimSpace(string(raw))
 

@@ -12,16 +12,16 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// The local CNS user cache. Three sources write to it: the user's own
+// the local CNS user cache. three sources write to it: the user's own
 // service profile (UserCache.SyncIfStale), the users:read directory (the
-// reconciliation job) and CNS webhooks. All of them go through
+// reconciliation job) and CNS webhooks. all of them go through
 // recordProfile and markDeleted, which keep these rules:
 //
 //   - A profile observed earlier never overwrites one observed later, so a
 //     late or reordered webhook can't roll a rename back.
-//   - Deletion is final. The username and avatar are erased and the row stays
+//   - deletion is final. the username and avatar are erased and the row stays
 //     as a tombstone, so nothing recreates the user afterwards.
-//   - CNS keeps usernames unique among live accounts. When one row takes a
+//   - CNS keeps usernames unique among live accounts. when one row takes a
 //     name, any other active row still holding it is out of date (renamed or
 //     deleted), so it leaves search and goes first in the re-check queue.
 
@@ -53,7 +53,7 @@ func (p *Postgres) RecordCNSProfile(ctx context.Context, profile models.CNSUserP
 }
 
 // MarkUserDeleted records that CNS deleted the account and erases what this
-// service cached about it. It reports whether the row was newly deleted.
+// service cached about it. it reports whether the row was newly deleted.
 func (p *Postgres) MarkUserDeleted(ctx context.Context, cnsUserID int64) (bool, error) {
 	var deleted bool
 	err := p.inTx(ctx, func(tx *sqlx.Tx) error {
@@ -64,7 +64,7 @@ func (p *Postgres) MarkUserDeleted(ctx context.Context, cnsUserID int64) (bool, 
 	return deleted, err
 }
 
-// ApplyCNSUserUpdated applies a user.updated webhook once per event id. It
+// ApplyCNSUserUpdated applies a user.updated webhook once per event id. it
 // reports false for an event id that was already applied.
 func (p *Postgres) ApplyCNSUserUpdated(ctx context.Context, eventID string, profile models.CNSUserProfile) (bool, error) {
 	return p.applyWebhookEvent(ctx, eventID, "user.updated", func(tx *sqlx.Tx) error {
@@ -72,7 +72,7 @@ func (p *Postgres) ApplyCNSUserUpdated(ctx context.Context, eventID string, prof
 	})
 }
 
-// ApplyCNSUserDeleted applies a user.deleted webhook once per event id. It
+// ApplyCNSUserDeleted applies a user.deleted webhook once per event id. it
 // reports false for an event id that was already applied.
 func (p *Postgres) ApplyCNSUserDeleted(ctx context.Context, eventID string, cnsUserID int64) (bool, error) {
 	return p.applyWebhookEvent(ctx, eventID, "user.deleted", func(tx *sqlx.Tx) error {
@@ -122,7 +122,7 @@ type UserSyncCursor struct {
 
 // ListUsersToVerify returns users that are not deleted and were last
 // confirmed against CNS before syncedBefore, least recently confirmed first,
-// starting after cursor. Paging by cursor instead of offset means a row that
+// starting after cursor. paging by cursor instead of offset means a row that
 // fails to verify doesn't come back again in the same pass.
 func (p *Postgres) ListUsersToVerify(ctx context.Context, syncedBefore time.Time, after UserSyncCursor, limit int) ([]models.User, error) {
 	users := []models.User{}
@@ -156,7 +156,7 @@ func (p *Postgres) SearchUsersByUsername(ctx context.Context, query string, limi
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
 // DeactivateStaleUsers marks active users inactive ('stale') if CNS hasn't
-// confirmed them since staleBefore. With the directory working every row is
+// confirmed them since staleBefore. with the directory working every row is
 // re-confirmed daily, so this only bites when CNS can't be reached; the row
 // comes back as soon as CNS confirms the account again.
 func (p *Postgres) DeactivateStaleUsers(ctx context.Context, staleBefore time.Time) (int64, error) {
@@ -219,7 +219,7 @@ func lockOrCreateUser(ctx context.Context, tx *sqlx.Tx, cnsUserID int64, next fu
 	} else if n == 1 {
 		return &row, true, nil
 	}
-	// Another writer inserted the row first; work on theirs.
+	// another writer inserted the row first; work on theirs.
 	cur, err = lockUser(ctx, tx, cnsUserID)
 	if err == nil && cur == nil {
 		err = errors.New("user row vanished during upsert")
@@ -295,7 +295,7 @@ func markDeleted(ctx context.Context, tx *sqlx.Tx, cnsUserID int64, now time.Tim
 			return false, err
 		}
 	}
-	// Files keep a copy of the owner's username for display.
+	// files keep a copy of the owner's username for display.
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE files SET owner_cns_username = NULL
 		WHERE owner_cns_user_id = $1 AND owner_cns_username IS NOT NULL`, cnsUserID); err != nil {
@@ -305,7 +305,7 @@ func markDeleted(ctx context.Context, tx *sqlx.Tx, cnsUserID int64, now time.Tim
 }
 
 // NextUserState is cur after taking in profile at now. cur is nil for a user
-// this service hasn't seen. The caller must not apply it to a deleted row.
+// this service hasn't seen. the caller must not apply it to a deleted row.
 func NextUserState(cur *models.User, profile models.CNSUserProfile, locked *bool, now time.Time) models.User {
 	// CNS confirmed the account existed at the time of the observation; a
 	// clock ahead of ours doesn't get to confirm the future.

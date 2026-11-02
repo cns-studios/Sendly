@@ -1,11 +1,11 @@
-// Toast notifications shared by every page: short messages that slide in at
+// toast notifications shared by every page: short messages that slide in at
 // the top, stack, close on their own, and can be closed with the button or
 // swiped away.
 //
-// Errors go through SendlyToast.fail(error, text): a message that is already
+// errors go through SendlyToast.fail(error, text): a message that is already
 // meant for people (one of the translated strings, or a known server error
 // code) is shown as is; anything technical becomes the short text plus a
-// reference like "#4823", with the details in the console. The reference is
+// reference like "#4823", with the details in the console. the reference is
 // derived from the error, so the same problem always shows the same number.
 const SendlyToast = (function () {
     'use strict';
@@ -15,7 +15,7 @@ const SendlyToast = (function () {
     const DURATION = { info: 4000, success: 3000, error: 6000 };
     const SWIPE_DISTANCE = 70;
 
-    // Server error codes with a plain-language message.
+    // server error codes with a plain-language message.
     const CODE_MESSAGES = {
         RATE_LIMITED: 'toast_rate_limited',
         DOWNLOAD_RATE_LIMITED: 'toast_rate_limited',
@@ -84,7 +84,7 @@ const SendlyToast = (function () {
         ref.hidden = !entry.ref;
     }
 
-    // ── Timing: paused while hovered, focused or held ──
+    // ── timing: paused while hovered, focused or held ──
     function schedule(entry) {
         clearTimeout(entry.timer);
         const timer = entry.el.querySelector('.toast-timer');
@@ -117,7 +117,7 @@ const SendlyToast = (function () {
         entry.timer = setTimeout(() => dismiss(entry), entry.remaining);
     }
 
-    // ── Swipe to dismiss: sideways or up ──
+    // ── swipe to dismiss: sideways or up ──
     function enableSwipe(entry, el) {
         let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false, pointerId = null, startedAt = 0;
 
@@ -174,7 +174,7 @@ const SendlyToast = (function () {
             el.style.transform = '';
             el.style.opacity = '';
         }
-        // Let the stack close the gap once the toast has slid out.
+        // let the stack close the gap once the toast has slid out.
         el.style.setProperty('--toast-h', `${el.offsetHeight}px`);
         el.style.maxHeight = `${el.offsetHeight}px`;
         el.classList.add('is-leaving', `leave-${direction}`);
@@ -189,7 +189,7 @@ const SendlyToast = (function () {
         const duration = options.duration ?? DURATION[type];
         const container = ensureStack();
 
-        // The same message again (or the same id) refreshes the visible toast.
+        // the same message again (or the same id) refreshes the visible toast.
         const existing = toasts.find((entry) => (options.id && entry.id === options.id)
             || (!options.id && entry.message === message && entry.type === type));
         if (existing) {
@@ -228,7 +228,7 @@ const SendlyToast = (function () {
         };
     }
 
-    // ── Errors ──
+    // ── errors ──
     function isPeopleFacing(message) {
         const strings = window.CONFIG?.t;
         if (!message || !strings) return false;
@@ -268,14 +268,14 @@ const SendlyToast = (function () {
         return show(described.message, { type: 'error', ref: described.ref });
     }
 
-    // An Error carrying the server's error code, for fail() to recognise.
+    // an error carrying the server's error code, for fail() to recognise.
     function apiError(payload, fallback) {
         const error = new Error(payload?.error || fallback || 'Request failed');
         if (payload?.code) error.code = payload.code;
         return error;
     }
 
-    // An Error whose message is meant for people and is shown as is.
+    // an error whose message is meant for people and is shown as is.
     function userError(message) {
         const error = new Error(message);
         error.friendly = true;

@@ -32,15 +32,15 @@ type CNSWebhookStore interface {
 	ApplyCNSUserDeleted(ctx context.Context, eventID string, cnsUserID int64) (bool, error)
 }
 
-// CNSSignOutNotifier tells a user's open Sendly pages, on every replica, that
+// CNSSignOutNotifier tells a user's open sendly pages, on every replica, that
 // their session ended, so they leave the signed-in view without waiting for
 // their next request.
 type CNSSignOutNotifier interface {
 	SignedOut(ctx context.Context, cnsUserID int64)
 }
 
-// CNSWebhookHandler receives CNS account events for Sendly's OAuth client
-// (docs: accounts-api INTEGRATION.md, "react to account changes"). Any 2xx
+// CNSWebhookHandler receives CNS account events for sendly's OAuth client
+// (docs: accounts-api INTEGRATION.md, "react to account changes"). any 2xx
 // tells CNS the event is handled; anything else is retried with backoff for
 // about a day, so a failure to apply answers 5xx.
 type CNSWebhookHandler struct {
@@ -50,7 +50,7 @@ type CNSWebhookHandler struct {
 	now     func() time.Time
 }
 
-// SetSignOutNotifier enables reacting to app.disconnected. Without one the
+// SetSignOutNotifier enables reacting to app.disconnected. without one the
 // event is acknowledged and nothing else happens: CNS has already revoked
 // the user's tokens, so their next request is signed out anyway.
 func (h *CNSWebhookHandler) SetSignOutNotifier(n CNSSignOutNotifier) { h.signOut = n }
@@ -92,8 +92,8 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	// Only the body is signed, so the event id comes from there and not from
-	// the CNS-Webhook-Id header.
+	// only the body is signed, so the event id comes from there and not from
+	// the CNS-webhook-id header.
 	var event cnsWebhookEvent
 	if err := json.Unmarshal(body, &event); err != nil || strings.TrimSpace(event.ID) == "" || event.Type == "" {
 		h.reject(c, event, "malformed event")
@@ -144,7 +144,7 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 			return
 		}
 		// CNS revoked the tokens before sending this, so every cookie the user
-		// holds is already dead. All that is left is their open pages.
+		// holds is already dead. all that is left is their open pages.
 		if h.signOut != nil {
 			h.signOut.SignedOut(ctx, data.UserID)
 		}
@@ -152,7 +152,7 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 	case "ping":
 		log.Printf("cns webhook: ping %s received", event.ID)
 	default:
-		// New event types are not an error: acknowledge so CNS stops retrying.
+		// new event types are not an error: acknowledge so CNS stops retrying.
 	}
 	if err != nil {
 		log.Printf("cns webhook: applying %s %s failed: %v", event.Type, event.ID, err)
@@ -162,14 +162,14 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// reject answers a correctly signed event this handler can't use. It is
+// reject answers a correctly signed event this handler can't use. it is
 // still a 4xx so the delivery shows as failed in CNS's delivery log.
 func (h *CNSWebhookHandler) reject(c *gin.Context, event cnsWebhookEvent, reason string) {
 	log.Printf("cns webhook: rejected event %q (%s): %s", event.ID, event.Type, reason)
 	c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Malformed event", Code: "INVALID_EVENT"})
 }
 
-// verify checks CNS-Webhook-Signature ("v1=" + hex HMAC-SHA256 of
+// verify checks CNS-webhook-signature ("v1=" + hex HMAC-SHA256 of
 // timestamp + "." + body) against every configured secret, and that the
 // timestamp is recent.
 func (h *CNSWebhookHandler) verify(timestamp, signature string, body []byte) bool {

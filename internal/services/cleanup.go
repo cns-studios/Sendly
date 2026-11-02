@@ -45,7 +45,7 @@ func (c *Cleanup) Stop() {
 	c.wg.Wait()
 }
 
-// run checks every minute whether cleanup is due. Every replica checks, but
+// run checks every minute whether cleanup is due. every replica checks, but
 // only one runs it per cleanupInterval.
 func (c *Cleanup) run() {
 	defer c.wg.Done()
@@ -158,7 +158,7 @@ func (c *Cleanup) cleanupOrphanedChunks(ctx context.Context) (int, error) {
 // cleanupOrphanedFiles deletes blobs that neither a file row nor an upload
 // session (assembled, waiting for finalize) refers to.
 func (c *Cleanup) cleanupOrphanedFiles(ctx context.Context) (int, error) {
-	// Sessions are read before the directory, so a blob assembled in
+	// sessions are read before the directory, so a blob assembled in
 	// between still has its session in the list.
 	_, sessionFiles, err := c.db.UploadSessionRefs(ctx)
 	if err != nil {

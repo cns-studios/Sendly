@@ -52,14 +52,14 @@ type UserDevice struct {
 	CreatedAt    time.Time       `db:"created_at" json:"created_at"`
 	LastSeenAt   time.Time       `db:"last_seen_at" json:"last_seen_at"`
 	RevokedAt    sql.NullTime    `db:"revoked_at" json:"-"`
-	// Kind is DeviceKindStandard or DeviceKindApprover (the CNS Accounts app).
+	// kind is DeviceKindStandard or DeviceKindApprover (the CNS accounts app).
 	Kind string `db:"kind" json:"kind"`
 }
 
 const (
 	DeviceKindStandard = "standard"
-	// DeviceKindApprover is the CNS Accounts app: it only approves new
-	// devices. It can't set up or recover the identity key and may remove
+	// DeviceKindApprover is the CNS accounts app: it only approves new
+	// devices. it can't set up or recover the identity key and may remove
 	// itself.
 	DeviceKindApprover = "approver"
 )
@@ -191,7 +191,7 @@ type Report struct {
 	TransferID sql.NullString `db:"transfer_id" json:"-"`
 }
 
-// Upload session states; see db/migrations/023-add-shared-runtime-state.sql.
+// upload session states; see db/migrations/023-add-shared-runtime-state.sql.
 const (
 	UploadStateUploading  = "uploading"
 	UploadStateAssembling = "assembling"
@@ -256,7 +256,7 @@ type UploadFinalizeRequest struct {
 	DEKWrapAlg      string `json:"dek_wrap_alg"`
 	DEKWrapNonceB64 string `json:"dek_wrap_nonce_b64"`
 	DEKWrapVersion  int    `json:"dek_wrap_version"`
-	// Identity* is the uploader's own copy of the file key, wrapped with
+	// identity* is the uploader's own copy of the file key, wrapped with
 	// their identity public key; required for signed-in uploads.
 	IdentityWrappedDEKB64   string `json:"identity_wrapped_dek_b64"`
 	IdentityDEKWrapAlg      string `json:"identity_dek_wrap_alg"`

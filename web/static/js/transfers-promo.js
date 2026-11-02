@@ -1,5 +1,5 @@
-// Transfers announcement card on the homepage. Markup: web/templates/transfers-promo.html,
-// styles: web/static/css/transfers-promo.css. Delete all three (and the template call in
+// transfers announcement card on the homepage. markup: web/templates/transfers-promo.html,
+// styles: web/static/css/transfers-promo.css. delete all three (and the template call in
 // index.html plus the transfers_promo_* i18n keys) to remove it.
 (function(){
     var card=document.getElementById('transfers-promo');

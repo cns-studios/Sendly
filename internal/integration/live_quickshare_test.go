@@ -22,9 +22,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Declining the first joiner used to clear the tunnel's single "peer" slot,
+// declining the first joiner used to clear the tunnel's single "peer" slot,
 // so starting the session never made it active and everyone else stayed on
-// the waiting screen. Now the host's Start activates it, and the declined
+// the waiting screen. now the host's start activates it, and the declined
 // joiner is told so and can't come back.
 func TestLiveDeclinedJoinerDoesNotBlockTheSession(t *testing.T) {
 	if os.Getenv("SENDLY_LIVE_INTEGRATION") != "1" {
@@ -95,7 +95,7 @@ func TestLiveDeclinedJoinerDoesNotBlockTheSession(t *testing.T) {
 			t.Fatalf("join status=%d %v", code, out)
 		}
 	}
-	// Signed-in participants are shown by their cached username and avatar.
+	// signed-in participants are shown by their cached username and avatar.
 	if err := db.RecordCNSProfile(context.Background(), models.CNSUserProfile{
 		CNSUserID: int64(accepted), Username: fmt.Sprintf("accepted-%d", accepted),
 		AvatarURL: "https://example.com/a.png", ObservedAt: time.Now(),

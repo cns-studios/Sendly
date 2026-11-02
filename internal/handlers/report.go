@@ -42,7 +42,7 @@ func (h *ReportHandler) Report(c *gin.Context) {
 }
 
 // ReportTransfer lets the recipient of an accepted transfer report its file.
-// It goes through the same checks, de-duplication and auto-delete threshold
+// it goes through the same checks, de-duplication and auto-delete threshold
 // as a link-share report, and records which transfer it came from.
 func (h *ReportHandler) ReportTransfer(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
@@ -155,7 +155,7 @@ func (h *ReportHandler) reportFile(c *gin.Context, fileID string, transfer *mode
 		println("Failed to send Discord notification:", err.Error())
 	}
 
-	// Only distinct signed-in reporters count towards automatic deletion;
+	// only distinct signed-in reporters count towards automatic deletion;
 	// anonymous reports are recorded and forwarded to moderation, but on
 	// their own must not let an unauthenticated client delete any file.
 	signedInReporters, err := h.db.CountSignedInReporters(c.Request.Context(), fileID)

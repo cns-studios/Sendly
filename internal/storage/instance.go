@@ -9,8 +9,8 @@ import (
 )
 
 // instanceMarkerName is the file in DATA_DIR (and a separate CHUNK_DIR) that
-// records which database owns the directory. Orphan cleanup deletes every
-// blob and chunk session its own database and Redis don't know about, so two
+// records which database owns the directory. orphan cleanup deletes every
+// blob and chunk session its own database and redis don't know about, so two
 // instances sharing storage would silently delete each other's files.
 const instanceMarkerName = ".sendly-instance"
 
@@ -20,7 +20,7 @@ type guardedDir struct {
 }
 
 // ClaimStorage ties the storage directories to the database identified by
-// instanceID. An unmarked directory is claimed if it holds no data yet; one
+// instanceID. an unmarked directory is claimed if it holds no data yet; one
 // that already holds data is claimed only with adopt, the explicit one-time
 // switch for deployments that predate the marker. A directory marked by a
 // different database is always an error.
@@ -34,7 +34,7 @@ func (fs *Filesystem) ClaimStorage(instanceID string, adopt bool) error {
 }
 
 // VerifyStorage checks that the storage directories are already claimed by
-// instanceID, without claiming anything. For tools that delete files but must
+// instanceID, without claiming anything. for tools that delete files but must
 // never take ownership of storage themselves, such as the admin CLI.
 func (fs *Filesystem) VerifyStorage(instanceID string) error {
 	for _, d := range fs.guardedDirs() {
@@ -93,7 +93,7 @@ func claimDir(d guardedDir, instanceID string, adopt bool) error {
 
 	if err := writeInstanceMarker(d.path, instanceID); err != nil {
 		if os.IsExist(err) {
-			// Another instance claimed it between our read and write.
+			// another instance claimed it between our read and write.
 			return claimDir(d, instanceID, false)
 		}
 		return fmt.Errorf("failed to write instance marker in %s: %w", d.path, err)

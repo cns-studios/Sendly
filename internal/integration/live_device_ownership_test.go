@@ -54,7 +54,7 @@ func TestLiveDeviceIDCannotMoveBetweenAccounts(t *testing.T) {
 	if err := db.CreateOrUpdateUserDevice(ctx, device(owner, "owner")); err != nil {
 		t.Fatal(err)
 	}
-	// The owner may re-register its own device (e.g. after a revocation).
+	// the owner may re-register its own device (e.g. after a revocation).
 	if err := db.CreateOrUpdateUserDevice(ctx, device(owner, "owner-rotated")); err != nil {
 		t.Fatalf("owner re-registration failed: %v", err)
 	}

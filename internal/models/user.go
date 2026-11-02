@@ -8,19 +8,19 @@ import (
 const (
 	UserStatusActive   = "active"
 	UserStatusInactive = "inactive"
-	// UserStatusDeleted means CNS confirmed the account is gone. It is final:
+	// UserStatusDeleted means CNS confirmed the account is gone. it is final:
 	// the profile is erased and nothing brings the row back.
 	UserStatusDeleted = "deleted"
 
-	// Why a row is inactive. Only stale rows come back on their own when CNS
+	// why a row is inactive. only stale rows come back on their own when CNS
 	// confirms the account still exists; a locked one waits for the user's
 	// next request.
 	InactiveReasonLocked = "locked"
 	InactiveReasonStale  = "stale"
 )
 
-// User is this service's local cache of a CNS-provisioned identity: which
-// CNS users are known here, plus the profile fields Sendly actually renders
+// user is this service's local cache of a CNS-provisioned identity: which
+// CNS users are known here, plus the profile fields sendly actually renders
 // (username, avatar) so pages don't round-trip to CNS to display them.
 type User struct {
 	CNSUserID         int64          `db:"cns_user_id" json:"cns_user_id"`

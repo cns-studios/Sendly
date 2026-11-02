@@ -13,7 +13,7 @@ import (
 )
 
 // RateLimitStore keeps request counters that every replica shares;
-// implemented by *storage.Postgres.
+// implemented by *storage.postgres.
 type RateLimitStore interface {
 	CheckRateLimit(ctx context.Context, key string, maxRequests int64, window time.Duration) (bool, error)
 }

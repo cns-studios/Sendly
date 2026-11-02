@@ -55,7 +55,7 @@ func (h *PageHandler) renderStatus(c *gin.Context, status int, templateName stri
 		data["description"] = translations["desc_index"]
 	}
 	baseURL := strings.TrimSuffix(h.cfg.BaseURL, "/")
-	// Matches the hreflang targets: English lives on the bare path, German on ?lang=de.
+	// matches the hreflang targets: english lives on the bare path, german on ?lang=de.
 	data["canonicalURL"] = baseURL + c.Request.URL.Path
 	if c.Query("lang") == "de" {
 		data["canonicalURL"] = baseURL + c.Request.URL.Path + "?lang=de"
@@ -93,7 +93,7 @@ func (h *PageHandler) Index(c *gin.Context) {
 	if h.cfg.CNSAuthURL != "" {
 		authLoginURL = "/auth/login"
 	}
-	// Build account URL from CNS Auth base URL
+	// build account URL from CNS auth base URL
 	accountURL := ""
 	if h.cfg.CNSAuthURL != "" {
 		accountURL = strings.TrimSuffix(h.cfg.CNSAuthURL, "/") + "/dashboard"
@@ -579,7 +579,7 @@ func userIDOrZero(user *middleware.CNSUser) int {
 	return user.ID
 }
 
-// Transfers renders the transfers page for a signed-in user. Anonymous visitors
+// transfers renders the transfers page for a signed-in user. anonymous visitors
 // get a landing page that demos the feature and asks them to sign up.
 func (h *PageHandler) Transfers(c *gin.Context) {
 	user := middleware.GetCNSUser(c)

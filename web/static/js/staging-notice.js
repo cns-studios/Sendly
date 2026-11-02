@@ -1,14 +1,14 @@
 /*
- * Staging notice: a floating warning shown on every host except production.
- * Dismissing it is remembered in this browser, so it never comes back.
- * Self-contained (injects its own styles), no dependencies.
+ * staging notice: a floating warning shown on every host except production.
+ * dismissing it is remembered in this browser, so it never comes back.
+ * self-contained (injects its own styles), no dependencies.
  */
 (function () {
   'use strict';
 
-  // The production domain: this host and all of its subdomains are "live".
+  // the production domain: this host and all of its subdomains are "live".
   var PRODUCTION_DOMAIN = 'sendly.zip';
-  // Where people on a pre-release copy should go instead.
+  // where people on a pre-release copy should go instead.
   var STABLE_URL = 'https://sendly.zip';
   var DISMISSED_KEY = 'cns_staging_notice_dismissed';
 
@@ -33,13 +33,13 @@
     }
   };
 
-  /** True on the production domain and any of its subdomains; everything else is pre-release. */
+  /** true on the production domain and any of its subdomains; everything else is pre-release. */
   function isProductionHost(hostname) {
     var host = String(hostname || '').toLowerCase().replace(/\.$/, '');
     return host === PRODUCTION_DOMAIN || host.slice(-(PRODUCTION_DOMAIN.length + 1)) === '.' + PRODUCTION_DOMAIN;
   }
 
-  // Loaded by the unit tests under Node: expose the host check and stop there.
+  // loaded by the unit tests under node: expose the host check and stop there.
   if (typeof document === 'undefined') {
     if (typeof module !== 'undefined' && module.exports) module.exports = { isProductionHost: isProductionHost };
     return;
@@ -49,7 +49,7 @@
     try {
       return window.localStorage.getItem(DISMISSED_KEY) !== null;
     } catch (e) {
-      return false; // Storage blocked: still warn, rather than hide the warning.
+      return false; // storage blocked: still warn, rather than hide the warning.
     }
   }
 
@@ -57,7 +57,7 @@
     try {
       window.localStorage.setItem(DISMISSED_KEY, new Date().toISOString());
     } catch (e) {
-      /* Can't remember it; it will show again next time. */
+      /* can't remember it; it will show again next time. */
     }
   }
 
@@ -181,7 +181,7 @@
       style.remove();
       window.removeEventListener('storage', onStorage);
     }
-    // Dismissed in another tab or window of this site: hide it here too.
+    // dismissed in another tab or window of this site: hide it here too.
     function onStorage(event) {
       if (event.key === DISMISSED_KEY || event.key === null) {
         if (isDismissed()) close();

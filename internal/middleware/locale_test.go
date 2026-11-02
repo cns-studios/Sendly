@@ -77,7 +77,7 @@ func newCtx(url string, headers map[string]string) (*gin.Context, *httptest.Resp
 }
 
 func TestDetectLocalePrecedence(t *testing.T) {
-	// ?lang= beats the cookie and Accept-Language, and is remembered.
+	// ?lang= beats the cookie and accept-language, and is remembered.
 	c, rec := newCtx("/?lang=de", map[string]string{"Cookie": "lang=en", "Accept-Language": "en"})
 	if got := detectLocale(c); got != "de" {
 		t.Errorf("query: got %q", got)
@@ -85,12 +85,12 @@ func TestDetectLocalePrecedence(t *testing.T) {
 	if !strings.Contains(rec.Header().Get("Set-Cookie"), "lang=de") {
 		t.Errorf("query choice not remembered: %q", rec.Header().Get("Set-Cookie"))
 	}
-	// The cookie beats Accept-Language.
+	// the cookie beats accept-language.
 	c, _ = newCtx("/", map[string]string{"Cookie": "lang=en", "Accept-Language": "de"})
 	if got := detectLocale(c); got != "en" {
 		t.Errorf("cookie: got %q", got)
 	}
-	// Accept-Language with q-values, not just a "de" prefix.
+	// accept-language with q-values, not just a "de" prefix.
 	c, _ = newCtx("/", map[string]string{"Accept-Language": "fr,de;q=0.8"})
 	if got := detectLocale(c); got != "de" {
 		t.Errorf("accept-language: got %q", got)
@@ -111,7 +111,7 @@ func TestApplyAccountLocale(t *testing.T) {
 		t.Errorf("request locale = %q, want de", GetLocale(c))
 	}
 
-	// No usable claim: whatever the visitor chose stays.
+	// no usable claim: whatever the visitor chose stays.
 	c, rec = newCtx("/", nil)
 	ApplyAccountLocale(c, idToken(`{"sub":"1"}`))
 	ApplyAccountLocale(c, "")
@@ -143,7 +143,7 @@ func TestChoosingALanguageWhileSignedInIsReported(t *testing.T) {
 	if c := <-got; c.token != "tok" || c.locale != "de" {
 		t.Errorf("reported %+v", c)
 	}
-	// Signed out, or no explicit choice: nothing to save.
+	// signed out, or no explicit choice: nothing to save.
 	do("/?lang=de", "")
 	do("/", "auth_token=tok; lang=de")
 	do("/?lang=fr", "auth_token=tok")

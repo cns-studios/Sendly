@@ -43,7 +43,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Commands like delete and cleanup remove blobs, so never run against
+	// commands like delete and cleanup remove blobs, so never run against
 	// storage owned by a different database.
 	instanceID, err := db.GetInstanceID(ctx)
 	if err != nil {
@@ -540,7 +540,7 @@ func forceCleanup(ctx context.Context, cfg *config.Config, db *storage.Postgres,
 	fmt.Printf("Deleted %d file blobs\n", deletedBlobs)
 
 	 
-	// Chunks of uploads in progress (on any replica) must survive this.
+	// chunks of uploads in progress (on any replica) must survive this.
 	activeSessions, _, err := db.UploadSessionRefs(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing upload sessions: %v\n", err)

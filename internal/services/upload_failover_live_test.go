@@ -13,7 +13,7 @@ import (
 	"sendly/internal/storage"
 )
 
-// Two replicas share one database and one volume. The replica assembling an
+// two replicas share one database and one volume. the replica assembling an
 // upload dies; the other one resumes it, and retried requests from the client
 // (chunk, complete, finalize) get the same answers as the first attempt.
 func TestLiveUploadSurvivesReplicaLoss(t *testing.T) {
@@ -46,7 +46,7 @@ func TestLiveUploadSurvivesReplicaLoss(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Chunks land on either replica; one is sent twice after a lost response.
+	// chunks land on either replica; one is sent twice after a lost response.
 	for i, chunk := range chunks {
 		pod := podA
 		if i%2 == 1 {
@@ -72,7 +72,7 @@ func TestLiveUploadSurvivesReplicaLoss(t *testing.T) {
 		t.Fatalf("status while pod-a holds the lease = %q, want pending", status)
 	}
 
-	// The client retries complete against pod-b: same answer, no second assembly.
+	// the client retries complete against pod-b: same answer, no second assembly.
 	if _, err := podB.CompleteUpload(ctx, init.SessionID); err != nil {
 		t.Fatalf("repeated complete: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestLiveUploadSurvivesReplicaLoss(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The finalize response was lost; the client asks pod-b again.
+	// the finalize response was lost; the client asks pod-b again.
 	second, err := podB.FinalizeUpload(ctx, init.SessionID, models.Duration24Hours)
 	if err != nil {
 		t.Fatalf("repeated finalize: %v", err)

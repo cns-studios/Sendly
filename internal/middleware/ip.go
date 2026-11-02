@@ -49,7 +49,7 @@ func (m *IPMiddleware) getClientIP(c *gin.Context) string {
 		}
 	}
 
-	// gin only honors X-Forwarded-For / X-Real-IP from the trusted proxies
+	// gin only honors X-forwarded-for / X-real-IP from the trusted proxies
 	// configured on the router (see SetTrustedProxies in main).
 	ip := c.ClientIP()
 	if ip == "" {

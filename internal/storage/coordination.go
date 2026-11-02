@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Coordination between replicas: shared rate limit counters, short-lived
+// coordination between replicas: shared rate limit counters, short-lived
 // token refresh results, and periodic jobs that must run once per interval
 // across the whole deployment rather than once per replica.
 
@@ -41,8 +41,8 @@ func (p *Postgres) PurgeRateLimitCounters(ctx context.Context, olderThan time.Du
 }
 
 // SharedRefresh runs refresh at most once per tokenID across all replicas
-// within ttl. Callers presenting the same token wait on an advisory lock;
-// whoever comes second gets the sealed result the first one stored. The
+// within ttl. callers presenting the same token wait on an advisory lock;
+// whoever comes second gets the sealed result the first one stored. the
 // lock is held across refresh, so refresh must be bounded by ctx.
 func (p *Postgres) SharedRefresh(ctx context.Context, tokenID []byte, ttl time.Duration, refresh func() ([]byte, error)) (sealed []byte, cached bool, err error) {
 	tx, err := p.db.BeginTxx(ctx, nil)
@@ -87,8 +87,8 @@ func (p *Postgres) PurgeTokenRefreshResults(ctx context.Context) (int64, error) 
 }
 
 // RunJob runs fn if no replica has started the job named name within the
-// last interval, and no replica is running it right now. It reports whether
-// fn ran. The claim is recorded before fn starts, so a replica that dies
+// last interval, and no replica is running it right now. it reports whether
+// fn ran. the claim is recorded before fn starts, so a replica that dies
 // halfway leaves the next run to whichever replica comes after interval.
 func (p *Postgres) RunJob(ctx context.Context, name string, interval time.Duration, fn func(context.Context)) (bool, error) {
 	conn, err := p.db.Connx(ctx)
@@ -132,7 +132,7 @@ func lockKey(id []byte) int64 {
 	return int64(h.Sum64())
 }
 
-// Notify sends payload to every session listening on channel, which is how
+// notify sends payload to every session listening on channel, which is how
 // replicas pass realtime events to each other.
 func (p *Postgres) Notify(ctx context.Context, channel, payload string) error {
 	_, err := p.db.ExecContext(ctx, `SELECT pg_notify($1, $2)`, channel, payload)

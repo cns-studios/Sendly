@@ -7,10 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ContentSecurityPolicy builds the CSP sent with every response. All scripts,
-// fonts and stylesheets must be served from our own origin. Inline style
+// ContentSecurityPolicy builds the CSP sent with every response. all scripts,
+// fonts and stylesheets must be served from our own origin. inline style
 // attributes are still used by the templates, hence 'unsafe-inline' for styles
-// only; scripts never allow inline code. Avatars are served by the CNS
+// only; scripts never allow inline code. avatars are served by the CNS
 // identity provider, so images may come from any https host.
 func ContentSecurityPolicy(baseURL string) string {
 	connect := []string{"'self'", "blob:"}
@@ -38,7 +38,7 @@ func ContentSecurityPolicy(baseURL string) string {
 	return strings.Join(directives, "; ")
 }
 
-// SecurityHeaders sets the Content-Security-Policy header on every response.
+// SecurityHeaders sets the content-security-policy header on every response.
 func SecurityHeaders(baseURL string) gin.HandlerFunc {
 	policy := ContentSecurityPolicy(baseURL)
 	return func(c *gin.Context) {

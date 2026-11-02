@@ -1,8 +1,8 @@
-// Moves accounts from before identity keys onto them. Temporary: remove this
+// moves accounts from before identity keys onto them. temporary: remove this
 // file, its script tags and the SendlyIdentityMigration hooks in crypto.js
 // together with handlers/identity_migration.go once every account is migrated.
 //
-// Everything happens in the browser; the server only stores wrapped keys. A
+// everything happens in the browser; the server only stores wrapped keys. A
 // device holding the account's legacy AES user key
 //  - creates the identity key if the account has none yet, storing it
 //    encrypted with the user key (the escrow) for the account's other legacy
@@ -25,7 +25,7 @@ const SendlyIdentityMigration = (function () {
         return fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
     }
 
-    // The legacy user key: this browser's stored copy, or this device's
+    // the legacy user key: this browser's stored copy, or this device's
     // server-side copy opened with the device key.
     async function legacyUserKey(userId, identity, headers) {
         const stored = SecureCrypto.getLegacyUserKeyRaw(userId);
@@ -55,8 +55,8 @@ const SendlyIdentityMigration = (function () {
         };
     }
 
-    // Gives this legacy device a copy of the account's identity key, creating
-    // the key if the account has none yet. Returns true if the device should
+    // gives this legacy device a copy of the account's identity key, creating
+    // the key if the account has none yet. returns true if the device should
     // register again (to pick the key up, or to adopt one created meanwhile).
     async function obtainIdentityKey({ userId, identity, payload, headers }) {
         if (!payload?.needs_identity_migration && !payload?.needs_enrollment) return false;
@@ -94,7 +94,7 @@ const SendlyIdentityMigration = (function () {
         } catch (_) {
             return false;
         }
-        // Only adopt a key that belongs to the account's active public key.
+        // only adopt a key that belongs to the account's active public key.
         const active = payload.identity_public_key;
         if (!active || active.key_version !== escrow.identity_key_version || !SecureCrypto.isSameRsaKey(privateKeyJWK, active.public_key_jwk)) {
             return false;
@@ -115,8 +115,8 @@ const SendlyIdentityMigration = (function () {
         });
     }
 
-    // Re-wraps the account's files from the legacy user key to the identity
-    // key, page by page, showing progress. Runs once per page load. Files this
+    // re-wraps the account's files from the legacy user key to the identity
+    // key, page by page, showing progress. runs once per page load. files this
     // device can't open (wrapped with another user key) stay locked and come
     // back on every run, so notices only count files that were migrated.
     async function migrateFiles({ userId, identity, identityKey, headers }) {
@@ -143,7 +143,7 @@ const SendlyIdentityMigration = (function () {
                         identity_dek_wrap_alg: 'RSA-OAEP-2048-v1'
                     });
                 } catch (error) {
-                    // Wrapped with another user key (e.g. a stale one); leave it locked.
+                    // wrapped with another user key (e.g. a stale one); leave it locked.
                     console.warn('Could not migrate file', item.file_id, error);
                 }
             }

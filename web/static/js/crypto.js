@@ -113,7 +113,7 @@ const SecureCrypto = (function() {
         return `${DEVICE_STORAGE_KEY}_u${userId}`;
     }
 
-    // The browser-wide identity is used unless this account already got its
+    // the browser-wide identity is used unless this account already got its
     // own one because the browser-wide device id belongs to another account
     // (see registerAuthenticatedDevice).
     async function getOrCreateDeviceIdentity(userId = 0) {
@@ -165,7 +165,7 @@ const SecureCrypto = (function() {
         return `${IDENTITY_KEY_PREFIX}${userId || 'guest'}`;
     }
 
-    // Stores the account's current identity key. Private keys of earlier
+    // stores the account's current identity key. private keys of earlier
     // versions are kept under `retired`: after a recovery they are the only
     // way to re-wrap files and transfers sent to those versions.
     function saveIdentityKey(userId, keyData) {
@@ -304,7 +304,7 @@ const SecureCrypto = (function() {
         };
     }
 
-    // Opens a file key envelope: a raw key (guest share links), or one wrapped
+    // opens a file key envelope: a raw key (guest share links), or one wrapped
     // with RSA-OAEP for a quick share guest's throwaway key or for the user's
     // identity key.
     async function unwrapFileDEK(envelope, {
@@ -333,10 +333,10 @@ const SecureCrypto = (function() {
         return rsaOaepEncrypt(dekBytes, identityPublicKeyJWK);
     }
 
-    // ── Legacy user key (read-only) ──
-    // Before identity keys, each account had one AES "user key" that wrapped
-    // its file keys. Nothing is wrapped with it anymore; it is only read to
-    // migrate an account's files to its identity key. Remove with the
+    // ── legacy user key (read-only) ──
+    // before identity keys, each account had one AES "user key" that wrapped
+    // its file keys. nothing is wrapped with it anymore; it is only read to
+    // migrate an account's files to its identity key. remove with the
     // identity migration.
     function getLegacyUserKeyRaw(userId) {
         const value = localStorage.getItem(`${USER_KEY_PREFIX}${userId || 'guest'}`);
@@ -349,8 +349,8 @@ const SecureCrypto = (function() {
         return new Uint8Array(raw);
     }
 
-    // Registers this browser as a device of the signed-in account and returns
-    // the account's identity key if this device holds a copy of it. The
+    // registers this browser as a device of the signed-in account and returns
+    // the account's identity key if this device holds a copy of it. the
     // server's copy is authoritative. A new identity keypair is only generated
     // when the server asks for one (a brand-new account) or on recovery,
     // which replaces the account's identity key with a new version.
@@ -393,8 +393,8 @@ const SecureCrypto = (function() {
             if (response.status === 409 && userId) {
                 const conflict = await response.clone().json().catch(() => ({}));
                 if (conflict.code === 'DEVICE_ID_CONFLICT') {
-                    // This browser's device id is registered to another account
-                    // (shared browser). Give this account its own device identity.
+                    // this browser's device id is registered to another account
+                    // (shared browser). give this account its own device identity.
                     identity = await createUserScopedDeviceIdentity(userId);
                     response = await fetch(endpoint, {
                         method: 'POST',
@@ -417,7 +417,7 @@ const SecureCrypto = (function() {
             payload = await send();
         }
 
-        // Temporary: an account from before identity keys (or one of its
+        // temporary: an account from before identity keys (or one of its
         // devices without the identity key yet) is moved onto them with its
         // legacy user key; see identity-migration.js.
         const migration = window.SendlyIdentityMigration;
@@ -435,10 +435,10 @@ const SecureCrypto = (function() {
         return { identity, identityKey, payload };
     }
 
-    // After a recovery, file keys wrapped for an older identity key version
-    // stay locked. If this browser still holds such a version (e.g. it was
+    // after a recovery, file keys wrapped for an older identity key version
+    // stay locked. if this browser still holds such a version (e.g. it was
     // offline during the recovery), it re-wraps them for the account's active
-    // public key as the server reports it. Runs once per page load.
+    // public key as the server reports it. runs once per page load.
     let rescueRun = null;
     function rescueLockedFileKeysInBackground({ userId, payload, headers }) {
         const active = payload?.identity_public_key;
@@ -465,7 +465,7 @@ const SecureCrypto = (function() {
                                 identity_dek_wrap_alg: 'RSA-OAEP-2048-v1'
                             });
                         } catch (_) {
-                            // Not openable with this key; it stays locked.
+                            // not openable with this key; it stays locked.
                         }
                     }
                     if (items.length) {
@@ -483,13 +483,13 @@ const SecureCrypto = (function() {
         return rescueRun;
     }
 
-    // Two JWKs describe the same RSA key if modulus and exponent match; a
+    // two JWKs describe the same RSA key if modulus and exponent match; a
     // private JWK carries both, so it can be checked against a public one.
     function isSameRsaKey(jwk, publicJWK) {
         return !!jwk?.n && jwk.n === publicJWK?.n && jwk.e === publicJWK?.e;
     }
 
-    // Opens this device's copy of the identity key from a registration
+    // opens this device's copy of the identity key from a registration
     // response. A copy that doesn't open, or doesn't belong to the account's
     // active identity public key, counts as none.
     async function identityKeyFromPayload(payload, identity) {
@@ -511,7 +511,7 @@ const SecureCrypto = (function() {
         }
     }
 
-    // Wraps a file key (or session password) for the signed-in user's own
+    // wraps a file key (or session password) for the signed-in user's own
     // identity key, as the uploader's 'owner' envelope.
     async function buildOwnerEnvelope(secretBytes, identityKey) {
         if (!identityKey?.publicKeyJWK) throw new Error('This device has no identity key');
@@ -593,8 +593,8 @@ const SecureCrypto = (function() {
         });
     }
 
-    // Encrypts `file` chunk by chunk and hands each to onChunk(index, bytes), up to `concurrency` at a time.
-    // The first failed chunk, or an aborted `signal`, stops the loop: no further chunk is read or encrypted,
+    // encrypts `file` chunk by chunk and hands each to onChunk(index, bytes), up to `concurrency` at a time.
+    // the first failed chunk, or an aborted `signal`, stops the loop: no further chunk is read or encrypted,
     // the uploads already running are waited for, and the call rejects.
     async function encryptFileChunked(file, password, chunkSize, onChunk, { concurrency = 1, signal } = {}) {
         const salt = generateRandomBytes(CONFIG.saltLength);

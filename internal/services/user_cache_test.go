@@ -20,7 +20,7 @@ import (
 )
 
 // memoryUserStore keeps users in a map but applies the same state rules as
-// storage.Postgres (storage.NextUserState, storage.DeletedUserState); the
+// storage.postgres (storage.NextUserState, storage.DeletedUserState); the
 // SQL around them is covered by the live storage tests.
 type memoryUserStore struct {
 	mu     sync.Mutex
@@ -383,7 +383,7 @@ func TestVerifyWithDirectoryRefreshesAndDeletes(t *testing.T) {
 		t.Fatalf("expected 1 batch and 1 single lookup, got %d and %d", fake.batchCalls, fake.singleCalls)
 	}
 
-	// Nothing is due any more.
+	// nothing is due any more.
 	again := uc.VerifyWithDirectory(context.Background(), time.Now().Add(-cfg.UserCacheRecheck), 25)
 	if again.Confirmed != 0 || again.Deleted != 0 || fake.batchCalls != 1 {
 		t.Fatalf("second pass did work: %+v (batch calls %d)", again, fake.batchCalls)

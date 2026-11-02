@@ -15,8 +15,8 @@ import (
 
 // IdentityRescueHandler lets a device that still holds an identity key version
 // from before the account's last recovery re-wrap the file keys locked to it
-// for the active version. Any signed-in session may do so, since the rescuing
-// device was revoked by the recovery. Only keys that are still locked can be
+// for the active version. any signed-in session may do so, since the rescuing
+// device was revoked by the recovery. only keys that are still locked can be
 // replaced, so a bad upload can't break a key the user can open; but the
 // rescuing browser wraps for the active public key as the server reports it,
 // so a compromised server could collect the keys of locked files this way.
@@ -30,7 +30,7 @@ func NewIdentityRescueHandler(db *storage.Postgres) *IdentityRescueHandler {
 
 const rescuePageSize = 100
 
-// Locked lists the caller's file keys wrapped for identity key ?version=,
+// locked lists the caller's file keys wrapped for identity key ?version=,
 // which must be older than the active one.
 func (h *IdentityRescueHandler) Locked(c *gin.Context) {
 	user, ok := requireUser(c)
@@ -58,7 +58,7 @@ func (h *IdentityRescueHandler) Locked(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Rescue replaces locked file keys with ones re-wrapped for the active
+// rescue replaces locked file keys with ones re-wrapped for the active
 // identity key version.
 func (h *IdentityRescueHandler) Rescue(c *gin.Context) {
 	user, ok := requireUser(c)

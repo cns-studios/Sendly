@@ -105,7 +105,7 @@ func TestLivePurgeDeletedFiles(t *testing.T) {
 		t.Fatalf("envelopes of kept files were touched: %d of 2 left", got)
 	}
 
-	// Idempotent: nothing of ours is left to delete.
+	// idempotent: nothing of ours is left to delete.
 	if _, err := db.PurgeDeletedFiles(ctx, cutoff, 1000); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestLivePurgeDeletedFilesRespectsBatchSize(t *testing.T) {
 	t.Cleanup(func() { db.db.Exec(`DELETE FROM files WHERE id = ANY($1)`, "{"+ids[0]+","+ids[1]+","+ids[2]+"}") })
 	ours := "{" + ids[0] + "," + ids[1] + "," + ids[2] + "}"
 
-	// Drain everything else so the batch limit is observable on our rows.
+	// drain everything else so the batch limit is observable on our rows.
 	for {
 		n, err := db.PurgeDeletedFiles(ctx, now.Add(-30*24*time.Hour), 1)
 		if err != nil {

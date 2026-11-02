@@ -121,11 +121,11 @@ func (h *RecentUploadsHandler) publishEnrollmentChange(ctx context.Context, user
 	}
 }
 
-// upgradeResponseCookies carries the Set-Cookie headers already queued on
-// the response into the WebSocket handshake. Upgrade hijacks the connection
-// and writes the 101 itself, ignoring c.Writer's headers, so when
+// upgradeResponseCookies carries the set-cookie headers already queued on
+// the response into the WebSocket handshake. upgrade hijacks the connection
+// and writes the 101 itself, ignoring c.writer's headers, so when
 // CNSAuthMiddleware refreshed the session on this request the rotated
-// refresh token never reached the browser. The browser then kept presenting
+// refresh token never reached the browser. the browser then kept presenting
 // the consumed token, and once CNS's grace window passed, the next request
 // tripped refresh-token reuse detection and revoked the whole session.
 func upgradeResponseCookies(c *gin.Context) http.Header {

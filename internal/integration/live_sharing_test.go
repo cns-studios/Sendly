@@ -122,7 +122,7 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	cfg.CNSAuthURL = authServer.URL
 	cfg.CNSAuthServiceKey = "live-service-key"
 
-	// Lookup searches Sendly's local user cache, not CNS.
+	// lookup searches sendly's local user cache, not CNS.
 	if err := db.RecordCNSProfile(context.Background(), models.CNSUserProfile{CNSUserID: recipientID, Username: "recipient-user", ObservedAt: time.Now()}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 		t.Fatalf("shared file decryption failed: err=%v plaintext=%q", err, decrypted)
 	}
 
-	// Declining revokes the key: no access, and the same file can't be re-sent to that user.
+	// declining revokes the key: no access, and the same file can't be re-sent to that user.
 	declinerLookup := requestAs(router, int(ownerID), http.MethodGet, fmt.Sprintf("/api/users/%d/identity-key", declinerID), nil, "")
 	var declinerPublic struct {
 		PublicKeyJWK json.RawMessage `json:"public_key_jwk"`
@@ -289,7 +289,7 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	if declinedHistory := requestAs(router, int(declinerID), http.MethodGet, "/api/me/transfers?view=history", nil, ""); !bytes.Contains(declinedHistory.Body.Bytes(), []byte(`"status":"declined"`)) {
 		t.Fatalf("declined history body=%s", declinedHistory.Body.String())
 	}
-	// The sender tracks both outgoing transfers and how each was answered.
+	// the sender tracks both outgoing transfers and how each was answered.
 	var sentHistory models.TransfersResponse
 	sentRes := requestAs(router, int(ownerID), http.MethodGet, "/api/me/transfers?view=history&direction=sent", nil, "")
 	if err := json.Unmarshal(sentRes.Body.Bytes(), &sentHistory); err != nil || sentRes.Code != http.StatusOK {
@@ -313,7 +313,7 @@ func TestLiveUserSharingEndToEnd(t *testing.T) {
 	if bad := requestAs(router, int(ownerID), http.MethodGet, "/api/me/transfers?view=history&direction=sideways", nil, ""); bad.Code != http.StatusBadRequest {
 		t.Fatalf("invalid direction status=%d", bad.Code)
 	}
-	// The first recipient's accepted access is unaffected by someone else declining.
+	// the first recipient's accepted access is unaffected by someone else declining.
 	if still := requestAs(router, int(recipientID), http.MethodGet, "/api/me/files/"+fileID+"/access?device_id="+recipientDevice, nil, ""); still.Code != http.StatusOK {
 		t.Fatalf("accepted recipient lost access: status=%d body=%s", still.Code, still.Body.String())
 	}

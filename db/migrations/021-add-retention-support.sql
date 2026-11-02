@@ -1,13 +1,13 @@
--- Retention support. Soft-deleted files need a deletion time so their rows can
+-- retention support. soft-deleted files need a deletion time so their rows can
 -- be hard-deleted after FILE_RECORD_RETENTION_DAYS.
 ALTER TABLE files ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;
 
--- Rows deleted before this column existed: an expired file was deleted no
+-- rows deleted before this column existed: an expired file was deleted no
 -- earlier than its expiry; anything else (reported) starts its grace period now.
 UPDATE files SET deleted_at = LEAST(expires_at, NOW())
 WHERE is_deleted = TRUE AND deleted_at IS NULL;
 
--- Reports are kept for REPORT_RETENTION_DAYS, which can outlast the file row,
+-- reports are kept for REPORT_RETENTION_DAYS, which can outlast the file row,
 -- so they must not cascade away with it.
 ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_file_id_fkey;
 

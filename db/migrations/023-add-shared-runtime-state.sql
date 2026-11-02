@@ -1,8 +1,8 @@
--- Runtime state that used to live in Redis or in one process's memory. Every
+-- runtime state that used to live in redis or in one process's memory. every
 -- replica must see it, and it has to survive a replica being killed, so it
--- moves into Postgres. None of it is key material: chunks stay ciphertext.
+-- moves into postgres. none of it is key material: chunks stay ciphertext.
 
--- One row per chunked upload, from init until it expires. state:
+-- one row per chunked upload, from init until it expires. state:
 --   uploading  -> chunks arriving
 --   assembling -> complete was called; a replica holding the lease joins the chunks
 --   assembled  -> the blob is in place and waits for finalize
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS upload_chunks (
     PRIMARY KEY (session_id, chunk_index)
 );
 
--- Fixed-window request counters. Unlogged: losing them in a crash or failover
+-- fixed-window request counters. unlogged: losing them in a crash or failover
 -- only resets the windows.
 CREATE UNLOGGED TABLE IF NOT EXISTS rate_limit_counters (
     key TEXT PRIMARY KEY,
@@ -43,7 +43,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS rate_limit_counters (
     count BIGINT NOT NULL
 );
 
--- The outcome of a CNS token refresh, kept for a few seconds so concurrent
+-- the outcome of a CNS token refresh, kept for a few seconds so concurrent
 -- requests on any replica presenting the same refresh token reuse it instead
 -- of refreshing twice (which CNS treats as token theft). token_id is a hash
 -- of the refresh token; sealed is the result encrypted under a key derived
@@ -54,7 +54,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS token_refresh_results (
     expires_at TIMESTAMPTZ NOT NULL
 );
 
--- Last start of each periodic job, so that only one replica runs it per interval.
+-- last start of each periodic job, so that only one replica runs it per interval.
 CREATE TABLE IF NOT EXISTS job_runs (
     name TEXT PRIMARY KEY,
     last_run_at TIMESTAMPTZ NOT NULL

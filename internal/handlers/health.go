@@ -16,7 +16,7 @@ const (
 	healthCacheTTL     = 5 * time.Second
 )
 
-// HealthCheck is one named dependency probe. Its error is logged, never
+// HealthCheck is one named dependency probe. its error is logged, never
 // returned to the client: /health is publicly reachable.
 type HealthCheck struct {
 	Name  string
@@ -40,15 +40,15 @@ func NewHealthHandler(checks ...HealthCheck) *HealthHandler {
 	return &HealthHandler{checks: checks}
 }
 
-// SetDraining makes Ready fail from now on.
+// SetDraining makes ready fail from now on.
 func (h *HealthHandler) SetDraining() {
 	h.draining.Store(true)
 }
 
-// Ready reports whether this replica should receive traffic: its
-// dependencies answer and it is not shutting down. Kubernetes' readiness
+// ready reports whether this replica should receive traffic: its
+// dependencies answer and it is not shutting down. kubernetes' readiness
 // probe uses it; unlike liveness, a failure only takes the pod out of the
-// Service, it doesn't restart it.
+// service, it doesn't restart it.
 func (h *HealthHandler) Ready(c *gin.Context) {
 	if h.draining.Load() {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "draining"})
@@ -57,12 +57,12 @@ func (h *HealthHandler) Ready(c *gin.Context) {
 	h.Health(c)
 }
 
-// Live only reports that the process answers requests.
+// live only reports that the process answers requests.
 func (h *HealthHandler) Live(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "alive"})
 }
 
-// Health probes every dependency and answers 503 if any fails. The result is
+// health probes every dependency and answers 503 if any fails. the result is
 // cached briefly so frequent probes don't repeat disk writes and pings.
 func (h *HealthHandler) Health(c *gin.Context) {
 	healthy, results := h.run(c.Request.Context())

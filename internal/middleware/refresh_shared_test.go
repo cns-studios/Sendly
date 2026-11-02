@@ -14,7 +14,7 @@ import (
 	"sendly/internal/config"
 )
 
-// memoryRefreshStore behaves like storage.Postgres.SharedRefresh: one caller
+// memoryRefreshStore behaves like storage.postgres.SharedRefresh: one caller
 // per token refreshes, the others wait and get its sealed result.
 type memoryRefreshStore struct {
 	mu      sync.Mutex
@@ -52,7 +52,7 @@ func countingCNS(t *testing.T, status int) (*config.Config, *atomic.Int32) {
 	return &config.Config{CNSAuthURL: server.URL, CNSAuthClientID: "sendly"}, &calls
 }
 
-// Concurrent requests carrying the same refresh token, spread over replicas,
+// concurrent requests carrying the same refresh token, spread over replicas,
 // must redeem it with CNS once: a second redemption revokes the session.
 func TestSharedRefreshRedeemsTokenOnce(t *testing.T) {
 	store := &memoryRefreshStore{results: map[string][]byte{}}

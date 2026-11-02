@@ -216,7 +216,7 @@ func (h *TunnelHandler) Confirm(c *gin.Context) {
 		userID = int64(user.ID)
 	}
 
-	// Guests confirm for a device ID; it has to be their own (the host's
+	// guests confirm for a device ID; it has to be their own (the host's
 	// initiator device for the host, their participant device otherwise).
 	if userID == 0 {
 		caller, authErr := authorizeTunnelCaller(c, h.db, current)
@@ -274,7 +274,7 @@ func (h *TunnelHandler) End(c *gin.Context) {
 		userID = int64(user.ID)
 	}
 
-	// Callers can only remove themselves: a guest by its own device.
+	// callers can only remove themselves: a guest by its own device.
 	deviceID := ""
 	if userID == 0 {
 		switch {
@@ -295,7 +295,7 @@ func (h *TunnelHandler) End(c *gin.Context) {
 
 	count, countErr := h.db.CountTunnelParticipants(c.Request.Context(), tunnelID)
 	if countErr != nil {
-		// Never treat a failed count as "empty": that would delete the files.
+		// never treat a failed count as "empty": that would delete the files.
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to leave tunnel", Code: "TUNNEL_LEAVE_FAILED"})
 		return
 	}
@@ -333,7 +333,7 @@ func (h *TunnelHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// Joiners waiting for the host's approval see the lobby, not the files.
+	// joiners waiting for the host's approval see the lobby, not the files.
 	files := []models.TunnelFileListItem{}
 	if caller.approved() {
 		var err error
@@ -522,7 +522,7 @@ func (h *TunnelHandler) PushParticipantEnvelope(c *gin.Context) {
 		return
 	}
 
-	// The session key only goes to participants the host approved.
+	// the session key only goes to participants the host approved.
 	target, err := h.db.GetTunnelParticipantByDevice(c.Request.Context(), tunnelID, req.ParticipantDeviceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to save envelope", Code: "ENVELOPE_SAVE_FAILED"})
@@ -592,7 +592,7 @@ func (h *TunnelHandler) GetParticipantEnvelope(c *gin.Context) {
 		c.JSON(http.StatusGone, models.ErrorResponse{Error: "Tunnel not available", Code: "TUNNEL_NOT_AVAILABLE"})
 		return
 	}
-	// Only the participant the envelope was wrapped for may fetch it.
+	// only the participant the envelope was wrapped for may fetch it.
 	caller, ok := h.requireTunnelCaller(c, tunnel)
 	if !ok {
 		return
@@ -633,7 +633,7 @@ func (h *TunnelHandler) requireTunnelCaller(c *gin.Context, tunnel *models.Tunne
 		return nil, false
 	}
 	if caller == nil {
-		// Tell a declined joiner apart from a stranger, so its page can say so.
+		// tell a declined joiner apart from a stranger, so its page can say so.
 		var userID int64
 		if user := middleware.GetCNSUser(c); user != nil {
 			userID = int64(user.ID)

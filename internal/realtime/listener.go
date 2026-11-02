@@ -9,8 +9,8 @@ import (
 	"github.com/lib/pq"
 )
 
-// Listen receives events from every replica over Postgres LISTEN and hands
-// them to hub until ctx ends. The listener reconnects by itself, for example
+// listen receives events from every replica over postgres LISTEN and hands
+// them to hub until ctx ends. the listener reconnects by itself, for example
 // after a database failover; events sent while it was away are lost, so the
 // hub's sockets are then closed and their clients reload on reconnecting.
 func Listen(ctx context.Context, dsn string, hub *Hub) error {
@@ -39,7 +39,7 @@ func Listen(ctx context.Context, dsn string, hub *Hub) error {
 				return
 			case n := <-listener.Notify:
 				if n == nil {
-					// Sent after a reconnect: anything in between was missed.
+					// sent after a reconnect: anything in between was missed.
 					hub.DropAll(websocket.CloseServiceRestart, "resync")
 					continue
 				}

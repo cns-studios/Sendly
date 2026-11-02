@@ -14,13 +14,13 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Quick share callers are authenticated as one of:
-//   - the host: the initiating CNS user, or for a guest host the X-Host-Token
+// quick share callers are authenticated as one of:
+//   - the host: the initiating CNS user, or for a guest host the X-host-token
 //     issued when the tunnel was started;
 //   - a participant: a signed-in caller by CNS user; an anonymous caller by
-//     X-Device-ID plus the X-Participant-Token issued when it joined.
+//     X-device-ID plus the X-participant-token issued when it joined.
 //
-// Device IDs are visible to other participants and never prove anything on
+// device IDs are visible to other participants and never prove anything on
 // their own.
 
 const (
@@ -49,7 +49,7 @@ func (tc *tunnelCaller) ownsDevice(deviceID string) bool {
 }
 
 // approved reports whether the host has admitted the caller (the host always
-// is). Only approved callers see files or receive key material.
+// is). only approved callers see files or receive key material.
 func (tc *tunnelCaller) approved() bool {
 	return tc.isHost || (tc.participant != nil && tc.participant.ApprovedAt.Valid)
 }

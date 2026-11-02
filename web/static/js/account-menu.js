@@ -1,5 +1,5 @@
-// Header account menu: open/close, keyboard navigation and menu actions.
-// Markup comes from the "account_menu" template partial.
+// header account menu: open/close, keyboard navigation and menu actions.
+// markup comes from the "account_menu" template partial.
 (function () {
     'use strict';
 
@@ -72,13 +72,13 @@
         if (isOpen && !trigger.contains(e.target) && !menu.contains(e.target)) closeMenu();
     });
 
-    // ── Transfers badge ──
-    // Pending (unanswered) transfers show as a red counter on the Transfers
-    // item and a dot on the avatar. The count arrives live over the existing
+    // ── transfers badge ──
+    // pending (unanswered) transfers show as a red counter on the transfers
+    // item and a dot on the avatar. the count arrives live over the existing
     // per-user device socket (transfers_updated events) and is re-broadcast
     // as a 'sendly:transfers-updated' window event for the transfers page;
     // sent_transfers_updated events become 'sendly:sent-transfers-updated'.
-    // The mobile menu mirrors both (see the mobile_menu partials).
+    // the mobile menu mirrors both (see the mobile_menu partials).
     var badges = ['account-menu-transfers-badge', 'mobile-menu-transfers-badge']
         .map(function (id) { return document.getElementById(id); }).filter(Boolean);
     var dots = ['account-menu-dot', 'mobile-menu-dot']
@@ -117,7 +117,7 @@
         }
         socket.addEventListener('open', function () {
             retryDelay = 2000;
-            // Sent transfers answered while the socket was down: let an open
+            // sent transfers answered while the socket was down: let an open
             // transfers page reload its history.
             if (socketEverOpened) window.dispatchEvent(new CustomEvent('sendly:sent-transfers-updated', { detail: {} }));
             socketEverOpened = true;
@@ -134,7 +134,7 @@
             }
         });
         socket.addEventListener('close', function () {
-            // Reconnect with backoff, and resync in case we missed an event.
+            // reconnect with backoff, and resync in case we missed an event.
             setTimeout(function () { connectSocket(); refreshCount(); }, retryDelay);
             retryDelay = Math.min(retryDelay * 2, 30000);
         });

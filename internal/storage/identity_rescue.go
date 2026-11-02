@@ -6,7 +6,7 @@ import (
 	"sendly/internal/models"
 )
 
-// After a recovery the account's file keys are still wrapped for the older
+// after a recovery the account's file keys are still wrapped for the older
 // identity key version; a returning device that holds that version re-wraps
 // them for the active one.
 
@@ -51,9 +51,9 @@ func (p *Postgres) ListLockedFileKeys(ctx context.Context, userID int64, version
 }
 
 // RescueLockedFileKeys replaces the user's file keys that are wrapped for
-// fromVersion with ones for the active version toVersion. Only keys that are
+// fromVersion with ones for the active version toVersion. only keys that are
 // still locked (fromVersion older than the active version) are replaced, so a
-// rescue can never overwrite a key the user can open. It returns how many
+// rescue can never overwrite a key the user can open. it returns how many
 // were replaced.
 func (p *Postgres) RescueLockedFileKeys(ctx context.Context, userID int64, fromVersion, toVersion int, items []models.FileAccessKeyEnvelope) (int, error) {
 	rescued := 0

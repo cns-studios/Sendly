@@ -8,9 +8,9 @@ import (
 	"sendly/internal/models"
 )
 
-// Legacy user key: every account used to have one AES "user key", wrapped
-// per device in user_key_envelopes, that wrapped all of its file keys. The
-// identity key replaced it. These queries remain only so accounts from
+// legacy user key: every account used to have one AES "user key", wrapped
+// per device in user_key_envelopes, that wrapped all of its file keys. the
+// identity key replaced it. these queries remain only so accounts from
 // before the switch can be migrated; delete this file together with the
 // identity migration.
 
@@ -51,7 +51,7 @@ func (p *Postgres) GetLegacyUserKeyEnvelope(ctx context.Context, userID int64, d
 }
 
 // StartIdentityMigration creates a legacy account's identity key (version 1)
-// with the migrating device's copy and the escrow for its other devices. It
+// with the migrating device's copy and the escrow for its other devices. it
 // fails if the account already has an identity key.
 func (p *Postgres) StartIdentityMigration(ctx context.Context, idKey *models.UserIdentityKey, envelope *models.UserIdentityKeyDeviceEnvelope, escrow *models.LegacyIdentityEscrow) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
@@ -127,7 +127,7 @@ func (p *Postgres) ListLegacyFilesToMigrate(ctx context.Context, userID int64, a
 }
 
 // StoreMigratedOwnerEnvelopes stores owner envelopes re-wrapped for identity
-// key version, only for the user's own files that have none yet. It returns
+// key version, only for the user's own files that have none yet. it returns
 // how many were stored.
 func (p *Postgres) StoreMigratedOwnerEnvelopes(ctx context.Context, userID int64, version int, items []models.FileAccessKeyEnvelope) (int, error) {
 	stored := 0

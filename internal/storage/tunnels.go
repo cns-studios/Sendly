@@ -133,7 +133,7 @@ func (p *Postgres) GetTunnelFileIDs(ctx context.Context, tunnelID string) ([]str
 // participant row may only be re-joined by that row's owner (same CNS user, or
 // an anonymous caller presenting the row's participant token); anyone else
 // gets ErrParticipantConflict, so a joiner can never replace another
-// participant's public key. It reports whether join.NewTokenHash was stored,
+// participant's public key. it reports whether join.NewTokenHash was stored,
 // i.e. whether a new anonymous participant was created.
 func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, join models.TunnelJoin) (*models.Tunnel, bool, error) {
 	userID, deviceID := join.UserID, strings.TrimSpace(join.DeviceID)
@@ -237,7 +237,7 @@ func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, join models.
 			_ = tx.Rollback()
 			return nil, false, err
 		}
-		// An envelope wrapped for the previous key is useless now; drop it so
+		// an envelope wrapped for the previous key is useless now; drop it so
 		// the host wraps the session key for the new one.
 		if _, err := tx.ExecContext(ctx, `
 			DELETE FROM tunnel_participant_envelopes
@@ -248,7 +248,7 @@ func (p *Postgres) JoinTunnel(ctx context.Context, tunnelID string, join models.
 		}
 	}
 
-	// A pending session shows as joined once someone is in; the host's Start
+	// A pending session shows as joined once someone is in; the host's start
 	// (ConfirmTunnel) makes it active.
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE tunnels SET status = $2 WHERE id = $1 AND status = $3
@@ -362,7 +362,7 @@ func (p *Postgres) ApproveTunnelParticipant(ctx context.Context, tunnelID, parti
 }
 
 // RejectTunnelParticipant removes a participant and its key envelope and
-// keeps it from joining the tunnel again. It returns the removed row.
+// keeps it from joining the tunnel again. it returns the removed row.
 func (p *Postgres) RejectTunnelParticipant(ctx context.Context, tunnelID, participantID string) (*models.TunnelParticipant, error) {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -401,7 +401,7 @@ func (p *Postgres) RejectTunnelParticipant(ctx context.Context, tunnelID, partic
 }
 
 // ConfirmTunnel starts a session: when the host confirms, the tunnel becomes
-// active for every participant the host approved. Only the host can start it.
+// active for every participant the host approved. only the host can start it.
 func (p *Postgres) ConfirmTunnel(ctx context.Context, tunnelID string, userID int64, deviceID string) (*models.Tunnel, error) {
 	tx, err := p.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -584,7 +584,7 @@ func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, 
 	if err != nil {
 		return err
 	}
-	// An existing envelope is never replaced: whoever could overwrite it
+	// an existing envelope is never replaced: whoever could overwrite it
 	// could hand the participant a key of their own choosing.
 	if rows, err := res.RowsAffected(); err != nil {
 		return err

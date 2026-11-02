@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Transfers are user-to-user sends (see file_transfers). These endpoints
+// transfers are user-to-user sends (see file_transfers). these endpoints
 // never touch key material: accepting only unlocks the recipient's existing
 // identity-wrapped envelope, declining deletes it.
 
@@ -118,7 +118,7 @@ func (h *RecentUploadsHandler) publishTransfersChanged(ctx context.Context, reci
 
 // publishSentTransferChanged tells the sender's open pages that one of their
 // sent transfers was created or answered, so their transfer history can
-// refresh. It carries no count: sent transfers never raise the badge.
+// refresh. it carries no count: sent transfers never raise the badge.
 func (h *RecentUploadsHandler) publishSentTransferChanged(senderUserID int64, fileID, status string) {
 	if h.hub == nil {
 		return

@@ -430,8 +430,8 @@ func requireDeviceUpsert(res sql.Result) error {
 // RecoverIdentityKey makes device the account's only trusted device: it
 // retires the active identity key, stores idKey as the next version with the
 // device's copy of it, revokes every other device and drops their copies and
-// open approval requests. Legacy user key envelopes go too; a recovered
-// account has nothing left to migrate. Envelopes wrapped for older identity
+// open approval requests. legacy user key envelopes go too; a recovered
+// account has nothing left to migrate. envelopes wrapped for older identity
 // key versions are kept, so a returning device that still holds an old
 // version can re-wrap them.
 func (p *Postgres) RecoverIdentityKey(ctx context.Context, device *models.UserDevice, idKey *models.UserIdentityKey, envelope *models.UserIdentityKeyDeviceEnvelope) error {
@@ -450,7 +450,7 @@ func (p *Postgres) RecoverIdentityKey(ctx context.Context, device *models.UserDe
 		{`DELETE FROM user_identity_key_device_envelopes WHERE cns_user_id = $1`, []any{userID}},
 		{`DELETE FROM user_key_envelopes WHERE cns_user_id = $1`, []any{userID}},
 		{`UPDATE user_identity_keys SET status = 'retired', retired_at = NOW() WHERE cns_user_id = $1 AND status = 'active'`, []any{userID}},
-		// Recovery revokes every device, so their open approval requests
+		// recovery revokes every device, so their open approval requests
 		// (including the recovering device's own) are moot.
 		{`UPDATE device_enrollments SET status = $1 WHERE cns_user_id = $2 AND status = $3`,
 			[]any{models.EnrollmentStatusExpired, userID, models.EnrollmentStatusPending}},
@@ -661,7 +661,7 @@ func (p *Postgres) GetTunnelFileWithEnvelope(ctx context.Context, tunnelID, file
 }
 
 func (p *Postgres) CreateUserIdentityKey(ctx context.Context, key *models.UserIdentityKey) error {
-	// Identity key versions are immutable; duplicate (user, version) inserts must fail
+	// identity key versions are immutable; duplicate (user, version) inserts must fail
 	// loudly rather than replacing key material that may already be in use.
 	_, err := p.db.ExecContext(ctx, `
 		INSERT INTO user_identity_keys
@@ -674,7 +674,7 @@ func (p *Postgres) CreateUserIdentityKey(ctx context.Context, key *models.UserId
 
 // CreateIdentityKeyWithDeviceEnvelope creates a brand-new account's identity
 // key together with the creating device's copy of it, so a key never exists
-// without a device holding it. It fails if the account already has an active
+// without a device holding it. it fails if the account already has an active
 // key (one active key per account, enforced by a unique index).
 func (p *Postgres) CreateIdentityKeyWithDeviceEnvelope(ctx context.Context, idKey *models.UserIdentityKey, envelope *models.UserIdentityKeyDeviceEnvelope) error {
 	tx, err := p.db.BeginTxx(ctx, nil)
@@ -822,7 +822,7 @@ func (p *Postgres) CreateFileAccessKeyEnvelope(ctx context.Context, envelope *mo
 
 // GetFileAccessKeyEnvelope returns the identity-wrapped DEK a user may use
 // for a file: their own 'owner' envelope, or a transfer ('share') envelope
-// once that transfer has been accepted. Pending transfers are withheld and
+// once that transfer has been accepted. pending transfers are withheld and
 // declined ones have no envelope left, so both return ErrFileAccessNotFound.
 func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, recipientUserID int64) (*models.FileAccessKeyEnvelope, error) {
 	var envelope models.FileAccessKeyEnvelope
@@ -849,7 +849,7 @@ func (p *Postgres) GetFileAccessKeyEnvelope(ctx context.Context, fileID string, 
 
 // GetRecentShareRecipients returns the users ownerUserID most recently sent
 // transfers to, newest first, joined against the local user cache so callers
-// can render a username and avatar. Recipients missing from the cache (or
+// can render a username and avatar. recipients missing from the cache (or
 // deactivated there) are skipped: there is nothing useful to display for them.
 func (p *Postgres) GetRecentShareRecipients(ctx context.Context, ownerUserID int64, limit int) ([]models.User, error) {
 	if limit <= 0 || limit > 50 {
@@ -1073,8 +1073,8 @@ func (p *Postgres) CancelEnrollment(ctx context.Context, userID int64, enrollmen
 	return nil
 }
 
-// RemoveApproverDevice revokes an approver device (the CNS Accounts app) and
-// drops its copies of the identity key and its open enrollment. Other device
+// RemoveApproverDevice revokes an approver device (the CNS accounts app) and
+// drops its copies of the identity key and its open enrollment. other device
 // kinds can't be removed this way.
 func (p *Postgres) RemoveApproverDevice(ctx context.Context, userID int64, deviceID string) error {
 	tx, err := p.db.BeginTxx(ctx, nil)

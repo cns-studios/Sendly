@@ -87,7 +87,7 @@ func (d *Discord) SendReportNotification(file *models.File, reporterIP string, r
 		},
 	}
 	if transfer != nil {
-		// Transferred files are only reachable by their recipients, so a
+		// transferred files are only reachable by their recipients, so a
 		// share link is of no use here; name both parties instead.
 		title = "Transferred File Reported"
 		fields = append(fields,

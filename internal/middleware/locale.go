@@ -18,7 +18,7 @@ var supportedLocales = []string{"en", "de"}
 
 // OnLocaleChosen, when set, is told about an explicit language choice made by
 // a signed-in user (the ?lang= switch), so it can be saved to their CNS
-// account. It runs in its own goroutine and must not block or panic the request.
+// account. it runs in its own goroutine and must not block or panic the request.
 var OnLocaleChosen func(accessToken, locale string)
 
 func LocaleMiddleware() gin.HandlerFunc {
@@ -43,7 +43,7 @@ func GetLocale(c *gin.Context) string {
 }
 
 // MatchLocale maps any BCP 47 tag ("de-AT", "en_GB", "DE") to a language
-// Sendly has a catalog for.
+// sendly has a catalog for.
 func MatchLocale(tag string) (string, bool) {
 	lang := strings.ToLower(strings.TrimSpace(tag))
 	if i := strings.IndexAny(lang, "-_"); i >= 0 {
@@ -57,8 +57,8 @@ func MatchLocale(tag string) (string, bool) {
 	return "", false
 }
 
-// NegotiateLocale picks the best supported language from an Accept-Language
-// header, honouring q-values. It returns "" when none is supported.
+// NegotiateLocale picks the best supported language from an accept-language
+// header, honouring q-values. it returns "" when none is supported.
 func NegotiateLocale(header string) string {
 	type candidate struct {
 		tag   string
@@ -124,8 +124,8 @@ func setLangCookie(c *gin.Context, lang string) {
 }
 
 // LocaleFromIDToken reads the OIDC "locale" claim from an ID token and maps
-// it to a language Sendly has. The token came straight from the CNS token
-// endpoint over TLS, which OpenID Connect Core 3.1.3.7 allows to be trusted
+// it to a language sendly has. the token came straight from the CNS token
+// endpoint over TLS, which OpenID connect core 3.1.3.7 allows to be trusted
 // without checking the signature; the claim is only a display hint anyway.
 func LocaleFromIDToken(idToken string) (string, bool) {
 	parts := strings.Split(idToken, ".")
@@ -146,7 +146,7 @@ func LocaleFromIDToken(idToken string) (string, bool) {
 }
 
 // ApplyAccountLocale makes the account's language (the locale claim) the
-// site language. With no usable claim, the language the visitor already
+// site language. with no usable claim, the language the visitor already
 // chose here stays.
 func ApplyAccountLocale(c *gin.Context, idToken string) {
 	if l, ok := LocaleFromIDToken(idToken); ok {

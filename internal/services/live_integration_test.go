@@ -59,13 +59,13 @@ func TestLiveDeviceRecovery(t *testing.T) {
 		}
 	}
 
-	// Device IDs belong to one account, so derive them from this run's user.
+	// device IDs belong to one account, so derive them from this run's user.
 	oldDeviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID*2)%1000000000000)
 	newDeviceID := fmt.Sprintf("00000000-0000-4000-8000-%012d", (userID*2+1)%1000000000000)
 	if result, err := service.Register(ctx, userID, request(oldDeviceID, "first"), false); err != nil || result.IdentityKeyEnvelope == nil {
 		t.Fatalf("first device did not create the identity key: result=%+v err=%v", result, err)
 	}
-	// The new device first asks to be approved, then recovers the account
+	// the new device first asks to be approved, then recovers the account
 	// instead; its own request must not be left behind for approval.
 	if result, err := service.Register(ctx, userID, request(newDeviceID, "second"), false); err != nil || !result.NeedsEnrollment {
 		t.Fatalf("expected the new device to need enrollment: result=%+v err=%v", result, err)

@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// fanout stands in for Postgres NOTIFY: every hub receives every message.
+// fanout stands in for postgres NOTIFY: every hub receives every message.
 type fanout struct {
 	mu   sync.Mutex
 	hubs []*Hub

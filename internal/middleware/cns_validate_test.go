@@ -97,7 +97,7 @@ func TestMiddlewareRefreshesRejectedToken(t *testing.T) {
 	}
 }
 
-// An outage must not sign the user out: the cookies stay for the next request.
+// an outage must not sign the user out: the cookies stay for the next request.
 func TestMiddlewareKeepsCookiesWhenCNSIsDown(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

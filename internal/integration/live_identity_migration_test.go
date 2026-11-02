@@ -58,7 +58,7 @@ func newIdentityTestEnv(t *testing.T) *identityTestEnv {
 	if err := db.RunMigrations(context.Background(), cfg.MigrationsDir); err != nil {
 		t.Fatal(err)
 	}
-	// Legacy rows are no longer written by the app; the test inserts them.
+	// legacy rows are no longer written by the app; the test inserts them.
 	raw, err := sqlx.Connect("postgres", cfg.PostgresDSN())
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestLiveLegacyAccountMigration(t *testing.T) {
 		t.Fatalf("expected needs_identity_migration: %v", out)
 	}
 
-	// The device's server-side copy of the user key opens with its device key.
+	// the device's server-side copy of the user key opens with its device key.
 	code, out := e.call(userID, http.MethodGet, "/api/me/identity-migration/legacy-key?device_id="+deviceA.id, nil)
 	if code != http.StatusOK {
 		t.Fatalf("legacy-key status=%d %v", code, out)
@@ -278,7 +278,7 @@ func TestLiveLegacyAccountMigration(t *testing.T) {
 		t.Fatalf("device A should now hold the identity key: %v", out)
 	}
 
-	// Re-wrap the legacy file for the identity key.
+	// re-wrap the legacy file for the identity key.
 	code, out = e.call(userID, http.MethodGet, "/api/me/identity-migration/files?device_id="+deviceA.id, nil)
 	items, _ := out["items"].([]any)
 	if code != http.StatusOK || len(items) != 1 {
@@ -303,7 +303,7 @@ func TestLiveLegacyAccountMigration(t *testing.T) {
 		t.Fatalf("migrated file key does not open: version=%d", version)
 	}
 
-	// Device B picks the identity key up from the escrow.
+	// device B picks the identity key up from the escrow.
 	if out := e.register(userID, deviceB, nil, false); out["needs_enrollment"] != true {
 		t.Fatalf("device B should not hold the key yet: %v", out)
 	}
@@ -343,7 +343,7 @@ func TestLiveLegacyAccountMigration(t *testing.T) {
 	}
 }
 
-// After a recovery, a device still holding the old identity key version
+// after a recovery, a device still holding the old identity key version
 // re-wraps the locked file keys for the new version; keys that are no longer
 // locked can't be replaced.
 func TestLiveRescueAfterRecovery(t *testing.T) {
@@ -400,7 +400,7 @@ func TestLiveRescueAfterRecovery(t *testing.T) {
 		t.Fatalf("rescued key does not open with version 2: version=%d", version)
 	}
 
-	// The key is no longer locked, so a second (bogus) rescue changes nothing.
+	// the key is no longer locked, so a second (bogus) rescue changes nothing.
 	garbage, _ := rsa.EncryptOAEP(sha256.New(), rand.Reader, &newIdentityKey.PublicKey, []byte("garbage"), nil)
 	rescue["items"] = []map[string]any{{"file_id": fileID, "identity_wrapped_dek_b64": base64.StdEncoding.EncodeToString(garbage), "identity_dek_wrap_alg": "RSA-OAEP-2048-v1"}}
 	if code, out := e.call(userID, http.MethodPost, "/api/me/identity-rescue", rescue); code != http.StatusOK || out["rescued"] != float64(0) {
