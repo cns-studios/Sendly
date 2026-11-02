@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -43,12 +44,19 @@ type CNSSignOutNotifier interface {
 // (docs: accounts-api INTEGRATION.md, "react to account changes"). any 2xx
 // tells CNS the event is handled; anything else is retried with backoff for
 // about a day, so a failure to apply answers 5xx.
-type CNSWebhookHandler struct {
-	secrets [][]byte
-	store   CNSWebhookStore
-	signOut CNSSignOutNotifier
-	now     func() time.Time
+type CNSAccountStatusNotifier interface {
+	AccountStatusChanged(ctx context.Context, cnsUserID int64, status accountstatus.Status)
 }
+
+type CNSWebhookHandler struct {
+	secrets       [][]byte
+	store         CNSWebhookStore
+	signOut       CNSSignOutNotifier
+	accountStatus CNSAccountStatusNotifier
+	now           func() time.Time
+}
+
+func (h *CNSWebhookHandler) SetAccountStatusNotifier(n CNSAccountStatusNotifier) { h.accountStatus = n }
 
 // SetSignOutNotifier enables reacting to app.disconnected. without one the
 // event is acknowledged and nothing else happens: CNS has already revoked
@@ -111,6 +119,8 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 				Username string  `json:"username"`
 				Avatar   *string `json:"avatar"`
 			} `json:"user"`
+			AccountStatus *accountstatus.Info `json:"account_status"`
+			Changes       []string            `json:"changes"`
 		}
 		if err := json.Unmarshal(event.Data, &data); err != nil || data.User.ID <= 0 ||
 			strings.TrimSpace(data.User.Username) == "" || event.CreatedAt.IsZero() {
@@ -121,7 +131,20 @@ func (h *CNSWebhookHandler) Handle(c *gin.Context) {
 		if data.User.Avatar != nil {
 			profile.AvatarURL = *data.User.Avatar
 		}
-		_, err = h.store.ApplyCNSUserUpdated(ctx, event.ID, profile)
+		if data.AccountStatus != nil {
+			profile.AccountStatus = &models.CNSAccountStatus{
+				Status:     accountstatus.Parse(data.AccountStatus.Status),
+				ExpiresAt:  data.AccountStatus.ExpiresAt,
+				ObservedAt: event.CreatedAt,
+			}
+		}
+		var applied bool
+		applied, err = h.store.ApplyCNSUserUpdated(ctx, event.ID, profile)
+		if err == nil && applied && data.AccountStatus != nil && h.accountStatus != nil && containsString(data.Changes, "account_status") {
+			status := data.AccountStatus.Effective(h.now())
+			h.accountStatus.AccountStatusChanged(ctx, data.User.ID, status)
+			log.Printf("cns webhook: cns_user_id=%d account status is now %s", data.User.ID, status)
+		}
 	case "user.deleted":
 		var data struct {
 			UserID int64 `json:"user_id"`
@@ -200,4 +223,13 @@ func (h *CNSWebhookHandler) verify(timestamp, signature string, body []byte) boo
 		}
 	}
 	return valid
+}
+
+func containsString(values []string, want string) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }

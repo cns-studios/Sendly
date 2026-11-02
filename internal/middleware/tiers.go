@@ -1,6 +1,9 @@
 package middleware
 
-import "sendly/internal/config"
+import (
+	"sendly/internal/accountstatus"
+	"sendly/internal/config"
+)
 
 type Tier struct {
 	MaxFileSize      int64
@@ -25,7 +28,7 @@ func AuthTier(cfg *config.Config) Tier {
 }
 
 func GetTier(cfg *config.Config, user *CNSUser) Tier {
-	if user != nil {
+	if user != nil && UserAllows(user, accountstatus.MemberLinkTier) {
 		return AuthTier(cfg)
 	}
 	return GuestTier(cfg)

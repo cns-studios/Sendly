@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"time"
 
 	"sendly/internal/config"
 	"sendly/internal/i18n"
@@ -43,6 +44,9 @@ func (h *PageHandler) renderStatus(c *gin.Context, status int, templateName stri
 	}
 	data["t"] = translations
 	data["locale"] = locale
+	accountStatus := buildAccountStatusView(middleware.GetCNSUser(c), translations, locale, time.Now())
+	data["accountStatus"] = accountStatus
+	data["accountStatusJSON"] = accountStatus.clientJSON()
 	if locale == "de" {
 		data["otherLocale"] = "en"
 		data["otherLocaleLabel"] = translations["lang_en"]

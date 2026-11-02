@@ -26,7 +26,8 @@ import (
 //     deleted), so it leaves search and goes first in the re-check queue.
 
 const userColumns = `cns_user_id, username, avatar_url, status, inactive_reason, created_at,
-	last_synced_at, profile_observed_at, deactivated_at, deleted_at`
+	last_synced_at, profile_observed_at, deactivated_at, deleted_at,
+	account_status, account_status_expires_at, account_status_observed_at`
 
 // GetUser returns the local cache row for a CNS user, or ErrUserNotFound if
 // this service has never provisioned/synced them.
@@ -68,8 +69,36 @@ func (p *Postgres) MarkUserDeleted(ctx context.Context, cnsUserID int64) (bool, 
 // reports false for an event id that was already applied.
 func (p *Postgres) ApplyCNSUserUpdated(ctx context.Context, eventID string, profile models.CNSUserProfile) (bool, error) {
 	return p.applyWebhookEvent(ctx, eventID, "user.updated", func(tx *sqlx.Tx) error {
-		return recordProfile(ctx, tx, profile, nil, time.Now())
+		if err := recordProfile(ctx, tx, profile, nil, time.Now()); err != nil {
+			return err
+		}
+		if profile.AccountStatus == nil {
+			return nil
+		}
+		return recordAccountStatus(ctx, tx, profile.CNSUserID, *profile.AccountStatus, time.Now())
 	})
+}
+
+func (p *Postgres) RecordAccountStatus(ctx context.Context, cnsUserID int64, status models.CNSAccountStatus) error {
+	return recordAccountStatus(ctx, p.db, cnsUserID, status, time.Now())
+}
+
+func recordAccountStatus(ctx context.Context, db sqlx.ExecerContext, cnsUserID int64, status models.CNSAccountStatus, now time.Time) error {
+	observedAt := status.ObservedAt
+	if observedAt.IsZero() || observedAt.After(now) {
+		observedAt = now
+	}
+	var expiresAt sql.NullTime
+	if status.ExpiresAt != nil {
+		expiresAt = sql.NullTime{Time: *status.ExpiresAt, Valid: true}
+	}
+	_, err := db.ExecContext(ctx, `
+		UPDATE users
+		SET account_status = $2, account_status_expires_at = $3, account_status_observed_at = $4
+		WHERE cns_user_id = $1 AND status <> $5
+		  AND (account_status_observed_at IS NULL OR account_status_observed_at <= $4)`,
+		cnsUserID, string(status.Status), expiresAt, observedAt, models.UserStatusDeleted)
+	return err
 }
 
 // ApplyCNSUserDeleted applies a user.deleted webhook once per event id. it
@@ -143,6 +172,7 @@ func (p *Postgres) SearchUsersByUsername(ctx context.Context, query string, limi
 		SELECT cns_user_id, username, avatar_url
 		FROM users
 		WHERE status = $1 AND username ILIKE $2 ESCAPE '\'
+		  AND (account_status = 'active' OR account_status_expires_at <= NOW())
 		ORDER BY username
 		LIMIT $3
 	`, models.UserStatusActive, "%"+likeEscaper.Replace(query)+"%", limit)

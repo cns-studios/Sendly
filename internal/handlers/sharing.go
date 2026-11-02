@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
 
@@ -18,6 +20,9 @@ func (h *RecentUploadsHandler) GetUserIdentityKey(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	if !requireTransfers(c, user) {
 		return
 	}
 
@@ -56,6 +61,9 @@ func (h *RecentUploadsHandler) LookupUsers(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
 		return
 	}
+	if !requireTransfers(c, user) {
+		return
+	}
 	query := strings.TrimSpace(c.Query("q"))
 	if len([]rune(query)) < 3 {
 		c.JSON(http.StatusOK, gin.H{"items": []gin.H{}})
@@ -80,6 +88,9 @@ func (h *RecentUploadsHandler) RecentShareRecipients(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	if !requireTransfers(c, user) {
 		return
 	}
 	recipients, err := h.db.GetRecentShareRecipients(c.Request.Context(), int64(user.ID), 8)
@@ -119,6 +130,9 @@ func (h *RecentUploadsHandler) ShareFileToUser(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	if !requireTransfers(c, user) {
 		return
 	}
 	fileID := strings.TrimSpace(c.Param("id"))
@@ -245,4 +259,20 @@ func parsePagination(c *gin.Context) (int, int, bool) {
 		perPage = value
 	}
 	return page, perPage, true
+}
+
+func requireTransfers(c *gin.Context, user *middleware.CNSUser) bool {
+	if middleware.UserAllows(user, accountstatus.Transfers) {
+		return true
+	}
+	middleware.AbortRestricted(c, accountstatus.Transfers)
+	return false
+}
+
+func (h *RecentUploadsHandler) transfersHeldFor(ctx context.Context, userID int64) bool {
+	u, err := h.db.GetUser(ctx, userID)
+	if err != nil || u == nil {
+		return false
+	}
+	return !u.EffectiveAccountStatus(time.Now()).Allows(accountstatus.Transfers)
 }

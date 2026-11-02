@@ -32,10 +32,12 @@
         <i data-lucide="user" aria-hidden="true"></i>
         <span>{{.t.header_your_account}}</span>
     </a>
+    {{if not .accountStatus.Suspended}}
     <a href="/auth/logout" role="menuitem" class="account-menu-item">
         <i data-lucide="log-out" aria-hidden="true"></i>
         <span>{{.t.header_logout}}</span>
     </a>
+    {{end}}
 </div>
 <script src="/static/js/account-menu.js" defer></script>
 
@@ -85,7 +87,7 @@
         <a href="/transfers" class="mobile-menu-row"><i data-lucide="inbox" aria-hidden="true"></i><span>{{.t.menu_transfers}}</span><span class="account-menu-badge mobile-menu-badge" id="mobile-menu-transfers-badge" hidden></span></a>
         {{end}}
         <a href="?lang={{.otherLocale}}" class="mobile-menu-row"><i data-lucide="languages" aria-hidden="true"></i><span>{{.otherLocaleLabel}}</span></a>
-        {{if .authenticated}}
+        {{if and .authenticated (not .accountStatus.Suspended)}}
         <a href="/auth/logout" class="mobile-menu-row"><i data-lucide="log-out" aria-hidden="true"></i><span>{{.t.header_logout}}</span></a>
         {{end}}
     </div>
@@ -101,3 +103,28 @@
     </div>
 </div>
 {{end}}
+
+{{define "account_status_notice"}}
+{{with .accountStatus}}{{if .Restricted}}
+<details class="account-status-notice" data-account-status="{{.Status}}">
+    <summary class="asn-summary">
+        <i data-lucide="shield-alert" class="asn-icon" aria-hidden="true"></i>
+        <span class="asn-heading">
+            <strong class="asn-title">{{.Title}}</strong>
+            {{if .Reason}}<span class="asn-reason">{{.Reason}}</span>{{end}}
+        </span>
+        <span class="asn-toggle">{{$.t.account_status_details}}</span>
+        <i data-lucide="chevron-down" class="asn-chevron" aria-hidden="true"></i>
+    </summary>
+    <div class="asn-body">
+        <ul class="asn-list">
+            {{range .Items}}<li>{{.}}</li>{{end}}
+        </ul>
+        {{if .ReasonText}}<p class="asn-note">{{.ReasonText}}</p>{{end}}
+        <p class="asn-meta">{{if .Until}}{{.Until}} {{end}}{{$.t.account_status_appeal_lead}} <a href="{{.AppealURL}}" target="_blank" rel="noopener">{{$.t.account_status_appeal}}</a>.</p>
+    </div>
+</details>
+{{end}}{{end}}
+<script type="application/json" id="account-status-config">{{.accountStatusJSON}}</script>
+{{end}}
+

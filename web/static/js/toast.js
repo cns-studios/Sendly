@@ -34,7 +34,9 @@ const SendlyToast = (function () {
         DEVICE_NOT_TRUSTED: 'toast_device_approve',
         DEVICE_NOT_AUTHORIZED: 'toast_device_approve',
         RECIPIENT_NOT_READY: 'share_recipient_not_ready',
-        ALREADY_REPORTED: 'toast_already_reported'
+        ALREADY_REPORTED: 'toast_already_reported',
+        ACCOUNT_RESTRICTED: 'toast_account_restricted',
+        ACCOUNT_SUSPENDED: 'toast_account_restricted'
     };
 
     const ICONS = {

@@ -152,6 +152,7 @@
     </div>
 
     {{template "mobile_menu" .}}
+    {{template "account_status_notice" .}}
 
     <div class="main-content">
 
@@ -174,6 +175,15 @@
                 </span>
                 <i data-lucide="arrow-right" class="home-action-arrow" aria-hidden="true"></i>
             </a>
+            {{if not .accountStatus.QuickShare}}
+            <div class="home-action home-action-off" role="status">
+                <span class="home-action-icon home-action-icon-soft"><i data-lucide="lock" aria-hidden="true"></i></span>
+                <span class="home-action-text">
+                    <span class="home-action-title">{{.t.home_mobile_quickshare_title}}</span>
+                    <span class="home-action-desc">{{.t.quickshare_restricted_short}}</span>
+                </span>
+            </div>
+            {{else}}
             <details class="home-action-group">
                 <summary class="home-action">
                     <span class="home-action-icon home-action-icon-soft"><i data-lucide="users" aria-hidden="true"></i></span>
@@ -188,6 +198,7 @@
                     <a href="/quickshare?action=join" class="home-choice"><i data-lucide="hash" aria-hidden="true"></i>{{.t.card_quickshare_join}}</a>
                 </div>
             </details>
+            {{end}}
         </div>
 
         <div class="action-cards">
@@ -196,6 +207,13 @@
                 <p class="card-desc">{{.t.card_send_desc}}</p>
                 <span class="card-btn card-btn-primary">{{.t.card_send_btn}}</span>
             </a>
+            {{if not .accountStatus.QuickShare}}
+            <div class="action-card action-card-quickshare action-card-off" role="status">
+                <h2 class="card-title">{{.t.card_quickshare_title}}</h2>
+                <p class="card-desc">{{.t.quickshare_restricted_short}}</p>
+                <span class="card-btn card-btn-outline card-btn-off"><i data-lucide="lock" aria-hidden="true"></i>{{.t.quickshare_restricted_badge}}</span>
+            </div>
+            {{else}}
             <div id="quickshare-card" class="action-card action-card-quickshare" role="button" tabindex="0" aria-expanded="false" aria-label="{{.t.card_quickshare_title}}">
                 <h2 class="card-title">{{.t.card_quickshare_title}}</h2>
                 <p class="card-desc">{{.t.card_quickshare_desc}}</p>
@@ -205,6 +223,7 @@
                     <a href="/quickshare?action=join" class="card-btn card-btn-outline">{{.t.card_quickshare_join}}</a>
                 </div>
             </div>
+            {{end}}
         </div>
 
         <div class="star-bg">

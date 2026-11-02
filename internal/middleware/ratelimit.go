@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/config"
 	"sendly/internal/models"
 
@@ -19,10 +20,26 @@ type RateLimitStore interface {
 }
 
 type RateLimiter struct {
-	store     RateLimitStore
-	maxPerMin int64
-	window    time.Duration
-	keyPrefix string
+	store             RateLimitStore
+	maxPerMin         int64
+	window            time.Duration
+	keyPrefix         string
+	restrictedDivisor int64
+}
+
+func restrictedLimit(c *gin.Context, max, divisor int64) int64 {
+	if divisor <= 1 || UserAllows(GetCNSUser(c), accountstatus.StandardRateLimits) {
+		return max
+	}
+	limited := max / divisor
+	if limited < 1 {
+		return 1
+	}
+	return limited
+}
+
+func (rl *RateLimiter) limit(c *gin.Context) int64 {
+	return restrictedLimit(c, rl.maxPerMin, rl.restrictedDivisor)
 }
 
 func NewRateLimiter(store RateLimitStore, maxPerMin int64, window time.Duration) *RateLimiter {
@@ -42,7 +59,7 @@ func (rl *RateLimiter) Handler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := rl.store.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
+		allowed, err := rl.store.CheckRateLimit(c.Request.Context(), key, rl.limit(c), rl.window)
 		if err != nil {
 
 			c.Next()
@@ -83,7 +100,7 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := rl.store.CheckRateLimit(c.Request.Context(), key, rl.maxPerMin, rl.window)
+		allowed, err := rl.store.CheckRateLimit(c.Request.Context(), key, rl.limit(c), rl.window)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, models.ErrorResponse{
 				Error: "Service temporarily unavailable",
@@ -107,10 +124,11 @@ func (rl *RateLimiter) StrictHandler() gin.HandlerFunc {
 }
 
 type DownloadRateLimiter struct {
-	store     RateLimitStore
-	maxPerMin int64
-	window    time.Duration
-	keyPrefix string
+	store             RateLimitStore
+	maxPerMin         int64
+	window            time.Duration
+	keyPrefix         string
+	restrictedDivisor int64
 }
 
 func NewDownloadRateLimiter(store RateLimitStore, maxPerMinute int64, window time.Duration) *DownloadRateLimiter {
@@ -130,7 +148,7 @@ func (drl *DownloadRateLimiter) Handler() gin.HandlerFunc {
 			return
 		}
 
-		allowed, err := drl.store.CheckRateLimit(c.Request.Context(), key, drl.maxPerMin, drl.window)
+		allowed, err := drl.store.CheckRateLimit(c.Request.Context(), key, restrictedLimit(c, drl.maxPerMin, drl.restrictedDivisor), drl.window)
 		if err != nil {
 			c.Next()
 			return
@@ -153,6 +171,9 @@ func NewRateLimiterSet(cfg *config.Config, store RateLimitStore) (*RateLimiter, 
 	standard := NewRateLimiter(store, cfg.RateLimitMaxPerMinute, time.Duration(cfg.RateLimitWindowSeconds)*time.Second)
 	strict := NewStrictRateLimiter(store, cfg.StrictRateLimitMaxPerMinute, time.Duration(cfg.StrictRateLimitWindowSeconds)*time.Second)
 	download := NewDownloadRateLimiter(store, cfg.DownloadRateLimitMaxPerMinute, time.Duration(cfg.DownloadRateLimitWindowSeconds)*time.Second)
+	standard.restrictedDivisor = cfg.RestrictedRateLimitDivisor
+	strict.restrictedDivisor = cfg.RestrictedRateLimitDivisor
+	download.restrictedDivisor = cfg.RestrictedRateLimitDivisor
 	return standard, strict, download
 }
 

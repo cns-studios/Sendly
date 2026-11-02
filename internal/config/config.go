@@ -52,9 +52,9 @@ type Config struct {
 
 	DiscordWebhookURL string
 
-	ReportBotURL         string
+	ReportBotURL        string
 	SendlyBotAPIKey     string
-	StatsReportInterval  time.Duration
+	StatsReportInterval time.Duration
 
 	CNSAuthURL             string
 	CNSAuthClientID        string
@@ -78,8 +78,8 @@ type Config struct {
 	// so a new secret can be deployed before the old one stops being used.
 	// empty disables the webhook endpoint.
 	CNSWebhookSecrets []string
-	AuthMaxFileSize  int64
-	MigrationsDir    string
+	AuthMaxFileSize   int64
+	MigrationsDir     string
 
 	UserCacheTTL               time.Duration
 	UserCacheReconcileInterval time.Duration
@@ -104,6 +104,7 @@ type Config struct {
 	StrictRateLimitWindowSeconds   int64
 	DownloadRateLimitMaxPerMinute  int64
 	DownloadRateLimitWindowSeconds int64
+	RestrictedRateLimitDivisor     int64
 }
 
 func Load() (*Config, error) {
@@ -131,7 +132,7 @@ func Load() (*Config, error) {
 		AutoDeleteReportCount:          getEnvInt("AUTO_DELETE_REPORT_COUNT", 3),
 		DiscordWebhookURL:              getEnv("DISCORD_WEBHOOK_URL", ""),
 		ReportBotURL:                   getEnv("REPORT_BOT_URL", ""),
-		SendlyBotAPIKey:               getEnv("SENDLY_BOT_API_KEY", ""),
+		SendlyBotAPIKey:                getEnv("SENDLY_BOT_API_KEY", ""),
 		StatsReportInterval:            time.Duration(getEnvInt("STATS_REPORT_INTERVAL_MINUTES", 5)) * time.Minute,
 		CNSAuthURL:                     getEnv("CNS_AUTH_URL", ""),
 		CNSAuthClientID:                getEnv("CNS_AUTH_CLIENT_ID", ""),
@@ -158,6 +159,7 @@ func Load() (*Config, error) {
 		StrictRateLimitWindowSeconds:   getEnvInt64("RATE_LIMIT_STRICT_WINDOW_SECONDS", 60),
 		DownloadRateLimitMaxPerMinute:  getEnvInt64("RATE_LIMIT_DOWNLOAD_MAX_PER_MINUTE", 60),
 		DownloadRateLimitWindowSeconds: getEnvInt64("RATE_LIMIT_DOWNLOAD_WINDOW_SECONDS", 60),
+		RestrictedRateLimitDivisor:     getEnvInt64("RESTRICTED_RATE_LIMIT_DIVISOR", 3),
 	}
 
 	if cfg.BehindCloudflare && len(cfg.TrustedProxies) == 0 {

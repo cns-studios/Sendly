@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="{{.locale}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <meta name="description" content="{{.description}}">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/staging-notice.js" defer></script>
+    <script src="/static/js/vendor/lucide-1.53.0.min.js"></script>
+    <meta name="theme-color" content="#00AE71">
+    <link rel="apple-touch-icon" href="/static/images/bun.png">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+</head>
+<body class="page-suspended">
+    <div class="header-wrapper">
+        <header class="header suspended-header">
+            <span class="logo-text">{{.t.header_logo}}</span>
+            <a href="?lang={{.otherLocale}}" class="suspended-lang">{{.otherLocaleLabel}}</a>
+        </header>
+    </div>
+    <main class="suspended-main">
+        <section class="suspended-card" aria-labelledby="suspended-title">
+            <div class="suspended-icon" aria-hidden="true"><i data-lucide="lock"></i></div>
+            <h1 id="suspended-title" class="suspended-title">{{.t.account_suspended_title}}</h1>
+            <p class="suspended-text">{{.t.account_suspended_text}} <a href="{{.accountStatus.AppealURL}}" target="_blank" rel="noopener">{{.t.account_suspended_appeal}}</a>.</p>
+            {{if or .accountStatus.Reason .accountStatus.ReasonText .accountStatus.Until}}
+            <dl class="suspended-facts">
+                {{if .accountStatus.Reason}}<div><dt><i data-lucide="info" aria-hidden="true"></i></dt><dd>{{.accountStatus.Reason}}</dd></div>{{end}}
+                {{if .accountStatus.ReasonText}}<div><dt><i data-lucide="message-square" aria-hidden="true"></i></dt><dd class="suspended-note">{{.accountStatus.ReasonText}}</dd></div>{{end}}
+                {{if .accountStatus.Until}}<div><dt><i data-lucide="calendar-clock" aria-hidden="true"></i></dt><dd>{{.accountStatus.Until}}</dd></div>{{end}}
+            </dl>
+            {{end}}
+        </section>
+    </main>
+    <footer class="footer">
+        <a href="/tos">{{.t.footer_tos}}</a>
+        <a href="/privacy">{{.t.footer_privacy}}</a>
+        <a href="/legal-notice">{{.t.footer_legal_notice}}</a>
+    </footer>
+    <script src="/static/js/page-init.js"></script>
+</body>
+</html>

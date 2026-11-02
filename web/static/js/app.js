@@ -7,12 +7,13 @@
      
     const CHUNK_SIZE = 5 * 1024 * 1024;  
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
+    const MEMBER_LINKS = AUTHENTICATED && window.CONFIG?.accountStatus?.member_links !== false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
     const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
-    const RETENTION = AUTHENTICATED ? '90d' : '7d';
-    const RETENTION_LABEL = AUTHENTICATED ? '90 Days' : '7 Days';
+    const RETENTION = MEMBER_LINKS ? '90d' : '7d';
+    const RETENTION_LABEL = MEMBER_LINKS ? '90 Days' : '7 Days';
     const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
     const MAX_CHUNK_UPLOAD_RETRIES = 5;
     const RECENT_UPLOADS_PER_PAGE = 10;

@@ -25,7 +25,12 @@ func UserCacheSyncMiddleware(userCache *services.UserCache) gin.HandlerFunc {
 		// here would risk using a token that was rotated out earlier in
 		// this same middleware chain.
 		if token := GetCNSAccessToken(c); token != "" {
-			go userCache.SyncIfStale(context.Background(), int64(user.ID), token)
+			status := user.AccountStatus
+			go func(id int64) {
+				ctx := context.Background()
+				userCache.SyncIfStale(ctx, id, token)
+				userCache.RecordAccountStatus(ctx, id, status)
+			}(int64(user.ID))
 		}
 		c.Next()
 	}

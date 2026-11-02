@@ -3,6 +3,8 @@ package models
 import (
 	"database/sql"
 	"time"
+
+	"sendly/internal/accountstatus"
 )
 
 const (
@@ -33,14 +35,33 @@ type User struct {
 	ProfileObservedAt sql.NullTime   `db:"profile_observed_at" json:"profile_observed_at,omitempty"`
 	DeactivatedAt     sql.NullTime   `db:"deactivated_at" json:"deactivated_at,omitempty"`
 	DeletedAt         sql.NullTime   `db:"deleted_at" json:"deleted_at,omitempty"`
+
+	AccountStatus           string       `db:"account_status" json:"account_status"`
+	AccountStatusExpiresAt  sql.NullTime `db:"account_status_expires_at" json:"account_status_expires_at,omitempty"`
+	AccountStatusObservedAt sql.NullTime `db:"account_status_observed_at" json:"-"`
+}
+
+func (u User) EffectiveAccountStatus(now time.Time) accountstatus.Status {
+	var expiresAt *time.Time
+	if u.AccountStatusExpiresAt.Valid {
+		expiresAt = &u.AccountStatusExpiresAt.Time
+	}
+	return accountstatus.Effective(accountstatus.Parse(u.AccountStatus), expiresAt, now)
+}
+
+type CNSAccountStatus struct {
+	Status     accountstatus.Status
+	ExpiresAt  *time.Time
+	ObservedAt time.Time
 }
 
 // CNSUserProfile is what CNS said about a user at ObservedAt, from any
 // source: the user's own service profile, the users:read directory, or a
 // user.updated webhook.
 type CNSUserProfile struct {
-	CNSUserID  int64
-	Username   string
-	AvatarURL  string
-	ObservedAt time.Time
+	CNSUserID     int64
+	Username      string
+	AvatarURL     string
+	ObservedAt    time.Time
+	AccountStatus *CNSAccountStatus
 }

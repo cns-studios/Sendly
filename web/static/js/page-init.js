@@ -14,6 +14,16 @@
         }
     }
 
+    var statusEl = document.getElementById('account-status-config');
+    if (statusEl) {
+        window.CONFIG = window.CONFIG || {};
+        try {
+            window.CONFIG.accountStatus = JSON.parse(statusEl.textContent);
+        } catch (e) {
+            window.CONFIG.accountStatus = null;
+        }
+    }
+
     function initIcons() {
         if (window.lucide && window.lucide.createIcons) {
             window.lucide.createIcons();

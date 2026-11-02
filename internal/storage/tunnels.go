@@ -556,10 +556,6 @@ func nullableString(value string) sql.NullString {
 	return sql.NullString{String: value, Valid: true}
 }
 
-
-
-
-
 func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID string) ([]models.TunnelParticipant, error) {
 	var participants []models.TunnelParticipant
 	err := p.db.SelectContext(ctx, &participants, `
@@ -571,8 +567,6 @@ func (p *Postgres) GetParticipantsWithPublicKeys(ctx context.Context, tunnelID s
 	markApproved(participants)
 	return participants, err
 }
-
-
 
 func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, participantDeviceID string, wrappedDEK, nonce []byte, wrapAlg string, wrapVersion int) error {
 	res, err := p.db.ExecContext(ctx, `
@@ -594,7 +588,6 @@ func (p *Postgres) SaveTunnelParticipantEnvelope(ctx context.Context, tunnelID, 
 	return nil
 }
 
-
 func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, deviceID string) (*models.TunnelGuestEnvelope, error) {
 	var row struct {
 		WrappedDEK     []byte `db:"wrapped_dek"`
@@ -609,7 +602,7 @@ func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, d
 		  AND  participant_device_id = $2
 	`, tunnelID, deviceID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil 
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err
@@ -622,8 +615,6 @@ func (p *Postgres) GetTunnelParticipantEnvelope(ctx context.Context, tunnelID, d
 	}, nil
 }
 
-
-
 func (p *Postgres) ParticipantHasEnvelope(ctx context.Context, tunnelID, deviceID string) (bool, error) {
 	var count int
 	err := p.db.GetContext(ctx, &count, `
@@ -631,4 +622,18 @@ func (p *Postgres) ParticipantHasEnvelope(ctx context.Context, tunnelID, deviceI
 		WHERE tunnel_id = $1 AND participant_device_id = $2
 	`, tunnelID, deviceID)
 	return count > 0, err
+}
+func (p *Postgres) EndTunnelsHostedBy(ctx context.Context, userID int64) (int64, error) {
+	if userID <= 0 {
+		return 0, nil
+	}
+	res, err := p.db.ExecContext(ctx, `
+		UPDATE tunnels
+		SET status = $1, ended_at = NOW(), ended_by_cns_user_id = $2
+		WHERE initiator_cns_user_id = $2 AND status NOT IN ($1, $3) AND expires_at > NOW()
+	`, models.TunnelStatusEnded, userID, models.TunnelStatusExpired)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

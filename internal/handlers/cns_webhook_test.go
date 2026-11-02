@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -253,5 +254,42 @@ func TestCNSWebhookRejectsAppDisconnectedWithoutUser(t *testing.T) {
 	}
 	if len(out.users) != 0 {
 		t.Fatal("nobody should be signed out")
+	}
+}
+
+type recordingStatusNotifier struct {
+	calls []string
+}
+
+func (r *recordingStatusNotifier) AccountStatusChanged(_ context.Context, id int64, status accountstatus.Status) {
+	r.calls = append(r.calls, strconv.FormatInt(id, 10)+":"+string(status))
+}
+
+func TestWebhookUserUpdatedCarriesAccountStatus(t *testing.T) {
+	store := &fakeWebhookStore{}
+	h := NewCNSWebhookHandler([]string{testWebhookSecret}, store)
+	notifier := &recordingStatusNotifier{}
+	h.SetAccountStatusNotifier(notifier)
+
+	body := `{"id":"evt-1","type":"user.updated","created_at":"2026-11-02T10:00:00Z","data":{"user":{"id":42,"username":"user_1a2b3c4d"},"account_status":{"status":"very_limited","restrictions":["avatar_change"],"reason_code":"spam"},"changes":["username","account_status"]}}`
+	if w := postWebhook(t, h, body, nil); w.Code != http.StatusNoContent {
+		t.Fatalf("status %d: %s", w.Code, w.Body.String())
+	}
+	if len(store.updated) != 1 || store.updated[0].AccountStatus == nil || store.updated[0].AccountStatus.Status != accountstatus.VeryLimited {
+		t.Fatalf("account status not passed to the store: %+v", store.updated)
+	}
+	if !store.updated[0].AccountStatus.ObservedAt.Equal(time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)) {
+		t.Fatalf("observed at should be the event time: %v", store.updated[0].AccountStatus.ObservedAt)
+	}
+	if len(notifier.calls) != 1 || notifier.calls[0] != "42:very_limited" {
+		t.Fatalf("notifier calls %v", notifier.calls)
+	}
+
+	body = `{"id":"evt-2","type":"user.updated","created_at":"2026-11-02T10:01:00Z","data":{"user":{"id":42,"username":"bob"},"account_status":{"status":"very_limited"},"changes":["username"]}}`
+	if w := postWebhook(t, h, body, nil); w.Code != http.StatusNoContent {
+		t.Fatalf("status %d", w.Code)
+	}
+	if len(notifier.calls) != 1 {
+		t.Fatalf("a rename alone must not notify: %v", notifier.calls)
 	}
 }

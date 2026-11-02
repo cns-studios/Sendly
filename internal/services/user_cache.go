@@ -2,11 +2,13 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log"
 	"sync"
 	"time"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/config"
 	"sendly/internal/models"
 	"sendly/internal/storage"
@@ -18,6 +20,7 @@ type UserCacheStore interface {
 	GetUser(ctx context.Context, cnsUserID int64) (*models.User, error)
 	RecordCNSProfile(ctx context.Context, profile models.CNSUserProfile, locked *bool) error
 	MarkUserDeleted(ctx context.Context, cnsUserID int64) (bool, error)
+	RecordAccountStatus(ctx context.Context, cnsUserID int64, status models.CNSAccountStatus) error
 	ListUsersToVerify(ctx context.Context, syncedBefore time.Time, after storage.UserSyncCursor, limit int) ([]models.User, error)
 	DeactivateStaleUsers(ctx context.Context, staleBefore time.Time) (int64, error)
 	PurgeCNSWebhookEvents(ctx context.Context, cutoff time.Time) (int64, error)
@@ -121,6 +124,37 @@ func (uc *UserCache) SyncIfStale(ctx context.Context, cnsUserID int64, accessTok
 		// service reads from, so a failed CNS-side write is not fatal.
 		log.Printf("user cache: failed to patch cns service data for cns_user_id=%d: %v", cnsUserID, err)
 	}
+}
+
+func (uc *UserCache) RecordAccountStatus(ctx context.Context, cnsUserID int64, info *accountstatus.Info) {
+	if info == nil {
+		return
+	}
+	existing, err := uc.db.GetUser(ctx, cnsUserID)
+	if err != nil {
+		if !errors.Is(err, models.ErrUserNotFound) {
+			log.Printf("user cache: failed to read local row for cns_user_id=%d: %v", cnsUserID, err)
+		}
+		return
+	}
+	status := accountstatus.Parse(info.Status)
+	if existing.AccountStatus == string(status) && sameExpiry(existing.AccountStatusExpiresAt, info.ExpiresAt) {
+		return
+	}
+	if err := uc.db.RecordAccountStatus(ctx, cnsUserID, models.CNSAccountStatus{
+		Status:     status,
+		ExpiresAt:  info.ExpiresAt,
+		ObservedAt: time.Now(),
+	}); err != nil {
+		log.Printf("user cache: failed to record account status for cns_user_id=%d: %v", cnsUserID, err)
+	}
+}
+
+func sameExpiry(stored sql.NullTime, live *time.Time) bool {
+	if !stored.Valid || live == nil {
+		return !stored.Valid && live == nil
+	}
+	return stored.Time.Equal(*live)
 }
 
 func (uc *UserCache) Start() {

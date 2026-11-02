@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/cnshttp"
 	"sendly/internal/config"
 
@@ -29,9 +30,10 @@ const CNSUserKey = "cns_user"
 const CNSAccessTokenKey = "cns_access_token"
 
 type CNSUser struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Avatar   string `json:"avatar,omitempty"`
+	ID            int                 `json:"id"`
+	Username      string              `json:"username"`
+	Avatar        string              `json:"avatar,omitempty"`
+	AccountStatus *accountstatus.Info `json:"account_status,omitempty"`
 }
 
 func (u *CNSUser) UnmarshalJSON(data []byte) error {

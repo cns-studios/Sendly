@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"sendly/internal/accountstatus"
 	"sendly/internal/middleware"
 	"sendly/internal/models"
 
@@ -39,6 +40,10 @@ func (h *RecentUploadsHandler) ListTransfers(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if view == "pending" && !middleware.UserAllows(user, accountstatus.Transfers) {
+		c.JSON(http.StatusOK, models.TransfersResponse{Items: []models.TransferListItem{}, Page: 1, PerPage: perPage})
+		return
+	}
 	items, total, err := h.db.ListTransfers(c.Request.Context(), int64(user.ID), view, direction, page, perPage)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{Error: "Failed to fetch transfers", Code: "TRANSFERS_FAILED"})
@@ -53,6 +58,10 @@ func (h *RecentUploadsHandler) PendingTransferCount(c *gin.Context) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	if !middleware.UserAllows(user, accountstatus.Transfers) {
+		c.JSON(http.StatusOK, gin.H{"count": 0})
 		return
 	}
 	count, err := h.db.CountPendingTransfers(c.Request.Context(), int64(user.ID))
@@ -75,6 +84,9 @@ func (h *RecentUploadsHandler) respondToTransfer(c *gin.Context, accept bool) {
 	user := middleware.GetCNSUser(c)
 	if user == nil {
 		c.JSON(http.StatusUnauthorized, models.ErrorResponse{Error: "Authentication required", Code: "AUTH_REQUIRED"})
+		return
+	}
+	if !requireTransfers(c, user) {
 		return
 	}
 	fileID := strings.TrimSpace(c.Param("file_id"))
@@ -105,7 +117,7 @@ func (h *RecentUploadsHandler) respondToTransfer(c *gin.Context, accept bool) {
 // the existing per-user device websocket (/api/me/devices/ws), so the badge
 // and an open transfers page update live.
 func (h *RecentUploadsHandler) publishTransfersChanged(ctx context.Context, recipientUserID int64) {
-	if h.hub == nil {
+	if h.hub == nil || h.transfersHeldFor(ctx, recipientUserID) {
 		return
 	}
 	count, err := h.db.CountPendingTransfers(ctx, recipientUserID)

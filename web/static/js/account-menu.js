@@ -125,7 +125,9 @@
         socket.addEventListener('message', function (event) {
             var data;
             try { data = JSON.parse(event.data); } catch (e) { return; }
-            if (data && data.type === 'transfers_updated' && typeof data.pending_count === 'number') {
+            if (data && data.type === 'account_status_changed') {
+                window.location.reload();
+            } else if (data && data.type === 'transfers_updated' && typeof data.pending_count === 'number') {
                 setTransferCount(data.pending_count);
             } else if (data && data.type === 'sent_transfers_updated') {
                 // A transfer this user sent was created or answered; no badge

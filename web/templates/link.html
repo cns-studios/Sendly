@@ -129,6 +129,7 @@
     </div>
 
     {{template "mobile_menu" .}}
+    {{template "account_status_notice" .}}
 
     <div class="main-content">
         <div class="link-content-wrapper">
@@ -217,7 +218,18 @@
                     </ul>
 
                     <div class="lr-more">
-                    {{if .authenticated}}
+                    {{if and .authenticated (not .accountStatus.Transfers)}}
+                    <div class="lr-send">
+                        <div class="lr-label">{{.t.share_users_title}}</div>
+                        <div class="restricted-inline" role="status">
+                            <i data-lucide="lock" class="restricted-inline-icon" aria-hidden="true"></i>
+                            <div class="restricted-inline-text">
+                                <strong>{{.t.share_restricted_title}}</strong>
+                                <p>{{.t.share_restricted_text}}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {{else if .authenticated}}
                     <div class="lr-send">
                         <div class="lr-label">{{.t.share_users_title}}</div>
                         <div class="recent-recipients hidden" id="share-recent-recipients">

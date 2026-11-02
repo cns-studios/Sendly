@@ -68,11 +68,22 @@
     </div>
 
     {{template "mobile_menu" .}}
+    {{template "account_status_notice" .}}
 
     <div class="main-content">
         <div class="link-content-wrapper transfers-wrapper">
             <h1 class="headline">{{.t.transfers_heading}}</h1>
             <p class="subhead">{{.t.transfers_subhead}}</p>
+
+            {{if not .accountStatus.Transfers}}
+            <div class="restricted-inline transfers-restricted" role="status">
+                <i data-lucide="lock" class="restricted-inline-icon" aria-hidden="true"></i>
+                <div class="restricted-inline-text">
+                    <strong>{{.t.transfers_restricted_title}}</strong>
+                    <p>{{.t.transfers_restricted_text}}</p>
+                </div>
+            </div>
+            {{end}}
 
             <div id="transfers-device-notice" class="card transfers-notice hidden" role="status">
                 <i data-lucide="shield-alert" class="transfers-notice-icon" aria-hidden="true"></i>
@@ -83,7 +94,7 @@
                 <a href="/" class="transfers-notice-link">{{.t.transfers_device_open_home}}</a>
             </div>
 
-            <section class="transfers-section" aria-labelledby="transfers-pending-title">
+            <section class="transfers-section{{if not .accountStatus.Transfers}} hidden{{end}}" aria-labelledby="transfers-pending-title">
                 <div class="transfers-section-head">
                     <h2 id="transfers-pending-title" class="transfers-section-title">{{.t.transfers_pending_title}}</h2>
                     <span id="transfers-pending-count" class="transfers-count hidden" aria-live="polite"></span>

@@ -539,7 +539,9 @@ var (
 	ErrInvalidCode              = &AppError{Code: "INVALID_CODE", Message: "invalid numeric code"}
 	ErrUserNotFound             = &AppError{Code: "USER_NOT_FOUND", Message: "user not found in local cache"}
 	// ErrRecipientDeleted shares the client-facing code of ErrUserNotFound.
-	ErrRecipientDeleted = &AppError{Code: "USER_NOT_FOUND", Message: "this account no longer exists"}
+	ErrRecipientDeleted  = &AppError{Code: "USER_NOT_FOUND", Message: "this account no longer exists"}
+	ErrAccountRestricted = &AppError{Code: "ACCOUNT_RESTRICTED", Message: "this feature is not available while your account is restricted"}
+	ErrAccountSuspended  = &AppError{Code: "ACCOUNT_SUSPENDED", Message: "your account is currently suspended and cannot use Sendly"}
 )
 
 func GenerateID(length int) string {

@@ -72,6 +72,26 @@ func (m *memoryUserStore) MarkUserDeleted(_ context.Context, cnsUserID int64) (b
 	return true, nil
 }
 
+func (m *memoryUserStore) RecordAccountStatus(_ context.Context, cnsUserID int64, status models.CNSAccountStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[cnsUserID]
+	if !ok || u.Status == models.UserStatusDeleted {
+		return nil
+	}
+	if u.AccountStatusObservedAt.Valid && status.ObservedAt.Before(u.AccountStatusObservedAt.Time) {
+		return nil
+	}
+	u.AccountStatus = string(status.Status)
+	u.AccountStatusExpiresAt = sql.NullTime{}
+	if status.ExpiresAt != nil {
+		u.AccountStatusExpiresAt = sql.NullTime{Time: *status.ExpiresAt, Valid: true}
+	}
+	u.AccountStatusObservedAt = sql.NullTime{Time: status.ObservedAt, Valid: true}
+	m.users[cnsUserID] = u
+	return nil
+}
+
 func (m *memoryUserStore) ListUsersToVerify(_ context.Context, syncedBefore time.Time, after storage.UserSyncCursor, limit int) ([]models.User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

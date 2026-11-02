@@ -13,6 +13,7 @@ import (
 	"sendly/internal/config"
 	"sendly/internal/handlers"
 	"sendly/internal/i18n"
+	"sendly/internal/accountstatus"
 	"sendly/internal/middleware"
 	"sendly/internal/realtime"
 	"sendly/internal/services"
@@ -128,6 +129,8 @@ func main() {
 	router.Use(middleware.LocaleMiddleware())
 
 	pageHandler := handlers.NewPageHandler(cfg, translator, db)
+	router.Use(middleware.AccountStatusGate(pageHandler.Suspended))
+	quickShareGate := middleware.RequireCapability(accountstatus.QuickShare)
 	authHandler := handlers.NewAuthHandler(cfg)
 	uploadHandler := handlers.NewUploadHandler(cfg, db, fs, uploadService)
 	downloadHandler := handlers.NewDownloadHandler(cfg, db, fs, tracker)
@@ -182,6 +185,7 @@ func main() {
 	// outside /api and its CSRF check.
 	cnsWebhookHandler := handlers.NewCNSWebhookHandler(cfg.CNSWebhookSecrets, db)
 	cnsWebhookHandler.SetSignOutNotifier(handlers.NewCNSSignOutNotifier(rt))
+	cnsWebhookHandler.SetAccountStatusNotifier(handlers.NewCNSAccountStatusNotifier(rt, db))
 	router.POST("/webhooks/cns", cnsWebhookHandler.Handle)
 
 	auth := router.Group("/auth")
@@ -231,20 +235,20 @@ func main() {
 			me.POST("/transfers/:file_id/decline", recentUploadsHandler.DeclineTransfer)
 			me.POST("/transfers/:file_id/report", strictRateLimiter.Handler(), reportHandler.ReportTransfer)
 			me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
-			me.POST("/tunnels/start", tunnelHandler.Start)
-			me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
-			me.GET("/tunnels/:id", tunnelHandler.Get)
-			me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
-			me.GET("/tunnels/:id/files", tunnelHandler.Files)
-			me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
+			me.POST("/tunnels/start", quickShareGate, tunnelHandler.Start)
+			me.POST("/tunnels/join", quickShareGate, strictRateLimiter.Handler(), tunnelHandler.Join)
+			me.GET("/tunnels/:id", quickShareGate, tunnelHandler.Get)
+			me.GET("/tunnels/:id/participants", quickShareGate, tunnelHandler.Participants)
+			me.GET("/tunnels/:id/files", quickShareGate, tunnelHandler.Files)
+			me.POST("/tunnels/:id/confirm", quickShareGate, tunnelHandler.Confirm)
 			me.DELETE("/tunnels/:id", tunnelHandler.End)
 
 			
-			me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
-			me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
-			me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
-			me.POST("/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
-			me.POST("/tunnels/:id/participants/:participant_id/reject", tunnelHandler.RejectParticipant)
+			me.GET("/tunnels/:id/participant-keys", quickShareGate, tunnelHandler.GetParticipantPublicKeys)
+			me.POST("/tunnels/:id/envelopes", quickShareGate, tunnelHandler.PushParticipantEnvelope)
+			me.GET("/tunnels/:id/envelopes/:device_id", quickShareGate, tunnelHandler.GetParticipantEnvelope)
+			me.POST("/tunnels/:id/participants/:participant_id/approve", quickShareGate, tunnelHandler.ApproveParticipant)
+			me.POST("/tunnels/:id/participants/:participant_id/reject", quickShareGate, tunnelHandler.RejectParticipant)
 
 			devices := me.Group("/devices")
 			{
@@ -273,7 +277,7 @@ func main() {
 	}
 
 	android := router.Group("/android")
-	android.Use(middleware.AndroidAuthMiddleware(cfg))
+	android.Use(middleware.AndroidAuthMiddleware(cfg), middleware.AccountStatusGate(nil))
 	{
 		upload := android.Group("/upload")
 		{
@@ -371,7 +375,7 @@ func main() {
 		desktop.GET("/limits", pageHandler.Limits)
 
 		desktopAuth := desktop.Group("")
-		desktopAuth.Use(middleware.DesktopAuthMiddleware(cfg, db))
+		desktopAuth.Use(middleware.DesktopAuthMiddleware(cfg, db), middleware.AccountStatusGate(nil))
 		{
 			upload := desktopAuth.Group("/upload")
 			{
@@ -400,20 +404,20 @@ func main() {
 			{
 				me.GET("/recent-uploads", recentUploadsHandler.RecentUploads)
 				me.GET("/files/:id/access", recentUploadsHandler.FileAccess)
-				me.POST("/tunnels/start", tunnelHandler.Start)
-				me.POST("/tunnels/join", strictRateLimiter.Handler(), tunnelHandler.Join)
-				me.GET("/tunnels/:id", tunnelHandler.Get)
-				me.GET("/tunnels/:id/participants", tunnelHandler.Participants)
-				me.GET("/tunnels/:id/files", tunnelHandler.Files)
-				me.POST("/tunnels/:id/confirm", tunnelHandler.Confirm)
+				me.POST("/tunnels/start", quickShareGate, tunnelHandler.Start)
+				me.POST("/tunnels/join", quickShareGate, strictRateLimiter.Handler(), tunnelHandler.Join)
+				me.GET("/tunnels/:id", quickShareGate, tunnelHandler.Get)
+				me.GET("/tunnels/:id/participants", quickShareGate, tunnelHandler.Participants)
+				me.GET("/tunnels/:id/files", quickShareGate, tunnelHandler.Files)
+				me.POST("/tunnels/:id/confirm", quickShareGate, tunnelHandler.Confirm)
 				me.DELETE("/tunnels/:id", tunnelHandler.End)
 
 				
-				me.GET("/tunnels/:id/participant-keys", tunnelHandler.GetParticipantPublicKeys)
-				me.POST("/tunnels/:id/envelopes", tunnelHandler.PushParticipantEnvelope)
-				me.GET("/tunnels/:id/envelopes/:device_id", tunnelHandler.GetParticipantEnvelope)
-				me.POST("/tunnels/:id/participants/:participant_id/approve", tunnelHandler.ApproveParticipant)
-				me.POST("/tunnels/:id/participants/:participant_id/reject", tunnelHandler.RejectParticipant)
+				me.GET("/tunnels/:id/participant-keys", quickShareGate, tunnelHandler.GetParticipantPublicKeys)
+				me.POST("/tunnels/:id/envelopes", quickShareGate, tunnelHandler.PushParticipantEnvelope)
+				me.GET("/tunnels/:id/envelopes/:device_id", quickShareGate, tunnelHandler.GetParticipantEnvelope)
+				me.POST("/tunnels/:id/participants/:participant_id/approve", quickShareGate, tunnelHandler.ApproveParticipant)
+				me.POST("/tunnels/:id/participants/:participant_id/reject", quickShareGate, tunnelHandler.RejectParticipant)
 
 				devices := me.Group("/devices")
 				{
