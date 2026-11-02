@@ -1,9 +1,9 @@
--- baseline schema, formerly init.sql (run only by the postgres container on
--- first start). as a migration it also reaches databases that are not created
--- by that container, such as a CloudNativePG cluster. every statement is
+-- Baseline schema, formerly init.sql (run only by the Postgres container on
+-- first start). As a migration it also reaches databases that are not created
+-- by that container, such as a CloudNativePG cluster. Every statement is
 -- idempotent, so databases created from init.sql apply it as a no-op.
 
--- create files table
+-- Create files table
 CREATE TABLE IF NOT EXISTS files (
     id VARCHAR(20) PRIMARY KEY,
     numeric_code VARCHAR(12) UNIQUE NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS files (
     is_deleted BOOLEAN DEFAULT FALSE
 );
 
--- create reports table
+-- Create reports table
 CREATE TABLE IF NOT EXISTS reports (
     id SERIAL PRIMARY KEY,
     file_id VARCHAR(20) REFERENCES files(id) ON DELETE CASCADE,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS reports (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- create indexes for performance
+-- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_files_numeric_code ON files(numeric_code);
 CREATE INDEX IF NOT EXISTS idx_files_expires_at ON files(expires_at);
 CREATE INDEX IF NOT EXISTS idx_files_is_deleted ON files(is_deleted);
@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_files_created_at ON files(created_at);
 CREATE INDEX IF NOT EXISTS idx_reports_file_id ON reports(file_id);
 
 
--- desktop API keys
+-- Desktop API keys
 CREATE TABLE IF NOT EXISTS desktop_api_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     key_value TEXT UNIQUE NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS desktop_api_keys (
     is_active BOOLEAN DEFAULT TRUE
 );
 
--- associates a file with a desktop API key (ownership)
+-- Associates a file with a desktop API key (ownership)
 CREATE TABLE IF NOT EXISTS desktop_files (
     file_id VARCHAR(20) REFERENCES files(id) ON DELETE CASCADE,
     api_key_id UUID REFERENCES desktop_api_keys(id) ON DELETE CASCADE,
@@ -53,11 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_desktop_files_file_id ON desktop_files(file_id);
 CREATE INDEX IF NOT EXISTS idx_desktop_api_keys_key_value ON desktop_api_keys(key_value);
 
 
--- function to auto-delete files when report count exceeds threshold
--- this will be called from the application, not as a trigger
+-- Function to auto-delete files when report count exceeds threshold
+-- This will be called from the application, not as a trigger
 -- (threshold is configurable via environment variable)
 
--- create a function to clean up expired files (called by app)
+-- Create a function to clean up expired files (called by app)
 CREATE OR REPLACE FUNCTION cleanup_expired_files()
 RETURNS INTEGER AS $$
 DECLARE

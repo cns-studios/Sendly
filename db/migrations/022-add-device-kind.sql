@@ -1,4 +1,4 @@
--- device kind. "approver" is the CNS accounts app: it holds the identity key
+-- Device kind. "approver" is the CNS Accounts app: it holds the identity key
 -- only to approve new devices, can't set up or recover the identity key, and
 -- can remove itself.
 ALTER TABLE user_devices

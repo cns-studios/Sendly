@@ -1,7 +1,7 @@
--- quick share joiners must be approved by the host before the host's client
+-- Quick share joiners must be approved by the host before the host's client
 -- wraps the session key for them or any file key is wrapped for them as the
--- tunnel peer. the host's own row is approved when the tunnel is created.
--- rows that exist at migration time (tunnels already in progress) are
+-- tunnel peer. The host's own row is approved when the tunnel is created.
+-- Rows that exist at migration time (tunnels already in progress) are
 -- treated as approved so running sessions keep working.
 ALTER TABLE tunnel_participants ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ NULL;
 

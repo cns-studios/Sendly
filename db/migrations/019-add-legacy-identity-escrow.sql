@@ -1,8 +1,8 @@
--- temporary, for migrating accounts from before identity keys. each account's
+-- Temporary, for migrating accounts from before identity keys. Each account's
 -- identity private key, encrypted in the browser with the account's legacy
 -- AES user key, so every device that still holds the user key can pick up
--- the identity key without being approved again. the server can't read it.
--- drop together with user_key_envelopes once every account is migrated.
+-- the identity key without being approved again. The server can't read it.
+-- Drop together with user_key_envelopes once every account is migrated.
 CREATE TABLE IF NOT EXISTS legacy_identity_escrow (
     cns_user_id BIGINT PRIMARY KEY,
     identity_key_version INT NOT NULL,

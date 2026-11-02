@@ -1,9 +1,9 @@
--- transfers: user-to-user file sharing with explicit accept/decline.
+-- Transfers: user-to-user file sharing with explicit accept/decline.
 --
--- the wrapped file key for a transfer recipient lives in
+-- The wrapped file key for a transfer recipient lives in
 -- file_access_key_envelopes (access_kind = 'share'), wrapped client-side with
--- the recipient's identity public key; the server never sees the DEK. this
--- table only tracks the transfer's lifecycle. the key is handed out only once
+-- the recipient's identity public key; the server never sees the DEK. This
+-- table only tracks the transfer's lifecycle. The key is handed out only once
 -- the transfer is accepted, and a decline deletes the recipient's envelope
 -- (revoking the key) while this row remains as history.
 --
@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_file_transfers_recipient_status
 CREATE INDEX IF NOT EXISTS idx_file_transfers_sender_created
     ON file_transfers(sender_cns_user_id, created_at DESC);
 
--- shares made before transfers existed had no accept step; keep them
+-- Shares made before transfers existed had no accept step; keep them
 -- accessible by recording them as already accepted.
 INSERT INTO file_transfers (file_id, sender_cns_user_id, recipient_cns_user_id, status, created_at, responded_at)
 SELECT e.file_id, f.owner_cns_user_id, e.recipient_cns_user_id, 'accepted', e.granted_at, e.granted_at

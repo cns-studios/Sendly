@@ -1,4 +1,4 @@
--- A random ID identifying this database. the server writes it into a marker
+-- A random ID identifying this database. The server writes it into a marker
 -- file in DATA_DIR (and CHUNK_DIR) and refuses to start when the marker
 -- belongs to another database, so two instances never share file storage:
 -- each one's orphan cleanup would delete the other's blobs.
