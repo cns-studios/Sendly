@@ -18,32 +18,25 @@
     const DOWNLOAD_CONCURRENCY = 4;
     const MAX_CHUNK_DOWNLOAD_RETRIES = 5;
     let isProcessing = false;
-    let downloadStartedAt = 0;
 
     const loadingSection = document.getElementById('loading-section');
     const fileSection = document.getElementById('file-section');
     const autoDecryptSection = document.getElementById('auto-decrypt-section');
     const missingKeySection = document.getElementById('missing-key-section');
-    const progressSection = document.getElementById('progress-section');
 
     const fileNameEl = document.getElementById('file-name');
-    const fileSizeEl = document.getElementById('file-size');
-    const fileCreatedEl = document.getElementById('file-created');
-    const fileExpiresEl = document.getElementById('file-expires');
+    const fileMetaEl = document.getElementById('file-meta');
+    const fileIconEl = document.getElementById('file-icon');
 
     const downloadAutoBtn = document.getElementById('download-auto-btn');
-
-    const progressTitle = document.getElementById('progress-title');
-    const progressText = document.getElementById('progress-text');
+    const downloadStatus = document.getElementById('download-status');
+    const downloadWords = autoDecryptSection ? autoDecryptSection.querySelectorAll('.share-word') : [];
+    const downloadNums = autoDecryptSection ? autoDecryptSection.querySelectorAll('.share-num-digits') : [];
 
     const reportBtn = document.getElementById('report-btn');
     const reportModal = document.getElementById('report-modal');
     const reportCancel = document.getElementById('report-cancel');
     const reportConfirm = document.getElementById('report-confirm');
-    const downloadCard = document.getElementById('download-card');
-    const downloadPercent = document.getElementById('download-percent');
-    const downloadBarFill = document.getElementById('download-bar-fill');
-    const downloadStatusRow = document.getElementById('download-status-row');
 
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
@@ -91,7 +84,7 @@
 
             fileMetadata = await response.json();
             displayFileMetadata();
-            resetDownloadCard();
+            setDownloadState('idle');
 
             autoDecryptSection.classList.toggle('hidden', !linkSecret);
             missingKeySection?.classList.toggle('hidden', !!linkSecret);
@@ -105,93 +98,258 @@
         }
     }
 
+    const FILE_ICONS = [
+        [/\.(png|jpe?g|gif|webp|avif|heic|bmp|svg|tiff?)$/i, 'file-image'],
+        [/\.(mp4|mov|mkv|webm|avi|m4v)$/i, 'file-video'],
+        [/\.(mp3|wav|flac|aac|ogg|m4a|opus)$/i, 'file-music'],
+        [/\.(zip|rar|7z|tar|gz|tgz|bz2|xz|zst)$/i, 'file-archive'],
+        [/\.(pdf|docx?|odt|rtf|txt|md|pages)$/i, 'file-text'],
+        [/\.(xlsx?|ods|csv|numbers)$/i, 'file-spreadsheet'],
+        [/\.(js|ts|go|py|rs|java|c|cpp|h|json|html|css|sh|ya?ml)$/i, 'file-code']
+    ];
+
+    function iconForFile(name) {
+        const match = FILE_ICONS.find(([re]) => re.test(name || ''));
+        return match ? match[1] : 'file';
+    }
+
     function displayFileMetadata() {
         document.title = `${fileMetadata.original_name} · ${SecureCrypto.formatFileSize(fileMetadata.size_bytes)} ➤ Sendly`;
         fileNameEl.textContent = fileMetadata.original_name;
-        fileSizeEl.textContent = SecureCrypto.formatFileSize(fileMetadata.size_bytes);
-        const uploadedDate = new Date(fileMetadata.created_at).toLocaleDateString();
-        fileCreatedEl.textContent = ` · ${t('shared_uploaded')} ${uploadedDate}`;
-        fileExpiresEl.textContent = SecureCrypto.getTimeRemaining(fileMetadata.expires_at);
-    }
 
-    function updateDownloadCard(percent, status, state = 'active') {
-        if (!downloadCard) return;
-        downloadCard.classList.remove('active', 'done', 'error');
-        if (state) downloadCard.classList.add(state);
-        if (downloadPercent) downloadPercent.textContent = `${Math.round(percent)}%`;
-        if (downloadBarFill) downloadBarFill.style.width = `${percent}%`;
-        if (downloadStatusRow) {
-            const label = downloadStatusRow.querySelector('span');
-            if (label) label.textContent = status;
+        const parts = [
+            SecureCrypto.formatFileSize(fileMetadata.size_bytes),
+            `${t('shared_uploaded')} ${new Date(fileMetadata.created_at).toLocaleDateString()}`
+        ];
+        if (fileMetadata.expires_at) parts.push(SecureCrypto.getTimeRemaining(fileMetadata.expires_at));
+        fileMetaEl.replaceChildren();
+        parts.forEach((text, i) => {
+            if (i > 0) {
+                const dot = document.createElement('span');
+                dot.className = i === 2 ? 'uploaded-meta-dot share-meta-date' : 'uploaded-meta-dot';
+                dot.setAttribute('aria-hidden', 'true');
+                fileMetaEl.appendChild(dot);
+            }
+            const span = document.createElement('span');
+            if (i === 1) span.className = 'share-meta-date';
+            span.textContent = text;
+            fileMetaEl.appendChild(span);
+        });
+
+        if (fileIconEl) {
+            fileIconEl.innerHTML = `<i data-lucide="${iconForFile(fileMetadata.original_name)}" aria-hidden="true"></i>`;
+            if (window.lucide?.createIcons) window.lucide.createIcons();
         }
     }
 
-    function resetDownloadCard() {
-        downloadCard?.classList.remove('active', 'done', 'error');
-        if (downloadPercent) downloadPercent.textContent = '';
-        if (downloadBarFill) downloadBarFill.style.width = '0%';
-        if (downloadStatusRow) {
-            const label = downloadStatusRow.querySelector('span');
-            if (label) label.textContent = t('shared_ready');
+    const DOWNLOAD_SHARE = 94;
+    const CREEP_HEADROOM = 5;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+    const meter = {
+        shown: 0,
+        target: 0,
+        cap: DOWNLOAD_SHARE - 0.5,
+        finishing: false,
+        raf: 0,
+        last: 0,
+        lastDigits: -1,
+        lastDigitsAt: 0,
+        onFinished: null
+    };
+
+    function startMeter() {
+        cancelAnimationFrame(meter.raf);
+        Object.assign(meter, { shown: 0, target: 0, cap: DOWNLOAD_SHARE - 0.5, finishing: false, last: 0, lastDigits: -1, lastDigitsAt: 0, onFinished: null });
+        renderMeter(0, true);
+        meter.raf = requestAnimationFrame(tickMeter);
+    }
+
+    function stopMeter() {
+        cancelAnimationFrame(meter.raf);
+        meter.raf = 0;
+        meter.onFinished = null;
+    }
+
+    function setMeterTarget(percent, cap) {
+        meter.target = Math.max(meter.target, Math.min(100, percent));
+        if (cap !== undefined) meter.cap = Math.max(meter.cap, cap);
+    }
+
+    function finishMeter() {
+        meter.finishing = true;
+        meter.target = 100;
+        meter.cap = 100;
+        return new Promise((resolve) => { meter.onFinished = resolve; });
+    }
+
+    function tickMeter(now) {
+        const dt = meter.last ? Math.min(0.1, (now - meter.last) / 1000) : 0;
+        meter.last = now;
+
+        if (meter.shown < meter.target) {
+            const tau = meter.finishing ? 0.16 : 0.45;
+            meter.shown += (meter.target - meter.shown) * (1 - Math.exp(-dt / tau)) + dt * 0.6;
+            meter.shown = Math.min(meter.shown, meter.target);
+        } else if (!meter.finishing) {
+            const creepGoal = Math.min(meter.cap, meter.target + CREEP_HEADROOM);
+            if (creepGoal > meter.shown) meter.shown += (creepGoal - meter.shown) * (1 - Math.exp(-dt / 3.5));
         }
+
+        if (meter.finishing && meter.shown >= 99.6) {
+            meter.shown = 100;
+            renderMeter(100, true);
+            const done = meter.onFinished;
+            stopMeter();
+            done?.();
+            return;
+        }
+
+        renderMeter(meter.shown, false);
+        meter.raf = requestAnimationFrame(tickMeter);
+    }
+
+    function renderMeter(value, force) {
+        downloadAutoBtn?.style.setProperty('--p', `${value.toFixed(2)}%`);
+        const digits = Math.floor(value);
+        const now = performance.now();
+        if (digits === meter.lastDigits) return;
+        if (!force && now - meter.lastDigitsAt < 90) return;
+        meter.lastDigits = digits;
+        meter.lastDigitsAt = now;
+        downloadNums.forEach((el) => rollText(el, String(digits)));
+    }
+
+    function rollText(container, text) {
+        const slots = Array.from(container.children);
+        while (slots.length < text.length) {
+            const slot = document.createElement('span');
+            slot.className = 'share-slot';
+            container.prepend(slot);
+            slots.unshift(slot);
+        }
+        while (slots.length > text.length) slots.shift().remove();
+        slots.forEach((slot, i) => {
+            const char = text[i];
+            const current = slot.querySelector('.share-char:not(.share-out)');
+            if (current && current.textContent === char) return;
+            slot.querySelectorAll('.share-out').forEach((el) => el.remove());
+            if (current) {
+                if (reduceMotion) current.remove();
+                else {
+                    current.classList.add('share-out');
+                    current.addEventListener('animationend', () => current.remove(), { once: true });
+                }
+            }
+            const next = document.createElement('span');
+            next.className = current && !reduceMotion ? 'share-char share-in' : 'share-char';
+            next.textContent = char;
+            slot.appendChild(next);
+        });
+    }
+
+    function swapWord(text) {
+        downloadWords.forEach((el) => {
+            const current = el.querySelector('.share-word-text:not(.share-out)');
+            if (current && current.textContent === text) return;
+            el.querySelectorAll('.share-out').forEach((node) => node.remove());
+            if (current) {
+                if (reduceMotion) current.remove();
+                else {
+                    current.classList.add('share-out');
+                    current.addEventListener('animationend', () => current.remove(), { once: true });
+                }
+            }
+            const next = document.createElement('span');
+            next.className = current && !reduceMotion ? 'share-word-text share-in' : 'share-word-text';
+            next.textContent = text;
+            el.appendChild(next);
+        });
+    }
+
+    function setDownloadState(state, status = '') {
+        if (!autoDecryptSection) return;
+        autoDecryptSection.classList.remove('active', 'done', 'error');
+        if (state !== 'idle') autoDecryptSection.classList.add(state);
+        if (downloadAutoBtn) downloadAutoBtn.disabled = state === 'active';
+        if (state !== 'active') downloadAutoBtn?.style.setProperty('--p', state === 'done' ? '100%' : '0%');
+        swapWord({
+            idle: t('shared_download'),
+            active: t('shared_downloading_label'),
+            done: t('shared_complete'),
+            error: t('shared_retry')
+        }[state]);
+        setStatus(status);
+    }
+
+    function setStatus(text) {
+        if (downloadStatus && downloadStatus.textContent !== text) downloadStatus.textContent = text;
+    }
+
+    const speed = { bytesPerSecond: 0, lastBytes: 0, lastAt: 0, lastRender: 0 };
+
+    function trackSpeed() {
+        const now = performance.now();
+        if (!speed.lastAt) {
+            Object.assign(speed, { lastAt: now, lastBytes: downloadState.received, lastRender: now });
+            return;
+        }
+        const dt = (now - speed.lastAt) / 1000;
+        if (dt < 0.25) return;
+        const instant = Math.max(0, downloadState.received - speed.lastBytes) / dt;
+        speed.bytesPerSecond = speed.bytesPerSecond ? speed.bytesPerSecond * 0.75 + instant * 0.25 : instant;
+        speed.lastAt = now;
+        speed.lastBytes = downloadState.received;
+        if (now - speed.lastRender < 700 || !speed.bytesPerSecond || !downloadState.total) return;
+        speed.lastRender = now;
+        const remaining = Math.ceil((downloadState.total - downloadState.received) / speed.bytesPerSecond);
+        setStatus(`${SecureCrypto.formatFileSize(speed.bytesPerSecond)}/s · ${tpl('shared_eta', { time: formatDuration(remaining) })}`);
+    }
+
+    function formatDuration(seconds) {
+        if (seconds < 60) return `${Math.max(1, seconds)}s`;
+        return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    }
+
+    function onBytesReceived(count) {
+        downloadState.received = Math.max(0, downloadState.received + count);
+        if (downloadState.total) setMeterTarget((downloadState.received / downloadState.total) * DOWNLOAD_SHARE);
+        trackSpeed();
     }
 
     async function downloadAndDecrypt() {
         if (isProcessing || !linkSecret) return;
         isProcessing = true;
 
-        loadingSection.classList.add('hidden');
-        autoDecryptSection.classList.add('hidden');
-        progressSection.classList.add('hidden');
-
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-
         try {
-            downloadStartedAt = Date.now();
-            updateDownloadCard(0, t('shared_downloading_status'));
-            const iconEl = document.getElementById('progress-icon');
-            if (iconEl) {
-                iconEl.innerHTML = '';
-                iconEl.appendChild(createProgressCircle(36));
-            }
-
-            updateProgress(getEncryptedDownloadProgress(), t('status_downloading'));
+            Object.assign(speed, { bytesPerSecond: 0, lastBytes: 0, lastAt: 0, lastRender: 0 });
+            setDownloadState('active');
+            startMeter();
             const encryptedBlob = await downloadEncryptedFile();
 
-            updateProgress(80, t('status_downloading'));
+            setMeterTarget(DOWNLOAD_SHARE, 99);
             const decryptedData = await SecureCrypto.decryptFileChunked(
                 encryptedBlob,
                 linkSecret,
                 fileMetadata.size_bytes,
-                (progress) => {
-                    updateProgress(80 + (progress * 0.2), t('status_downloading'));
-                }
+                (progress) => setMeterTarget(DOWNLOAD_SHARE + (progress / 100) * (100 - DOWNLOAD_SHARE))
             );
 
+            await finishMeter();
             triggerDownload(decryptedData, fileMetadata.original_name);
+            setDownloadState('done', t('state_download_automatically'));
+            resetDownloadState();
 
-            updateDownloadCard(100, t('shared_complete'), 'done');
-            showDownloadedState();
-
-            await new Promise((resolve) => setTimeout(resolve, 3000));
-
-            resetDownloadBox();
-            autoDecryptSection.classList.remove('hidden');
+            await new Promise((resolve) => setTimeout(resolve, 3200));
+            setDownloadState('idle');
         } catch (error) {
             console.error('Download/decrypt failed:', error);
-            updateDownloadCard(0, t('shared_retry'), 'error');
-
+            stopMeter();
+            setDownloadState('error', t('toast_download_failed'));
             showNotification(t('toast_download_failed'), 'error');
-            autoDecryptSection.classList.remove('hidden');
         } finally {
             isProcessing = false;
         }
-    }
-
-    function getEncryptedDownloadProgress() {
-        if (downloadState.blob) return 80;
-        if (!downloadState.total) return 0;
-        return Math.min(80, (downloadState.received / downloadState.total) * 80);
     }
 
     async function downloadEncryptedFile() {
@@ -203,16 +361,47 @@
             await downloadState.promise;
             return downloadState.blob;
         } catch (error) {
-            downloadState.promise = null;
-            downloadState.chunks = [];
-            downloadState.received = 0;
-            downloadState.total = 0;
+            resetDownloadState();
+            throw error;
+        }
+    }
+
+    async function readBody(response, onBytes) {
+        if (!response.body?.getReader) {
+            const data = new Uint8Array(await response.arrayBuffer());
+            onBytes(data.length);
+            return data;
+        }
+        const reader = response.body.getReader();
+        const parts = [];
+        let size = 0;
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            parts.push(value);
+            size += value.length;
+            onBytes(value.length);
+        }
+        const out = new Uint8Array(size);
+        let offset = 0;
+        for (const part of parts) {
+            out.set(part, offset);
+            offset += part.length;
+        }
+        return out;
+    }
+
+    async function readCounted(response) {
+        let counted = 0;
+        try {
+            return await readBody(response, (n) => { counted += n; onBytesReceived(n); });
+        } catch (error) {
+            onBytesReceived(-counted);
             throw error;
         }
     }
 
     async function streamEncryptedFile() {
-        if (!downloadStartedAt) downloadStartedAt = Date.now();
         const firstEnd = DOWNLOAD_CHUNK_SIZE - 1;
         const firstResponse = await SendlyNet.fetch(`/api/file/${fileMetadata.id}/download`, {
             headers: { Range: `bytes=0-${firstEnd}` }
@@ -232,21 +421,17 @@
         const chunkCount = Math.ceil(total / DOWNLOAD_CHUNK_SIZE);
         downloadState.chunks = new Array(chunkCount);
         if (firstResponse.status === 200) {
-            const data = new Uint8Array(await firstResponse.arrayBuffer());
+            const data = await readCounted(firstResponse);
             if (data.length !== total) throw new Error(t('toast_download_failed'));
             downloadState.chunks = [data];
-            downloadState.received = data.length;
-            updateDownloadCard(100, t('shared_downloading_status'));
             downloadState.blob = new Blob(downloadState.chunks);
             return downloadState.blob;
         }
 
-        const firstChunk = new Uint8Array(await firstResponse.arrayBuffer());
+        const firstChunk = await readCounted(firstResponse);
         const expectedFirstLength = Math.min(DOWNLOAD_CHUNK_SIZE, total);
         if (firstChunk.length !== expectedFirstLength) throw new Error(t('toast_download_failed'));
         downloadState.chunks[0] = firstChunk;
-        downloadState.received = firstChunk.length;
-        updateDownloadCard((downloadState.received / total) * 100, t('shared_downloading_status'));
         let nextChunk = 1;
 
         async function worker() {
@@ -256,18 +441,6 @@
                 const start = index * DOWNLOAD_CHUNK_SIZE;
                 const end = Math.min(total - 1, start + DOWNLOAD_CHUNK_SIZE - 1);
                 downloadState.chunks[index] = await downloadRangeWithRetry(start, end);
-                downloadState.received += downloadState.chunks[index].length;
-                updateProgress((downloadState.received / total) * 80, t('status_downloading'));
-                const percent = (downloadState.received / total) * 100;
-                const elapsed = Math.max(0.1, (Date.now() - downloadStartedAt) / 1000);
-                const bytesPerSecond = downloadState.received / elapsed;
-                const remaining = bytesPerSecond > 0 ? Math.ceil((total - downloadState.received) / bytesPerSecond) : 0;
-                updateDownloadCard(percent, `${SecureCrypto.formatFileSize(bytesPerSecond)}/s · ${tpl('shared_eta', { time: formatDuration(remaining) })}`);
-            }
-
-            function formatDuration(seconds) {
-                if (seconds < 60) return `${Math.max(1, seconds)}s`;
-                return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
             }
         }
         await Promise.all(Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, chunkCount) }, worker));
@@ -287,8 +460,11 @@
                     const error = await response.json().catch(() => ({}));
                     throw SendlyToast.apiError(error, `Download chunk ${start} failed`);
                 }
-                const data = new Uint8Array(await response.arrayBuffer());
-                if (data.length !== end - start + 1) throw new Error(`Incomplete download chunk ${start}`);
+                const data = await readCounted(response);
+                if (data.length !== end - start + 1) {
+                    onBytesReceived(-data.length);
+                    throw new Error(`Incomplete download chunk ${start}`);
+                }
                 return data;
             } catch (error) {
                 lastError = error;
@@ -342,88 +518,17 @@
         }
     }
 
-    function createProgressCircle(size) {
-        const svgNS = 'http://www.w3.org/2000/svg';
-        const svg = document.createElementNS(svgNS, 'svg');
-        svg.setAttribute('viewBox', '0 0 36 36');
-        svg.setAttribute('width', size);
-        svg.setAttribute('height', size);
-        svg.classList.add('progress-circle');
-        const bg = document.createElementNS(svgNS, 'circle');
-        bg.setAttribute('cx', '18');
-        bg.setAttribute('cy', '18');
-        bg.setAttribute('r', '15');
-        bg.setAttribute('fill', 'none');
-        bg.setAttribute('stroke', '#E4E3E3');
-        bg.setAttribute('stroke-width', '3');
-        const fill = document.createElementNS(svgNS, 'circle');
-        fill.setAttribute('cx', '18');
-        fill.setAttribute('cy', '18');
-        fill.setAttribute('r', '15');
-        fill.setAttribute('fill', 'none');
-        fill.setAttribute('stroke', '#007AFF');
-        fill.setAttribute('stroke-width', '3');
-        fill.setAttribute('stroke-linecap', 'round');
-        fill.setAttribute('stroke-dasharray', '94.25');
-        fill.setAttribute('stroke-dashoffset', '94.25');
-        fill.setAttribute('transform', 'rotate(-90 18 18)');
-        fill.classList.add('progress-circle-fill');
-        svg.appendChild(bg);
-        svg.appendChild(fill);
-        return svg;
-    }
-
-    function updateProgress(percent, text) {
-        if (progressText) progressText.textContent = `${Math.round(Math.min(100, Math.max(0, percent)))}%`;
-        if (text && progressTitle) progressTitle.textContent = text;
-        const iconEl = document.getElementById('progress-icon');
-        const fill = iconEl?.querySelector('.progress-circle-fill');
-        if (fill) {
-            const circumference = 94.25;
-            fill.setAttribute('stroke-dashoffset', circumference * (1 - Math.min(1, Math.max(0, percent / 100))));
-        }
-    }
-
-    function showDownloadedState() {
-        if (progressTitle) progressTitle.textContent = t('status_complete');
-        if (progressText) progressText.textContent = t('state_download_automatically');
-
-        const iconEl = document.getElementById('progress-icon');
-        if (iconEl) {
-            iconEl.innerHTML = '';
-            iconEl.className = '';
-            const icon = document.createElement('i');
-            icon.setAttribute('data-lucide', 'check-circle');
-            icon.style.cssText = 'width: 36px; height: 36px; color: #007AFF;';
-            iconEl.appendChild(icon);
-            if (window.lucide && lucide.createIcons) {
-                lucide.createIcons();
-            }
-        }
-    }
-
-    function resetDownloadBox() {
-        if (progressTitle) progressTitle.textContent = t('status_downloading');
-        if (progressText) progressText.textContent = t('app_0_pct');
-
+    function resetDownloadState() {
         downloadState.promise = null;
         downloadState.blob = null;
         downloadState.chunks = [];
         downloadState.received = 0;
         downloadState.total = 0;
-
-        const iconEl = document.getElementById('progress-icon');
-        if (iconEl) {
-            iconEl.innerHTML = '';
-            iconEl.appendChild(createProgressCircle(36));
-        }
     }
-
 
     function showFileError(icon, title, subtitle) {
         loadingSection.classList.add('hidden');
         fileSection.classList.add('hidden');
-        progressSection.classList.add('hidden');
 
         const section = document.getElementById('error-section');
         const iconEl = document.getElementById('error-icon');
@@ -432,7 +537,7 @@
         if (!section || !titleEl || !subtitleEl) return;
 
         if (iconEl) {
-            iconEl.innerHTML = `<i data-lucide="${icon}" style="width:48px;height:48px;"></i>`;
+            iconEl.innerHTML = `<i data-lucide="${icon}" aria-hidden="true"></i>`;
         }
         titleEl.textContent = title;
         subtitleEl.textContent = subtitle;

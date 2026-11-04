@@ -103,59 +103,65 @@
     {{template "account_status_notice" .}}
 
     <div class="main-content">
-        <div class="shared-content-wrapper">
+        <div class="shared-content-wrapper share-wrapper">
 
-            <div id="loading-section">
-                <div class="loading-box">
-                    <div class="spinner"></div>
-                    <p>{{.t.shared_loading}}</p>
+            <div id="loading-section" class="share-loading" aria-busy="true" aria-label="{{.t.shared_loading}}">
+                <div class="share-skel share-skel-kicker"></div>
+                <div class="share-skel-row">
+                    <div class="share-skel share-skel-icon"></div>
+                    <div class="share-skel-lines">
+                        <div class="share-skel share-skel-title"></div>
+                        <div class="share-skel share-skel-meta"></div>
+                    </div>
                 </div>
+                <div class="share-skel share-skel-btn"></div>
             </div>
 
-            <div id="file-section" class="hidden">
-                <p class="shared-heading">{{.t.shared_heading}}</p>
+            <section id="file-section" class="share-file hidden" aria-labelledby="file-name">
+                <p class="share-kicker">{{.t.shared_heading}}</p>
 
-                <div class="file-info-box download-card" id="download-card">
-                    <div class="download-card-top">
-                        <div class="download-file-icon"><i data-lucide="file-archive" aria-hidden="true"></i></div>
-                        <div class="download-file-info">
-                            <p class="file-name-text" id="file-name"></p>
-                            <p class="file-meta-text"><span id="file-size"></span><span id="file-created"></span></p>
-                        </div>
-                        <div class="download-card-right">
-                            <span class="download-percent" id="download-percent"></span>
-                        </div>
-                    </div>
-                    <div class="download-bar-track"><div class="download-bar-fill" id="download-bar-fill"></div></div>
-                    <div class="download-status-row" id="download-status-row">
-                        <i data-lucide="cloud-download" aria-hidden="true"></i>
-                        <span>{{.t.shared_ready}}</span>
-                    </div>
-                    <span id="file-expires" hidden></span>
-                    <div id="auto-decrypt-section" class="hidden">
-                        <button id="download-auto-btn" class="download-btn">{{.t.shared_download}}</button>
-                    </div>
-                    <div id="missing-key-section" class="hidden">
-                        <div class="no-password-btn">{{.t.shared_wrong_link}}</div>
+                <div class="share-file-row">
+                    <div class="share-file-icon" id="file-icon"><i data-lucide="file" aria-hidden="true"></i></div>
+                    <div class="share-file-info">
+                        <h1 class="share-file-name" id="file-name"></h1>
+                        <p class="share-file-meta" id="file-meta"></p>
                     </div>
                 </div>
 
-                <p class="warning-text">{{.t.shared_warning}}</p>
-                <button id="report-btn" class="report-link">{{.t.shared_report}}</button>
-            </div>
-
-            <div id="progress-section" class="hidden">
-                <div class="downloading-box">
-                    <p id="progress-title" class="downloading-title">{{.t.shared_downloading}}</p>
-                    <div id="progress-icon"></div>
-                    <p id="progress-text" class="downloading-percent">0%</p>
+                <div id="auto-decrypt-section" class="share-action hidden">
+                    <button id="download-auto-btn" type="button" class="share-download-btn">
+                        <span class="share-download-fill" aria-hidden="true"></span>
+                        <span class="share-download-label">
+                            <i data-lucide="download" class="share-ic share-ic-download" aria-hidden="true"></i>
+                            <i data-lucide="check" class="share-ic share-ic-done" aria-hidden="true"></i>
+                            <span class="share-word"><span class="share-word-text">{{.t.shared_download}}</span></span>
+                            <span class="share-num" aria-hidden="true"><span class="share-num-digits"></span>%</span>
+                        </span>
+                        <span class="share-download-label share-download-label-on" aria-hidden="true">
+                            <i data-lucide="download" class="share-ic share-ic-download"></i>
+                            <i data-lucide="check" class="share-ic share-ic-done"></i>
+                            <span class="share-word"><span class="share-word-text">{{.t.shared_download}}</span></span>
+                            <span class="share-num"><span class="share-num-digits"></span>%</span>
+                        </span>
+                    </button>
+                    <p id="download-status" class="share-download-status" aria-live="polite"></p>
                 </div>
-            </div>
 
-            <div id="error-section" class="hidden">
-                <div id="error-icon" style="margin-bottom:24px;"></div>
-                <p id="error-title" style="color:black;font-size:32px;font-weight:590;margin-bottom:24px;"></p>
-                <p id="error-subtitle" style="color:#828282;font-size:16px;font-weight:510;text-align:center;"></p>
+                <div id="missing-key-section" class="share-missing-key hidden" role="alert">
+                    <i data-lucide="link-2-off" aria-hidden="true"></i>
+                    <p>{{.t.shared_wrong_link}}</p>
+                </div>
+
+                <div class="share-foot">
+                    <p class="share-warning">{{.t.shared_warning}}</p>
+                    <button id="report-btn" type="button" class="share-report">{{.t.shared_report}}</button>
+                </div>
+            </section>
+
+            <div id="error-section" class="uploaded-state share-error hidden">
+                <div class="uploaded-state-icon" id="error-icon"></div>
+                <h1 class="uploaded-state-title" id="error-title"></h1>
+                <p class="uploaded-state-desc" id="error-subtitle"></p>
             </div>
 
             <div id="report-modal" class="tos-overlay hidden" aria-hidden="true">
