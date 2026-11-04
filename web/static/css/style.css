@@ -1373,7 +1373,7 @@ body.page-shared #auto-decrypt-section {
     margin-top: 8px;
 }
 
-body.page-shared #no-password-section {
+body.page-shared #missing-key-section {
     margin-top: 8px;
 }
 

@@ -4,9 +4,8 @@
     const t = (k, d) => window.CONFIG?.t?.[k] || d || k;
     const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
 
-    const fileId = window.CONFIG?.fileID;
     let fileMetadata = null;
-    let currentPassword = null;
+    let linkSecret = null;
 
     const downloadState = {
         promise: null,
@@ -22,9 +21,9 @@
     let downloadStartedAt = 0;
 
     const loadingSection = document.getElementById('loading-section');
-    const passwordSection = document.getElementById('password-section');
+    const fileSection = document.getElementById('file-section');
     const autoDecryptSection = document.getElementById('auto-decrypt-section');
-    const noPasswordSection = document.getElementById('no-password-section');
+    const missingKeySection = document.getElementById('missing-key-section');
     const progressSection = document.getElementById('progress-section');
 
     const fileNameEl = document.getElementById('file-name');
@@ -74,7 +73,7 @@
     }
 
     function setupEventListeners() {
-        downloadAutoBtn?.addEventListener('click', () => downloadAndDecrypt(currentPassword));
+        downloadAutoBtn?.addEventListener('click', downloadAndDecrypt);
         reportBtn?.addEventListener('click', () => { reportModal.classList.remove('hidden'); });
         reportCancel?.addEventListener('click', () => { reportModal.classList.add('hidden'); });
         reportConfirm?.addEventListener('click', submitReport);
@@ -94,20 +93,11 @@
             displayFileMetadata();
             resetDownloadCard();
 
-            const hashPassword = SecureCrypto.getPasswordFromHash();
-            if (hashPassword) {
-                const validation = SecureCrypto.validatePassword(hashPassword);
-                if (validation.valid) {
-                    currentPassword = hashPassword;
-                    autoDecryptSection.classList.remove('hidden');
-                    if (noPasswordSection) noPasswordSection.classList.add('hidden');
-                }
-            } else {
-                if (noPasswordSection) noPasswordSection.classList.remove('hidden');
-            }
+            autoDecryptSection.classList.toggle('hidden', !linkSecret);
+            missingKeySection?.classList.toggle('hidden', !!linkSecret);
 
             loadingSection.classList.add('hidden');
-            passwordSection.classList.remove('hidden');
+            fileSection.classList.remove('hidden');
 
         } catch (error) {
             console.error('Failed to load file metadata:', error);
@@ -116,6 +106,7 @@
     }
 
     function displayFileMetadata() {
+        document.title = `${fileMetadata.original_name} · ${SecureCrypto.formatFileSize(fileMetadata.size_bytes)} ➤ Sendly`;
         fileNameEl.textContent = fileMetadata.original_name;
         fileSizeEl.textContent = SecureCrypto.formatFileSize(fileMetadata.size_bytes);
         const uploadedDate = new Date(fileMetadata.created_at).toLocaleDateString();
@@ -145,18 +136,9 @@
         }
     }
 
-    async function downloadAndDecrypt(password) {
-        if (isProcessing) return;
+    async function downloadAndDecrypt() {
+        if (isProcessing || !linkSecret) return;
         isProcessing = true;
-
-        const validation = SecureCrypto.validatePassword(password);
-        if (!validation.valid) {
-            isProcessing = false;
-            showNotification(validation.error, 'error');
-            return;
-        }
-
-        currentPassword = password;
 
         loadingSection.classList.add('hidden');
         autoDecryptSection.classList.add('hidden');
@@ -179,7 +161,7 @@
             updateProgress(80, t('status_downloading'));
             const decryptedData = await SecureCrypto.decryptFileChunked(
                 encryptedBlob,
-                password,
+                linkSecret,
                 fileMetadata.size_bytes,
                 (progress) => {
                     updateProgress(80 + (progress * 0.2), t('status_downloading'));
@@ -194,17 +176,13 @@
             await new Promise((resolve) => setTimeout(resolve, 3000));
 
             resetDownloadBox();
-            if (currentPassword) {
-                autoDecryptSection.classList.remove('hidden');
-            }
+            autoDecryptSection.classList.remove('hidden');
         } catch (error) {
             console.error('Download/decrypt failed:', error);
             updateDownloadCard(0, t('shared_retry'), 'error');
 
             showNotification(t('toast_download_failed'), 'error');
-            if (currentPassword) {
-                autoDecryptSection.classList.remove('hidden');
-            }
+            autoDecryptSection.classList.remove('hidden');
         } finally {
             isProcessing = false;
         }
@@ -444,7 +422,7 @@
 
     function showFileError(icon, title, subtitle) {
         loadingSection.classList.add('hidden');
-        passwordSection.classList.add('hidden');
+        fileSection.classList.add('hidden');
         progressSection.classList.add('hidden');
 
         const section = document.getElementById('error-section');
@@ -493,13 +471,20 @@
         SendlyToast.show(message, { type });
     }
 
+    async function resolveFileId() {
+        if (window.CONFIG?.fileID) return window.CONFIG.fileID;
+        if (!SecureCrypto.isLinkToken(linkSecret)) return '';
+        return SecureCrypto.fileIdFromLinkToken(linkSecret);
+    }
+
     async function init() {
         setupTOSGate();
-        try { await SecureCrypto.loadWordList(); } catch (error) { console.error('Word list failed:', error); }
         setupEventListeners();
 
+        linkSecret = SecureCrypto.getLinkSecretFromHash();
+        const fileId = await resolveFileId();
         if (!fileId) {
-            showFileError('cloud-alert', t('error_invalid_link_title'), t('error_no_file_id'));
+            showFileError('cloud-alert', t('error_invalid_link_title'), t('error_invalid_link_desc'));
             return;
         }
 

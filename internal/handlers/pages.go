@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"net/http"
 	"strings"
@@ -461,8 +460,15 @@ func (h *PageHandler) Link(c *gin.Context) {
 }
 
 func (h *PageHandler) SharedFile(c *gin.Context) {
+	h.renderSharedPage(c, c.Param("id"), "/shared/"+c.Param("id"))
+}
+
+func (h *PageHandler) SharedLink(c *gin.Context) {
+	h.renderSharedPage(c, "", "/s")
+}
+
+func (h *PageHandler) renderSharedPage(c *gin.Context, fileID, sharePath string) {
 	setCSRFTokenCookie(c)
-	fileID := c.Param("id")
 	user := middleware.GetCNSUser(c)
 	authenticated := user != nil
 	username := ""
@@ -491,15 +497,11 @@ func (h *PageHandler) SharedFile(c *gin.Context) {
 		configJSON = []byte("{}")
 	}
 	translations := h.tr.Get(locale)
-	title := translations["title_shared"]
-	if file, lookupErr := h.db.GetFileByID(c.Request.Context(), fileID); lookupErr == nil {
-		title = fmt.Sprintf("%s · %s ➤ Sendly", file.OriginalName, formatBytes(file.SizeBytes))
-	}
 	h.render(c, "shared.html", gin.H{
-		"title":         title,
+		"title":         translations["title_shared"],
 		"description":   translations["desc_shared"],
 		"baseURL":       h.cfg.BaseURL,
-		"fileID":        fileID,
+		"sharePath":     sharePath,
 		"authenticated": authenticated,
 		"username":      username,
 		"userAvatar":    userAvatar,
@@ -552,19 +554,6 @@ func (h *PageHandler) Uploaded(c *gin.Context) {
 		"noindex":       true,
 		"configJSON":    template.JS(string(configJSON)),
 	})
-}
-
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }
 
 func (h *PageHandler) Limits(c *gin.Context) {

@@ -5,37 +5,14 @@
     const tpl = (k, vars) => { let s = t(k); if (vars) for (const [key, val] of Object.entries(vars)) s = s.replace(`{${key}}`, val); return s; };
 
      
-    const CHUNK_SIZE = 5 * 1024 * 1024;  
     const AUTHENTICATED = window.CONFIG?.authenticated || false;
-    const MEMBER_LINKS = AUTHENTICATED && window.CONFIG?.accountStatus?.member_links !== false;
     const CNS_USER_ID = window.CONFIG?.cnsUserId || 0;
     const CNS_USERNAME = window.CONFIG?.cnsUsername || '';
     const TOS_VERSION = window.CONFIG?.tosVersion || '2026-09-25';
     const TOS_COOKIE_NAME = 'sendly_tos_accepted';
-    const RETENTION = MEMBER_LINKS ? '90d' : '7d';
-    const RETENTION_LABEL = MEMBER_LINKS ? '90 Days' : '7 Days';
-    const PARALLEL_CHUNK_UPLOADS = window.CONFIG?.parallelChunkUploads || 6;
-    const MAX_CHUNK_UPLOAD_RETRIES = 5;
     const RECENT_UPLOADS_PER_PAGE = 10;
     const RECENT_SEARCH_DEBOUNCE_MS = 180;
     const PAGE_LOCALE = document.documentElement.lang || undefined;
-
-    let totalChunks = 0;
-
-    let selectedFile = null;
-    let generatedPassword = null;
-    let uploadSessionId = null;
-    let pendingExpiresAt = null;
-    let pendingCountdownTimer = null;
-    let isUploading = false;
-    let isFinalizing = false;
-    let uploadComplete = false;
-    let uploadError = null;
-    let pendingAutoCopyText = null;
-    let pendingAutoCopyBanner = false;
-    let pendingAutoCopyBound = false;
-    let finalizeEnvelopePayload = null;
-    let ephemeralKeyPair = null;
 
     let authDeviceIdentity = null;
     let authIdentityKey = null;
@@ -44,30 +21,7 @@
     let recentTotalPages = 0;
     let recentLoadToken = 0;
     let recentSearchDebounceTimer = null;
-    let activeTunnel = null;
-    let tunnelPollTimer = null;
-    let lastShareUrl = '';
-    let idleCopyDone = false;
-    let idleCopyBannerShown = false;
 
-    const stageEntry = document.getElementById('stage-entry');
-    const stageProcessing = document.getElementById('stage-processing');
-    const stagePending = document.getElementById('stage-pending');
-    const stageOutput = document.getElementById('stage-output');
-    const pendingCountdown = document.getElementById('pending-countdown');
-    
-    const progressVal = document.getElementById('progress-val');
-    const processMain = document.getElementById('process-main');
-    const processSub = document.getElementById('process-sub');
-
-    const finalizeBtn = document.getElementById('finalize-btn');
-    const fileDetails = document.getElementById('file-details');
-    const statusText = document.getElementById('status-text');
-
-    const outUrl = document.getElementById('out-url');
-    const outPin = document.getElementById('out-pin');
-    const outKey = document.getElementById('out-key');
-    const outExpiryLabel = document.getElementById('out-expiry-label');
     const recentSection = document.getElementById('recent-uploads-section');
     const recentLoading = document.getElementById('recent-loading');
     const recentError = document.getElementById('recent-error');
@@ -79,21 +33,6 @@
     const recentDeviceNotice = document.getElementById('recent-device-notice');
     const recentMore = document.getElementById('recent-more');
     const recentRetry = document.getElementById('recent-retry');
-    const tunnelFilesSection = document.getElementById('tunnel-files-section');
-    const tunnelList = document.getElementById('tunnel-list');
-    const tunnelEmpty = document.getElementById('tunnel-empty');
-    const tunnelCount = document.getElementById('tunnel-count');
-    const tunnelControlsSection = document.getElementById('tunnel-controls-section');
-    const tunnelDurationSelect = document.getElementById('tunnel-duration-select');
-    const tunnelStartBtn = document.getElementById('tunnel-start-btn');
-    const tunnelJoinCode = document.getElementById('tunnel-join-code');
-    const tunnelJoinBtn = document.getElementById('tunnel-join-btn');
-    const tunnelConfirmWrap = document.getElementById('tunnel-confirm-wrap');
-    const tunnelConfirmBtn = document.getElementById('tunnel-confirm-btn');
-    const tunnelActiveMeta = document.getElementById('tunnel-active-meta');
-    const tunnelQRWrap = document.getElementById('tunnel-qr-wrap');
-    const tunnelQRCode = document.getElementById('tunnel-qr-code');
-    const tunnelEndBtn = document.getElementById('tunnel-end-btn');
     const deviceApprovalModal = document.getElementById('device-approval-modal');
     const deviceApprovalTitle = document.getElementById('device-approval-title');
     const deviceApprovalMessage = document.getElementById('device-approval-message');
@@ -107,7 +46,6 @@
     const tosOverlay = document.getElementById('tos-overlay');
     const tosAcceptBtn = document.getElementById('tos-accept-btn');
     const tosDeclineBtn = document.getElementById('tos-decline-btn');
-    const downloadActivityOverlay = document.getElementById('download-activity-overlay');
     const actionModal = document.getElementById('action-modal');
     const actionModalTitle = document.getElementById('action-modal-title');
     const actionModalDescription = document.getElementById('action-modal-description');
@@ -193,14 +131,6 @@
 
     async function init() {
         setupTOSGate();
-
-         
-        try {
-            await SecureCrypto.loadWordList();
-        } catch (error) {
-            console.error('Failed to preload word list:', error);
-        }
-
         applyTierUI();
         setupEventListeners();
 
@@ -967,322 +897,6 @@
         updateRecentPagination();
     }
 
-    function showTunnelInfo(state) {
-        if (!state) return;
-        showInfoBanner(state);
-    }
-
-    function setTunnelEntryControlsHidden(hidden) {
-        tunnelDurationSelect?.closest('.tunnel-control-row')?.classList.toggle('hidden', hidden);
-        tunnelStartBtn?.closest('.tunnel-control-row')?.classList.toggle('hidden', hidden);
-        tunnelJoinCode?.closest('.tunnel-control-row')?.classList.toggle('hidden', hidden);
-    }
-
-    function clearTunnelState() {
-        activeTunnel = null;
-        if (tunnelPollTimer) {
-            clearInterval(tunnelPollTimer);
-            tunnelPollTimer = null;
-        }
-
-        tunnelEndBtn?.classList.add('hidden');
-        tunnelFilesSection?.classList.add('hidden');
-        tunnelConfirmWrap?.classList.add('hidden');
-        tunnelQRWrap?.classList.add('hidden');
-        if (tunnelList) {
-            tunnelList.innerHTML = '';
-            tunnelList.classList.add('hidden');
-        }
-        tunnelEmpty?.classList.add('hidden');
-        if (tunnelCount) tunnelCount.textContent = t('app_0_files');
-        if (tunnelActiveMeta) {
-            tunnelActiveMeta.classList.add('hidden');
-            tunnelActiveMeta.textContent = '';
-        }
-        if (tunnelQRCode) {
-            tunnelQRCode.innerHTML = '';
-        }
-        setTunnelEntryControlsHidden(false);
-    }
-
-    function applyTunnelUI(tunnel, qrPayload = '') {
-        activeTunnel = tunnel;
-        const parent = recentSection?.parentElement;
-        if (parent && tunnelEndBtn && tunnelFilesSection && recentSection) {
-            parent.insertBefore(tunnelEndBtn, recentSection);
-            parent.insertBefore(tunnelFilesSection, recentSection);
-        }
-        tunnelEndBtn?.classList.remove('hidden');
-        tunnelFilesSection?.classList.remove('hidden');
-        tunnelControlsSection?.classList.remove('hidden');
-        setTunnelEntryControlsHidden(true);
-
-        const expiresLabel = tunnel?.expires_at ? formatExpiryDate(tunnel.expires_at) : t('format_soon');
-        if (tunnelActiveMeta) {
-            tunnelActiveMeta.classList.remove('hidden');
-            tunnelActiveMeta.innerHTML = `
-                <span class="tunnel-meta-label">${t('tunnel_code')}</span>
-                <span class="tunnel-code-pill">${escapeHtml(tunnel.code)}</span>
-                <span class="tunnel-meta-divider">·</span>
-                <span>${t('tunnel_status')}${escapeHtml(tunnel.status)}</span>
-                <span class="tunnel-meta-divider">·</span>
-                <span>${t('label_expires')}${escapeHtml(expiresLabel)}</span>
-            `;
-        }
-
-        const waitingConfirm = !!(tunnel && (!tunnel.initiator_confirmed || !tunnel.peer_confirmed));
-        tunnelConfirmWrap?.classList.toggle('hidden', !waitingConfirm);
-
-        if (qrPayload && window.QRCode && tunnelQRCode) {
-            tunnelQRCode.innerHTML = '';
-            new QRCode(tunnelQRCode, {
-                text: qrPayload,
-                width: 176,
-                height: 176,
-                colorDark: '#f3f3f3',
-                colorLight: '#111111',
-            });
-            tunnelQRWrap?.classList.remove('hidden');
-        }
-    }
-
-    function renderTunnelFiles(items) {
-        if (!tunnelList || !tunnelEmpty || !tunnelCount) return;
-
-        const files = Array.isArray(items) ? items : [];
-        tunnelCount.textContent = `${files.length} ${t(files.length === 1 ? 'label_file' : 'label_files')}`;
-
-        if (!files.length) {
-            tunnelList.classList.add('hidden');
-            tunnelEmpty.classList.remove('hidden');
-            return;
-        }
-
-        tunnelEmpty.classList.add('hidden');
-        tunnelList.classList.remove('hidden');
-        tunnelList.innerHTML = files.map((item) => `
-            <article class="recent-item" data-file-id="${escapeHtml(item.file_id || '')}" data-file-name="${escapeHtml(item.filename || '')}" data-tunnel-id="${escapeHtml(activeTunnel?.id || '')}">
-                <div class="recent-main">
-                    <div class="recent-name-wrap">
-                        <div class="recent-name" title="${escapeHtml(item.filename)}">${escapeHtml(item.filename)}</div>
-                    </div>
-                    <div class="recent-actions">
-                        <button class="recent-action" data-action="download" aria-label="${t('label_download_tunnel')}" title="${t('label_download_tunnel')}">
-                            <i data-lucide="download" style="width: 0.85rem; height: 0.85rem;"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="recent-meta">
-                    <span>${SecureCrypto.formatFileSize(item.size_bytes)}</span>
-                    <span>${t('label_uploaded')}${formatUploadDate(item.created_at)}</span>
-                </div>
-            </article>
-        `).join('');
-
-        tunnelList.querySelectorAll('.recent-action').forEach((btn) => {
-            btn.addEventListener('click', handleTunnelFileAction);
-        });
-
-        if (window.lucide?.createIcons) {
-            window.lucide.createIcons();
-        }
-    }
-
-    async function handleTunnelFileAction(event) {
-        const button = event.currentTarget;
-        const item = button.closest('.recent-item');
-        if (!item) return;
-
-        const fileId = item.dataset.fileId;
-        const fileName = item.dataset.fileName;
-        const tunnelId = item.dataset.tunnelId;
-
-        try {
-            button.disabled = true;
-            await downloadOwnedFile(fileId, fileName, tunnelId, item);
-        } catch (error) {
-            console.error('Tunnel download failed:', error);
-            SendlyToast.fail(error, t('toast_tunnel_download_failed'));
-        } finally {
-            button.disabled = false;
-        }
-    }
-
-    async function refreshTunnelState() {
-        if (!activeTunnel?.id) return;
-
-        try {
-            const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}`, {
-                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-            });
-            if (!response.ok) {
-                if (response.status === 410 || response.status === 404 || response.status === 403) {
-                    clearTunnelState();
-                    showInfoBanner(t('toast_tunnel_session_ended'));
-                    return;
-                }
-                throw new Error('Failed to refresh tunnel state');
-            }
-
-            const payload = await response.json().catch(() => ({}));
-            if (payload?.tunnel) {
-                applyTunnelUI(payload.tunnel);
-            }
-            renderTunnelFiles(payload?.files || []);
-        } catch (error) {
-            console.error('Tunnel refresh failed:', error);
-        }
-    }
-
-    function startTunnelPolling() {
-        if (tunnelPollTimer) {
-            clearInterval(tunnelPollTimer);
-        }
-        tunnelPollTimer = setInterval(() => {
-            refreshTunnelState();
-        }, 4000);
-    }
-
-    async function handleStartTunnel() {
-        if (!authDeviceIdentity) {
-            try {
-                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
-            } catch (error) {
-                SendlyToast.fail(error, t('toast_device_identity_failed'));
-                return;
-            }
-        }
-
-        const duration = tunnelDurationSelect?.value || '1h';
-        const response = await fetch('/api/me/tunnels/start', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                duration,
-                device_id: authDeviceIdentity?.deviceId || ''
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw SendlyToast.apiError(error, 'Failed to start tunnel');
-        }
-
-        const payload = await response.json();
-        applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        showTunnelInfo(t('toast_tunnel_created'));
-        startTunnelPolling();
-
-        await fetch(`/api/me/tunnels/${encodeURIComponent(payload.tunnel.id)}/confirm`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({ device_id: authDeviceIdentity?.deviceId || '' })
-        }).catch(() => {});
-
-        refreshTunnelState();
-    }
-
-    async function handleJoinTunnel() {
-        if (!authDeviceIdentity) {
-            try {
-                authDeviceIdentity = await SecureCrypto.getOrCreateDeviceIdentity(CNS_USER_ID);
-            } catch (error) {
-                SendlyToast.fail(error, t('toast_device_identity_failed'));
-                return;
-            }
-        }
-
-        const code = (tunnelJoinCode?.value || '').trim();
-        if (!code) {
-            showErrorBanner(t('toast_tunnel_enter_code'));
-            return;
-        }
-
-        const response = await fetch('/api/me/tunnels/join', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                code,
-                device_id: authDeviceIdentity?.deviceId || ''
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw SendlyToast.apiError(error, 'Failed to join tunnel');
-        }
-
-        const payload = await response.json();
-        applyTunnelUI(payload.tunnel, payload.qr_payload || '');
-        showTunnelInfo(t('toast_tunnel_joined'));
-        startTunnelPolling();
-        await refreshTunnelState();
-    }
-
-    async function handleConfirmTunnel() {
-        if (!activeTunnel?.id) return;
-
-        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}/confirm`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({ device_id: authDeviceIdentity?.deviceId || '' })
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw SendlyToast.apiError(error, 'Failed to confirm tunnel');
-        }
-
-        const payload = await response.json().catch(() => ({}));
-        if (payload?.tunnel) {
-            applyTunnelUI(payload.tunnel);
-        }
-        showTunnelInfo(t('toast_tunnel_confirmed'));
-    }
-
-    async function handleEndTunnel() {
-        if (!activeTunnel?.id) return;
-
-        const confirmed = await openActionModal({
-            title: t('toast_tunnel_end_title'),
-            description: t('toast_tunnel_end_desc'),
-            confirmText: t('toast_tunnel_end_confirm'),
-            cancelText: t('toast_tunnel_end_cancel'),
-            kicker: t('toast_tunnel_end_kicker'),
-            tone: 'warning'
-        });
-        if (!confirmed) return;
-
-        const response = await fetch(`/api/me/tunnels/${encodeURIComponent(activeTunnel.id)}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({ device_id: authDeviceIdentity?.deviceId || '' })
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw SendlyToast.apiError(error, 'Failed to end tunnel');
-        }
-
-        clearTunnelState();
-        showInfoBanner(t('toast_tunnel_ended'));
-    }
-
     async function prefetchRecentLockStates(items) {
         if (!Array.isArray(items) || !items.length) {
             return;
@@ -1340,7 +954,7 @@
 
         try {
             if (action === 'download') {
-                await downloadOwnedFile(fileId, fileName, '', item);
+                await downloadOwnedFile(fileId, fileName, item);
             } else if (action === 'copy') {
                 await copyRecentShareLink(item, button);
             }
@@ -1363,7 +977,7 @@
 
         // clipboard writes must happen close to the click. if the key is not cached yet,
         // hand the clipboard a promise (safari/chrome) instead of awaiting network first.
-        const linkPromise = getOwnedFilePassphrase(fileId).then((passphrase) => `${shareUrl}#${passphrase}`);
+        const linkPromise = getOwnedFilePassphrase(fileId).then((secret) => SecureCrypto.shareLinkFor(fileId, shareUrl, secret));
         let copied = false;
         if (!SecureCrypto.getCachedFileKey(fileId) && window.ClipboardItem && navigator.clipboard?.write) {
             try {
@@ -1376,7 +990,7 @@
             }
         }
         if (!copied) {
-            copied = await copyToClipboard(await linkPromise, true);
+            copied = await copyToClipboard(await linkPromise);
         }
         if (!copied) {
             showToast(t('toast_copy_failed'));
@@ -1398,46 +1012,21 @@
         if (textEl) textEl.textContent = text;
     }
 
-    async function downloadOwnedFile(fileId, fileName, tunnelId = '', cardEl = null) {
+    async function downloadOwnedFile(fileId, fileName, cardEl) {
         if (activeDownloads.has(fileId)) return;
-        const isUploadedCard = !!cardEl?.classList.contains('uploaded-card');
-
-        let progressFill = null;
-        let downloadBtn = null;
-        let originalBtnHtml = '';
 
         activeDownloads.add(fileId);
-        if (isUploadedCard) {
-            downloadBtn = cardEl.querySelector('.uploaded-action[data-action="download"]');
-            if (downloadBtn) downloadBtn.disabled = true;
-            setRecentCardProgress(cardEl, 'active', 0, t('status_downloading'));
-        } else if (cardEl) {
-            const progressBar = document.createElement('div');
-            progressBar.className = 'file-download-progress';
-            progressFill = document.createElement('div');
-            progressFill.className = 'file-download-progress-bar';
-            progressBar.appendChild(progressFill);
-            cardEl.appendChild(progressBar);
-
-            downloadBtn = cardEl.querySelector('.recent-action[data-action="download"]');
-            if (downloadBtn && !downloadBtn.disabled) {
-                originalBtnHtml = downloadBtn.innerHTML;
-                downloadBtn.innerHTML = '<div class="downloading-spinner" style="width:16px;height:16px;border-width:2px;"></div>';
-                downloadBtn.disabled = true;
-            }
-        }
+        const downloadBtn = cardEl.querySelector('.uploaded-action[data-action="download"]');
+        if (downloadBtn) downloadBtn.disabled = true;
+        setRecentCardProgress(cardEl, 'active', 0, t('status_downloading'));
 
         const updateProgress = (pct, text) => {
-            if (isUploadedCard) {
-                setRecentCardProgress(cardEl, 'active', pct, `${text} ${Math.floor(pct)}%`);
-            } else if (progressFill) {
-                progressFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
-            }
+            setRecentCardProgress(cardEl, 'active', pct, `${text} ${Math.floor(pct)}%`);
         };
 
         let succeeded = false;
         try {
-            const passphrase = await getOwnedFilePassphrase(fileId, tunnelId);
+            const passphrase = await getOwnedFilePassphrase(fileId);
             const response = await SendlyNet.fetch(`/api/file/${fileId}/download`);
             if (!response.ok) {
                 throw new Error('Failed to download encrypted file');
@@ -1482,33 +1071,19 @@
             setTimeout(() => URL.revokeObjectURL(url), 10000);
 
             succeeded = true;
-            if (isUploadedCard) {
-                setRecentCardProgress(cardEl, 'done', 100, t('shared_complete'));
-            } else {
-                updateProgress(100);
-            }
-            await new Promise((resolve) => setTimeout(resolve, isUploadedCard ? 2200 : 600));
+            setRecentCardProgress(cardEl, 'done', 100, t('shared_complete'));
+            await new Promise((resolve) => setTimeout(resolve, 2200));
         } finally {
             activeDownloads.delete(fileId);
-            if (isUploadedCard) {
-                if (succeeded || !cardEl.classList.contains('is-locked')) {
-                    setRecentCardProgress(cardEl, succeeded ? '' : 'error', 0, succeeded ? '' : t('toast_download_failed'));
-                }
-                if (!succeeded) {
-                    setTimeout(() => {
-                        if (cardEl.classList.contains('error')) setRecentCardProgress(cardEl, '', 0, '');
-                    }, 4000);
-                }
-                if (downloadBtn && !cardEl.classList.contains('is-locked')) downloadBtn.disabled = false;
+            if (succeeded || !cardEl.classList.contains('is-locked')) {
+                setRecentCardProgress(cardEl, succeeded ? '' : 'error', 0, succeeded ? '' : t('toast_download_failed'));
             }
-            if (progressFill && progressFill.parentNode) {
-                const bar = progressFill.parentNode;
-                if (bar.parentNode) bar.parentNode.removeChild(bar);
+            if (!succeeded) {
+                setTimeout(() => {
+                    if (cardEl.classList.contains('error')) setRecentCardProgress(cardEl, '', 0, '');
+                }, 4000);
             }
-            if (downloadBtn && originalBtnHtml) {
-                downloadBtn.innerHTML = originalBtnHtml;
-                downloadBtn.disabled = false;
-            }
+            if (downloadBtn && !cardEl.classList.contains('is-locked')) downloadBtn.disabled = false;
         }
     }
 
@@ -1519,9 +1094,8 @@
     }
 
     // returns a file's passphrase: the signed-in owner's (or an accepted
-    // transfer's) copy, opened with this device's identity key, or, for a
-    // quick share guest's upload, the copy wrapped for this page's throwaway key.
-    async function getOwnedFilePassphrase(fileId, tunnelId = '') {
+    // transfer's) copy, opened with this device's identity key.
+    async function getOwnedFilePassphrase(fileId) {
         const cached = SecureCrypto.getCachedFileKey(fileId);
         if (cached) {
             return cached;
@@ -1531,26 +1105,8 @@
             await initialDeviceReady;
         }
 
-        if (tunnelId) {
-            const response = await fetch(`/api/tunnels/${encodeURIComponent(tunnelId)}/files/${encodeURIComponent(fileId)}/access`, {
-                headers: { 'X-CSRF-Token': getCookieValue('csrf_token') }
-            });
-            if (!response.ok) {
-                const errorPayload = await response.json().catch(() => ({}));
-                throw SendlyToast.apiError(errorPayload, 'Unable to access decryption key for this file.');
-            }
-            const payload = await response.json();
-            const dekBytes = await SecureCrypto.unwrapFileDEK(payload.file_key_envelope, {
-                authenticated: false,
-                ephemeralPrivateKey: ephemeralKeyPair?.privateKey
-            });
-            const passphrase = new TextDecoder().decode(dekBytes);
-            SecureCrypto.cacheFileKey(fileId, passphrase);
-            return passphrase;
-        }
-
         if (!AUTHENTICATED) {
-            throw new Error('A tunnel is required to access this file.');
+            throw new Error('Sign in to access this file.');
         }
         if (!authIdentityKey) {
             const ready = await ensureDeviceReady({ userAction: true });
@@ -1625,24 +1181,6 @@
         return date.toLocaleString(PAGE_LOCALE, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     }
 
-    function formatExpiryDate(dateStr) {
-        const date = new Date(dateStr);
-        const now = new Date();
-        if (date <= now) return t('format_expired');
-
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-        const dayDiff = Math.round((dateStart - todayStart) / 86400000);
-
-        if (dayDiff === 0) {
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        if (dayDiff === 1) {
-            return t('format_tomorrow');
-        }
-        return date.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
-    }
-
     function escapeHtml(value) {
         return String(value || '')
             .replace(/&/g, '&amp;')
@@ -1655,38 +1193,6 @@
      
 
     function setupEventListeners() {
-        const resetVaultEl = document.getElementById('reset-vault');
-        resetVaultEl?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            resetUpload();
-        });
-        const startOverBtn = document.getElementById('start-over-btn');
-        startOverBtn?.addEventListener('click', () => resetUpload());
-        finalizeBtn?.addEventListener('click', handleFinalize);
-
-         
-        document.querySelectorAll('.copy-trigger').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const input = this.parentElement.querySelector('input');
-                const copied = await copyToClipboard(input.value);
-                if (!copied) {
-                    showToast(t('toast_copy_failed'));
-                    return;
-                }
-                const original = this.innerHTML;
-                this.innerHTML = '<i data-lucide="check" style="width: 1rem; height: 1rem;"></i>';
-                this.style.background = 'var(--accent)';
-                this.style.color = '#000';
-                lucide.createIcons();
-                setTimeout(() => {
-                    this.innerHTML = original;
-                    this.style.background = 'transparent';
-                    this.style.color = 'inherit';
-                    lucide.createIcons();
-                }, 2000);
-            });
-        });
-
         recentSearchInput?.addEventListener('input', handleRecentSearchInput);
         recentList?.addEventListener('click', handleRecentAction);
         recentMore?.addEventListener('click', () => {
@@ -1708,343 +1214,6 @@
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') dismissDeviceApprovalModal();
         });
-
-        const downloadCloseBtn = document.getElementById('download-activity-close');
-        downloadCloseBtn?.addEventListener('click', () => showDownloadActivityOverlay(false));
-
-        tunnelControlsSection?.classList.remove('hidden');
-        tunnelStartBtn?.addEventListener('click', async () => {
-            try {
-                await handleStartTunnel();
-            } catch (error) {
-                SendlyToast.fail(error, t('toast_tunnel_failed_start'));
-            }
-        });
-        tunnelJoinBtn?.addEventListener('click', async () => {
-            try {
-                await handleJoinTunnel();
-            } catch (error) {
-                SendlyToast.fail(error, t('toast_tunnel_failed_join'));
-            }
-        });
-        tunnelConfirmBtn?.addEventListener('click', async () => {
-            try {
-                await handleConfirmTunnel();
-                await refreshTunnelState();
-            } catch (error) {
-                SendlyToast.fail(error, t('toast_tunnel_failed_confirm'));
-            }
-        });
-        tunnelEndBtn?.addEventListener('click', async () => {
-            try {
-                await handleEndTunnel();
-            } catch (error) {
-                SendlyToast.fail(error, t('toast_tunnel_failed_end'));
-            }
-        });
-    }
-
-    function handleFinalize() {
-        if (isFinalizing) return;
-
-        isFinalizing = true;
-        updateFinalizeButtonState();
-        stagePending.classList.add('hidden');
-        stageProcessing.classList.remove('hidden');
-        statusText.textContent = t('status_uploading');
-
-        if (uploadComplete) {
-            finalizeUpload();
-        } else if (uploadError) {
-            isFinalizing = false;
-            updateFinalizeButtonState();
-            stageProcessing.classList.add('hidden');
-            stagePending.classList.remove('hidden');
-            SendlyToast.fail(uploadError, t('toast_upload_failed'));
-        } else {
-            const poll = setInterval(() => {
-                if (uploadComplete) {
-                    clearInterval(poll);
-                    finalizeUpload();
-                } else if (uploadError) {
-                    clearInterval(poll);
-                    isFinalizing = false;
-                    updateFinalizeButtonState();
-                    stageProcessing.classList.add('hidden');
-                    stagePending.classList.remove('hidden');
-                    statusText.textContent = t('status_ready');
-                    statusText.style.color = 'var(--accent)';
-                    SendlyToast.fail(uploadError, t('toast_upload_failed'));
-                }
-            }, 500);
-        }
-    }
-
-    function updateFinalizeButtonState() {
-        finalizeBtn.disabled = isFinalizing;
-    }
-    function updateUploadProgress() {
-        processMain.textContent = t('status_uploading_short');
-        processSub.textContent = '';
-    }
-
-    async function waitForAssembly(sessionId, intervalMs = 1500, timeoutMs = 600000) {
-        const deadline = Date.now() + timeoutMs;
-        while (Date.now() < deadline) {
-            const res = await SendlyNet.fetch(`/api/upload/status/${sessionId}`);
-            if (!res.ok) throw new Error('Failed to check assembly status');
-            const { status } = await res.json();
-            if (status === 'done') return;
-            if (status.startsWith('error:')) throw new Error(status.slice(6));
-            statusText.textContent = t('status_finalizing');
-            await new Promise(r => setTimeout(r, intervalMs));
-        }
-        throw new Error('Assembly timed out');
-    }
-
-    async function runProtocol() {
-        stageEntry.classList.add('hidden');
-        stagePending.classList.add('hidden');
-        stageOutput.classList.add('hidden');
-        stageProcessing.classList.remove('hidden');
-        statusText.textContent = t('status_uploading');
-        
-        try {
-            generatedPassword = await SecureCrypto.generatePassword();
-            updateProgress(0, t('status_scrambling'), t('status_uploading'));
-
-            const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
-            const initResponse = await initUpload(selectedFile.size, totalChunks);
-            uploadSessionId = initResponse.session_id;
-            let uploadedCount = 0;
-
-            await SecureCrypto.encryptFileChunked(
-                selectedFile,
-                generatedPassword,
-                CHUNK_SIZE,
-                async (chunkIndex, chunkData) => {
-                    await uploadOneChunk(uploadSessionId, chunkIndex, chunkData);
-                    uploadedCount++;
-                    updateProgress(
-                        50 + (uploadedCount / totalChunks) * 45,
-                        t('status_to_clouds'),
-                        t('status_uploading')
-                    );
-                },
-                { concurrency: PARALLEL_CHUNK_UPLOADS }
-            );
-
-            const completeResponse = await completeUpload();
-            await waitForAssembly(uploadSessionId);
-            pendingExpiresAt = completeResponse.pending_expires_at
-                ? new Date(completeResponse.pending_expires_at).getTime()
-                : null;
-            startPendingCountdown();
-            showPendingUI();
-        } catch (error) {
-            console.error('Something failed:', error);
-            SendlyToast.fail(error, t('toast_something_failed'));
-        }
-    }
-
-    async function uploadOneChunk(sessionId, chunkIndex, chunkData) {
-        let lastError;
-
-        for (let attempt = 0; attempt < MAX_CHUNK_UPLOAD_RETRIES; attempt++) {
-            if (attempt > 0) {
-                await new Promise(r => setTimeout(r, 2000 * attempt));
-            }
-
-            try {
-                const formData = new FormData();
-                formData.append('session_id', sessionId);
-                formData.append('chunk_index', chunkIndex.toString());
-                formData.append('chunk', new Blob([chunkData]));
-
-                const response = await SendlyNet.fetch('/api/upload/chunk', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRF-Token': getCookieValue('csrf_token')
-                    },
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw SendlyToast.apiError(error, `Failed to upload chunk ${chunkIndex + 1}`);
-                }
-
-                return;
-            } catch (error) {
-                lastError = error;
-                console.warn(`Chunk ${chunkIndex} attempt ${attempt + 1} failed:`, error.message);
-            }
-        }
-
-        throw lastError;
-    }
-
-    async function initUpload(fileSize, totalChunks) {
-        const response = await SendlyNet.fetch('/api/upload/init', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                file_name: selectedFile.name,
-                file_size: fileSize,
-                total_chunks: totalChunks,
-                chunk_size: CHUNK_SIZE
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw SendlyToast.apiError(error, 'Failed to initialize upload');
-        }
-
-        return response.json();
-    }
-
-    async function completeUpload() {
-        updateProgress(95, t('status_everything_arrived'), t('status_finalizing'));
-
-        const response = await SendlyNet.fetch('/api/upload/complete', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                session_id: uploadSessionId,
-                confirmed: true
-            })
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw SendlyToast.apiError(error, 'Failed to complete upload');
-        }
-
-        updateProgress(100, t('app_yippe'), t('status_complete'));
-        return response.json();
-    }
-
-    function showPendingUI() {
-        hideErrorBanner();
-        stageEntry.classList.add('hidden');
-        stageProcessing.classList.add('hidden');
-        stagePending.classList.remove('hidden');
-        stageOutput.classList.add('hidden');
-        statusText.textContent = uploadError ? t('status_upload_failed') : t('status_pending');
-        statusText.style.color = uploadError ? '#f44336' : 'var(--accent)';
-        updateFinalizeButtonState();
-    }
-
-    function showPending(response) {
-        uploadSessionId = response.session_id;
-        pendingExpiresAt = response.pending_expires_at ? new Date(response.pending_expires_at).getTime() : null;
-        showPendingUI();
-        startPendingCountdown();
-    }
-
-    function selectedDuration() {
-        return RETENTION;
-    }
-
-    function selectedDurationLabel() {
-        return RETENTION_LABEL;
-    }
-
-    async function finalizeUpload() {
-        statusText.textContent = t('status_finalizing');
-
-        try {
-            const finalizePayload = {
-                session_id: uploadSessionId,
-                ...(finalizeEnvelopePayload || {})
-            };
-            if (activeTunnel?.id) {
-                finalizePayload.tunnel_id = activeTunnel.id;
-            } else {
-                finalizePayload.duration = selectedDuration();
-            }
-
-            const response = await SendlyNet.fetch('/api/upload/finalize', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': getCookieValue('csrf_token')
-                },
-                body: JSON.stringify(finalizePayload)
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw SendlyToast.apiError(error, 'Failed to finalize upload');
-            }
-
-            const payload = await response.json();
-            showSuccess(payload);
-            if (activeTunnel?.id) {
-                refreshTunnelState();
-            }
-        } catch (error) {
-            console.error('Finalize failed:', error);
-            isFinalizing = false;
-            updateFinalizeButtonState();
-            stageProcessing.classList.add('hidden');
-            stagePending.classList.remove('hidden');
-            statusText.textContent = t('status_ready');
-            statusText.style.color = 'var(--accent)';
-            SendlyToast.fail(error, t('toast_finalize_failed'));
-        }
-    }
-
-    async function cancelUpload() {
-        if (!uploadSessionId) return;
-
-        await fetch('/api/upload/cancel', {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-Token': getCookieValue('csrf_token')
-            },
-            body: JSON.stringify({
-                session_id: uploadSessionId
-            })
-        });
-
-        uploadSessionId = null;
-    }
-
-    function showSuccess(response) {
-        clearPendingCountdown();
-        isFinalizing = false;
-        if (response.file_id && generatedPassword) {
-            SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
-        }
-
-        const fullShareUrl = `${response.share_url}#${generatedPassword}`;
-        outUrl.value = fullShareUrl;
-        outPin.value = response.numeric_code;
-        outKey.value = generatedPassword;
-        outExpiryLabel.textContent = t('label_expiry_prefix') + RETENTION_LABEL + t('label_retention');
-        uploadSessionId = null;
-        lastShareUrl = fullShareUrl;
-
-        stageProcessing.classList.add('hidden');
-        stagePending.classList.add('hidden');
-        stageOutput.classList.remove('hidden');
-        statusText.textContent = t('status_secure');
-        statusText.style.color = 'var(--accent)';
-
-        setupIdleCopy(fullShareUrl);
-
-        if (AUTHENTICATED) {
-            loadRecentUploads().catch(() => {});
-        }
     }
 
     function showNotification(message, type = 'error') {
@@ -2066,23 +1235,9 @@
     }
 
 
-    function updateProgress(percent, sub, main) {
-        const boundedPercent = Math.floor(Math.min(100, Math.max(0, percent)));
-        progressVal.textContent = `${boundedPercent}%`;
-        if (sub) processSub.textContent = sub;
-        if (main) processMain.textContent = main;
-    }
-
-    async function copyToClipboard(text, silent = false, showBanner = false) {
+    async function copyToClipboard(text) {
         try {
             await navigator.clipboard.writeText(text);
-            if (!silent) {
-                if (showBanner) {
-                    showShareBanner();
-                } else {
-                    showToast(t('toast_copied'));
-                }
-            }
             return true;
         } catch (error) {
             console.error('Failed to copy:', error);
@@ -2095,247 +1250,16 @@
             const copiedWithFallback = document.execCommand('copy');
             document.body.removeChild(textarea);
 
-            if (!copiedWithFallback) {
-                return false;
-            }
-
-            if (!silent) {
-                if (showBanner) {
-                    showShareBanner();
-                } else {
-                    showToast(t('toast_copied'));
-                }
-            }
-            return true;
+            return copiedWithFallback;
         }
-    }
-
-    async function attemptAutoCopy(text) {
-        const copied = await copyToClipboard(text, true, true);
-        if (copied) {
-            showShareBanner();
-            return;
-        }
-
-        showToast(t('toast_copy_retry'));
-        queueAutoCopyOnNextInteraction(text, true);
-    }
-
-    function queueAutoCopyOnNextInteraction(text, showBanner) {
-        pendingAutoCopyText = text;
-        pendingAutoCopyBanner = showBanner;
-
-        if (pendingAutoCopyBound) {
-            return;
-        }
-
-        pendingAutoCopyBound = true;
-        ['click', 'keydown', 'touchstart'].forEach((eventName) => {
-            document.addEventListener(eventName, handlePendingAutoCopy, true);
-        });
-    }
-
-    async function handlePendingAutoCopy() {
-        if (!pendingAutoCopyText) {
-            clearPendingAutoCopyListeners();
-            return;
-        }
-
-        const textToCopy = pendingAutoCopyText;
-        const shouldShowBanner = pendingAutoCopyBanner;
-        const copied = await copyToClipboard(textToCopy, true, shouldShowBanner);
-
-        if (copied) {
-            if (shouldShowBanner) {
-                showShareBanner();
-            } else {
-                showToast(t('toast_copied'));
-            }
-            pendingAutoCopyText = null;
-            pendingAutoCopyBanner = false;
-            clearPendingAutoCopyListeners();
-        }
-    }
-
-    function clearPendingAutoCopyListeners() {
-        if (!pendingAutoCopyBound) {
-            return;
-        }
-
-        ['click', 'keydown', 'touchstart'].forEach((eventName) => {
-            document.removeEventListener(eventName, handlePendingAutoCopy, true);
-        });
-        pendingAutoCopyBound = false;
-    }
-
-    function showShareBanner() {
-        showToast(t('toast_link_copied_notification'));    }
-
-    function setupIdleCopy(text) {
-        idleCopyDone = false;
-        idleCopyBannerShown = false;
-        const infoBox = stageOutput.querySelector('.info-box');
-        if (infoBox) {
-            const idleMsg = document.createElement('p');
-            idleMsg.className = 'info-text';
-            idleMsg.id = 'idle-copy-msg';
-            idleMsg.textContent = t('toast_copy_move_mouse');
-            idleMsg.style.cursor = 'pointer';
-            idleMsg.style.color = 'var(--accent)';
-            infoBox.parentNode.insertBefore(idleMsg, infoBox);
-        }
-
-        const onMove = () => {
-            if (idleCopyDone) return;
-            copyToClipboard(text, true, true).then(ok => {
-                if (ok) {
-                    idleCopyDone = true;
-                    const msg = document.getElementById('idle-copy-msg');
-                    if (msg) msg.textContent = t('toast_link_copied_idle');
-                    showShareBanner();
-                    setTimeout(() => {
-                        idleCopyDone = false;
-                        const msg2 = document.getElementById('idle-copy-msg');
-                        if (msg2) msg2.textContent = t('toast_copy_move_mouse');
-                        document.addEventListener('mousemove', onMove, { once: true });
-                        document.addEventListener('touchstart', onMove, { once: true });
-                        document.addEventListener('keydown', onMove, { once: true });
-                    }, 4000);
-                }
-            });
-        };
-
-        document.addEventListener('mousemove', onMove, { once: true });
-        document.addEventListener('touchstart', onMove, { once: true });
-        document.addEventListener('keydown', onMove, { once: true });
     }
 
     function showToast(message) {
         SendlyToast.success(message);
     }
 
-    function resetUpload() {
-        clearPendingCountdown();
-        pendingAutoCopyText = null;
-        pendingAutoCopyBanner = false;
-        clearPendingAutoCopyListeners();
-        hideErrorBanner();
-        selectedFile = null;
-        generatedPassword = null;
-        const sessionToCancel = uploadSessionId;
-        uploadSessionId = null;
-        pendingExpiresAt = null;
-        finalizeEnvelopePayload = null;
-        isFinalizing = false;
-        isUploading = false;
-        uploadComplete = false;
-        uploadError = null;
-        idleCopyDone = false;
-        idleCopyBannerShown = false;
-        lastShareUrl = '';
-
-        if (sessionToCancel) {
-            fetch('/api/upload/cancel', {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': getCookieValue('csrf_token')
-                },
-                body: JSON.stringify({ session_id: sessionToCancel })
-            }).catch(e => console.error('Failed to cancel upload:', e));
-        }
-
-        fileDetails.classList.add('hidden');
-        finalizeBtn.disabled = true;
-        statusText.textContent = t('status_ready');
-        statusText.style.color = 'var(--accent)';
-        stageEntry.classList.remove('hidden');
-        stageProcessing.classList.add('hidden');
-        stagePending.classList.add('hidden');
-        stageOutput.classList.add('hidden');
-
-        const msg = document.getElementById('idle-copy-msg');
-        if (msg) msg.remove();
-    }
-
-    function startPendingCountdown() {
-        clearPendingCountdown();
-        if (!pendingExpiresAt) {
-            pendingCountdown.textContent = t('state_upload_pending');
-            return;
-        }
-
-        const tick = () => {
-            const remainingMs = pendingExpiresAt - Date.now();
-            if (remainingMs <= 0) {
-                clearPendingCountdown();
-                pendingCountdown.textContent = t('state_upload_expired');
-                openActionModal({
-                    title: t('toast_session_expired_title'),
-                    description: t('toast_session_expired_desc'),
-                    confirmText: t('toast_session_expired_confirm'),
-                    hideCancel: true,
-                    kicker: t('toast_session_expired_kicker')
-                });
-                resetUpload();
-                return;
-            }
-
-            const totalSeconds = Math.floor(remainingMs / 1000);
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            pendingCountdown.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        };
-
-        tick();
-        pendingCountdownTimer = setInterval(tick, 1000);
-    }
-
-    function clearPendingCountdown() {
-        if (pendingCountdownTimer) {
-            clearInterval(pendingCountdownTimer);
-            pendingCountdownTimer = null;
-        }
-    }
-
     function setRecoveryActionVisible(visible) {
         (recentDeviceNotice || recentRecoverDevice)?.classList.toggle('hidden', !(visible && isDeviceUntrusted));
-    }
-
-    function showDownloadActivityOverlay(show) {
-        if (!downloadActivityOverlay) return;
-
-        if (!show) {
-            downloadActivityOverlay.classList.add('hidden');
-            downloadActivityOverlay.setAttribute('aria-hidden', 'true');
-            return;
-        }
-
-        const isComplete = show === 'complete';
-        downloadActivityOverlay.classList.remove('hidden');
-        downloadActivityOverlay.setAttribute('aria-hidden', 'false');
-
-        const titleEl = document.getElementById('download-activity-title');
-        const iconEl = document.getElementById('download-activity-icon');
-        const percentEl = document.getElementById('download-activity-percent');
-
-        if (isComplete) {
-            if (titleEl) titleEl.textContent = t('status_complete');
-            if (iconEl) {
-                iconEl.innerHTML = '<i data-lucide="check-circle" style="width:36px;height:36px;color:#007AFF;"></i>';
-            }
-            if (percentEl) percentEl.textContent = t('state_download_automatically');
-        } else {
-            if (titleEl) titleEl.textContent = t('status_downloading');
-            if (iconEl) {
-                iconEl.innerHTML = '<div class="downloading-spinner"></div>';
-            }
-            if (percentEl) percentEl.textContent = t('app_0_pct');
-        }
-
-        if (window.lucide?.createIcons) {
-            window.lucide.createIcons();
-        }
     }
 
     function openActionModal(options) {

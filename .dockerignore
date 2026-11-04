@@ -7,3 +7,4 @@ legal
 docs
 scripts
 docker-compose*.yaml
+web/tests

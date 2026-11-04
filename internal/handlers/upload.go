@@ -67,7 +67,11 @@ func (h *UploadHandler) Init(c *gin.Context) {
 	resp, err := h.uploadService.InitUpload(c.Request.Context(), &req, clientIP, maxSize)
 	if err != nil {
 		if appErr, ok := err.(*models.AppError); ok {
-			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			status := http.StatusBadRequest
+			if appErr == models.ErrFileIDTaken {
+				status = http.StatusConflict
+			}
+			c.JSON(status, models.ErrorResponse{
 				Error: appErr.Message,
 				Code:  appErr.Code,
 			})

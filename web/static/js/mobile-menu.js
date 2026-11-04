@@ -2,7 +2,7 @@
     'use strict';
 
     // language links are plain "?lang=xx" hrefs, which drop the rest of the query and
-    // the #fragment. on /shared/ pages the fragment is the decryption key, so keep it.
+    // the #fragment. on share pages the fragment is the decryption key, so keep it.
     document.addEventListener('click', function (e) {
         var link = e.target.closest ? e.target.closest('a[href^="?lang="]') : null;
         if (!link || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

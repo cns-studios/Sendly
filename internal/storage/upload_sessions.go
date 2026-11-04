@@ -16,13 +16,24 @@ const uploadSessionColumns = `session_id, file_id, original_name, total_size, to
 	uploader_ip, state, error, expires_at, created_at`
 
 func (p *Postgres) CreateUploadSession(ctx context.Context, s *models.UploadSession, ttl time.Duration) error {
-	_, err := p.db.ExecContext(ctx, `
+	res, err := p.db.ExecContext(ctx, `
 		INSERT INTO upload_sessions (session_id, file_id, original_name, total_size, total_chunks, chunk_size,
 			uploader_ip, state, expires_at, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW() + make_interval(secs => $9), $10)`,
+		SELECT $1::text, $2::varchar, $3::text, $4::bigint, $5::int, $6::bigint, $7::varchar, $8::text,
+			NOW() + make_interval(secs => $9::double precision), $10::timestamptz
+		WHERE NOT EXISTS (SELECT 1 FROM files WHERE id = $2::varchar)
+		ON CONFLICT (file_id) DO NOTHING`,
 		s.SessionID, s.FileID, s.OriginalName, s.TotalSize, s.TotalChunks, s.ChunkSize,
 		s.UploaderIP, models.UploadStateUploading, ttl.Seconds(), s.CreatedAt)
-	return err
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n == 0 {
+		return models.ErrFileIDTaken
+	}
+	return nil
 }
 
 // GetUploadSession returns a live session. an expired one is reported as not

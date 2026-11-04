@@ -20,7 +20,7 @@
     let totalChunks = 0;
     let uploadedChunks = 0;
     let selectedFile = null;
-    let generatedPassword = null;
+    let linkToken = null;
     let uploadSessionId = null;
     let pendingExpiresAt = null;
     let pendingCountdownTimer = null;
@@ -381,7 +381,7 @@
     }
 
     async function shareFileWithUser(recipient) {
-        if (shareInFlight || !recipient || !generatedPassword) return;
+        if (shareInFlight || !recipient || !linkToken) return;
         shareInFlight = true;
         shareRecipientSend.disabled = true;
         shareRecipientSend.classList.add('is-loading');
@@ -399,7 +399,7 @@
                     throw SendlyToast.apiError(keyPayload, t('share_failed'));
                 }
                 const wrapped = await SecureCrypto.wrapFileDEKForIdentity(
-                    new TextEncoder().encode(generatedPassword), keyPayload.public_key_jwk
+                    new TextEncoder().encode(linkToken), keyPayload.public_key_jwk
                 );
                 const response = await fetch(`/api/file/${encodeURIComponent(uploadedFileID)}/share-to-user`, {
                     method: 'POST',
@@ -641,25 +641,25 @@
         const signal = uploadSignal;
 
         try {
-            generatedPassword = await SecureCrypto.generatePassword();
-            const dekBytes = new TextEncoder().encode(generatedPassword);
-
             if (AUTHENTICATED) {
                 if (!authIdentityKey) await ensureDeviceReady();
                 if (!authIdentityKey) {
                     throw new Error(t('toast_device_approve'));
                 }
-                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(dekBytes, authIdentityKey);
             }
 
             totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
-            const initResponse = await initUpload(selectedFile.size, totalChunks, signal);
+            const initResponse = await initLinkUpload(selectedFile.size, totalChunks, signal);
             uploadSessionId = initResponse.session_id;
+
+            if (AUTHENTICATED) {
+                finalizeEnvelopePayload = await SecureCrypto.buildOwnerEnvelope(new TextEncoder().encode(linkToken), authIdentityKey);
+            }
             uploadedChunks = 0;
 
             await SecureCrypto.encryptFileChunked(
                 selectedFile,
-                generatedPassword,
+                linkToken,
                 CHUNK_SIZE,
                 async (chunkIndex, chunkData) => {
                     await uploadOneChunk(uploadSessionId, chunkIndex, chunkData, signal);
@@ -724,15 +724,20 @@
         throw lastError;
     }
 
-    async function initUpload(fileSize, totalChunks, signal) {
-        const response = await SendlyNet.fetch('/api/upload/init', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
-            body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE }),
-            signal
-        });
-        if (!response.ok) { const error = await response.json(); throw SendlyToast.apiError(error, 'Failed to initialize'); }
-        return response.json();
+    async function initLinkUpload(fileSize, totalChunks, signal) {
+        for (let attempt = 0; ; attempt++) {
+            linkToken = SecureCrypto.generateLinkToken();
+            const fileId = await SecureCrypto.fileIdFromLinkToken(linkToken);
+            const response = await SendlyNet.fetch('/api/upload/init', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getCookieValue('csrf_token') },
+                body: JSON.stringify({ file_name: selectedFile.name, file_size: fileSize, total_chunks: totalChunks, chunk_size: CHUNK_SIZE, file_id: fileId }),
+                signal
+            });
+            if (response.ok) return response.json();
+            const error = await response.json().catch(() => ({}));
+            if (error.code !== 'FILE_ID_TAKEN' || attempt >= 2) throw SendlyToast.apiError(error, 'Failed to initialize');
+        }
     }
 
     async function completeUpload() {
@@ -780,8 +785,8 @@
     function showSuccess(response) {
         clearPendingCountdown();
         isFinalizing = false;
-        if (response.file_id && generatedPassword) SecureCrypto.cacheFileKey(response.file_id, generatedPassword);
-        const fullShareUrl = `${response.share_url}#${generatedPassword}`;
+        if (response.file_id && linkToken) SecureCrypto.cacheFileKey(response.file_id, linkToken);
+        const fullShareUrl = SecureCrypto.linkShareUrl(linkToken);
         uploadedFileID = response.file_id || '';
 
         // populate file metadata
@@ -847,7 +852,7 @@
 
     function resetUpload() {
         clearPendingCountdown();
-        selectedFile = null; generatedPassword = null; uploadedFileID = ''; shareUrl = '';
+        selectedFile = null; linkToken = null; uploadedFileID = ''; shareUrl = '';
         const sessionToCancel = uploadSessionId;
         uploadSessionId = null; pendingExpiresAt = null; finalizeEnvelopePayload = null;
         isFinalizing = false; isUploading = false; uploadComplete = false; uploadError = null;
@@ -896,7 +901,6 @@
 
     async function init() {
         setupTOSGate();
-        try { await SecureCrypto.loadWordList(); } catch (error) { console.error('Word list failed:', error); }
         setupEventListeners();
         loadRecentShareRecipients();
         if (AUTHENTICATED) ensureDeviceReady();

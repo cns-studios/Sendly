@@ -14,6 +14,11 @@ const SecureCrypto = (function() {
         wordCount: 5
     };
 
+    const LINK_TOKEN_BYTES = 16;
+    const LINK_TOKEN_PATTERN = /^[A-Za-z0-9_-]{22}$/;
+    const LINK_FILE_ID_INFO = 'sendly-link-file-id-v1';
+    const FILE_ID_LENGTH = 17;
+
     const DEVICE_STORAGE_KEY = 'sendly_device_identity_v1';
     const USER_KEY_PREFIX = 'sendly_user_key_v1_';
     const IDENTITY_KEY_PREFIX = 'sendly_identity_key_v1_';
@@ -107,6 +112,53 @@ const SecureCrypto = (function() {
             bytes[i] = binary.charCodeAt(i);
         }
         return bytes;
+    }
+
+    function toBase64Url(data) {
+        return toBase64(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function generateLinkToken() {
+        return toBase64Url(generateRandomBytes(LINK_TOKEN_BYTES));
+    }
+
+    function isLinkToken(value) {
+        return typeof value === 'string' && LINK_TOKEN_PATTERN.test(value);
+    }
+
+    async function fileIdFromLinkToken(token) {
+        if (!isLinkToken(token)) throw new Error('Invalid link token');
+        const encoder = new TextEncoder();
+        const key = await crypto.subtle.importKey('raw', encoder.encode(token), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(LINK_FILE_ID_INFO)));
+        let value = 0n;
+        for (const byte of mac.subarray(0, 16)) value = (value << 8n) | BigInt(byte);
+        return (value % (36n ** BigInt(FILE_ID_LENGTH))).toString(36).padStart(FILE_ID_LENGTH, '0');
+    }
+
+    function shareBaseURL() {
+        return String(window.CONFIG?.baseURL || window.location.origin).replace(/\/+$/, '');
+    }
+
+    function linkShareUrl(token) {
+        return `${shareBaseURL()}/s#${token}`;
+    }
+
+    async function shareLinkFor(fileId, legacyShareUrl, secret) {
+        if (isLinkToken(secret) && await fileIdFromLinkToken(secret) === fileId) {
+            return linkShareUrl(secret);
+        }
+        return `${legacyShareUrl}#${secret}`;
+    }
+
+    function getLinkSecretFromHash() {
+        const hash = window.location.hash;
+        if (!hash || hash.length <= 1) return null;
+        try {
+            return decodeURIComponent(hash.substring(1));
+        } catch (_) {
+            return null;
+        }
     }
 
     function userDeviceStorageKey(userId) {
@@ -523,30 +575,6 @@ const SecureCrypto = (function() {
         };
     }
 
-    async function encrypt(data, password) {
-        const salt = generateRandomBytes(CONFIG.saltLength);
-        const iv = generateRandomBytes(CONFIG.ivLength);
-        const key = await deriveKey(password, salt);
-
-        const ciphertext = await crypto.subtle.encrypt(
-            {
-                name: CONFIG.algorithm,
-                iv: iv
-            },
-            key,
-            data
-        );
-
-         
-        const result = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
-        result.set(salt, 0);
-        result.set(iv, salt.length);
-        result.set(new Uint8Array(ciphertext), salt.length + iv.length);
-
-        return result;
-    }
-
-
     async function decrypt(encryptedData, password) {
         const data = new Uint8Array(encryptedData);
 
@@ -705,33 +733,6 @@ const SecureCrypto = (function() {
         return result;
     }
 
-    async function encryptFile(file, password, onProgress) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-
-            reader.onload = async function(e) {
-                try {
-                    if (onProgress) onProgress(0, t('status_encrypting'));
-                    
-                    const data = new Uint8Array(e.target.result);
-                    const encrypted = await encrypt(data, password);
-                    
-                    if (onProgress) onProgress(100, t('status_encryption_complete'));
-                    
-                    resolve(new Blob([encrypted], { type: 'application/octet-stream' }));
-                } catch (error) {
-                    reject(error);
-                }
-            };
-
-            reader.onerror = function() {
-reject(new Error(t('error_failed_read_file')));
-            };
-
-            reader.readAsArrayBuffer(file);
-        });
-    }
-
     function computeOriginalFileSize(encryptedLength) {
         const baseOverhead = FORMAT_MAGIC.length + CONFIG.saltLength;
         const chunkOverhead = CONFIG.ivLength + 16;
@@ -780,46 +781,6 @@ reject(new Error(t('error_failed_read_file')));
         });
     }
 
-    function validatePassword(password) {
-        if (!password || typeof password !== 'string') {
-            return { valid: false, error: t('crypto_password_required') };
-        }
-
-        const words = password.toLowerCase().trim().split('-');
-        
-        if (words.length !== CONFIG.wordCount) {
-            return { 
-                valid: false, 
-                error: tpl('crypto_password_words', {count: CONFIG.wordCount}) 
-            };
-        }
-
-        for (const word of words) {
-            if (!/^[a-z]+$/.test(word)) {
-                return { 
-                    valid: false, 
-                    error: t('crypto_password_letters') 
-                };
-            }
-            if (word.length < 2) {
-                return { 
-                    valid: false, 
-                    error: t('crypto_password_length') 
-                };
-            }
-        }
-
-        return { valid: true };
-    }
-
-    function getPasswordFromHash() {
-        const hash = window.location.hash;
-        if (!hash || hash.length <= 1) {
-            return null;
-        }
-        return decodeURIComponent(hash.substring(1));
-    }
-
     function formatFileSize(bytes) {
         if (bytes === 0) return t('format_bytes');
         
@@ -828,11 +789,6 @@ reject(new Error(t('error_failed_read_file')));
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    function formatDate(dateString) {
-        const date = new Date(dateString);
-        return date.toLocaleString();
     }
 
     function getTimeRemaining(expiresAt) {
@@ -860,14 +816,16 @@ reject(new Error(t('error_failed_read_file')));
      
     return {
         generatePassword,
-        encryptFile,
+        generateLinkToken,
+        isLinkToken,
+        fileIdFromLinkToken,
+        linkShareUrl,
+        shareLinkFor,
+        getLinkSecretFromHash,
         decryptBlob,
         encryptFileChunked,
         decryptFileChunked,
-        validatePassword,
-        getPasswordFromHash,
         formatFileSize,
-        formatDate,
         getTimeRemaining,
         loadWordList,
         toBase64,

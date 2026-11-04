@@ -13,7 +13,7 @@ What protects your files, who can do what, and what Sendly deliberately trusts. 
 End-to-end encrypted: the server stores only encrypted file blobs and wrapped keys, never a file key, session password or private key in the clear.
 
 - **Files** are encrypted in the browser (WebCrypto) with a per-upload key, or in quick share with the session password, before any byte is uploaded.
-- **Link shares:** the key travels in the URL fragment, which never reaches the server. Anyone with the full link can decrypt; anyone without the fragment cannot.
+- **Link shares:** the key travels in the URL fragment, which never reaches the server. Anyone with the full link can decrypt; anyone without the fragment cannot. Short links (`/s#<token>`) carry a 128-bit random token; the file id the server sees is an HMAC of it, so the id reveals nothing about the key. Older links (`/shared/<id>#<words>`) keep working.
 - **Accounts:** each account has a versioned identity keypair (RSA-OAEP-2048). Its private key exists only in browsers; the server keeps one copy per trusted device, wrapped for that device's own key (`user_identity_key_device_envelopes`). A user's access to a file is their copy of its key wrapped with their identity public key.
 - **Transfers:** the sender wraps the file key for the recipient's identity public key. The recipient's copy is only handed out once they accept.
 - **Quick share:** the host wraps a session password for each approved participant's throwaway RSA key. Guests' keys live only in the page.

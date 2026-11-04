@@ -39,7 +39,7 @@ func (h *DownloadHandler) GetMetadata(c *gin.Context) {
 		return
 	}
 
-	if !isValidFileID(fileID) {
+	if !models.IsValidFileID(fileID) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid file ID format",
 			Code:  "INVALID_FILE_ID",
@@ -88,7 +88,7 @@ func (h *DownloadHandler) Download(c *gin.Context) {
 		return
 	}
 
-	if !isValidFileID(fileID) {
+	if !models.IsValidFileID(fileID) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid file ID format",
 			Code:  "INVALID_FILE_ID",
@@ -182,15 +182,6 @@ func (h *DownloadHandler) GetByCode(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, file.ToMetadata())
-}
-
-func isValidFileID(id string) bool {
-
-	if len(id) != 17 {
-		return false
-	}
-	matched, _ := regexp.MatchString("^[a-z0-9]+$", id)
-	return matched
 }
 
 func isValidNumericCode(code string) bool {

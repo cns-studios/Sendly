@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -136,7 +135,7 @@ func (h *AndroidHandler) GetFile(c *gin.Context) {
 	}
 
 	fileID := c.Param("id")
-	if !isAndroidFileID(fileID) {
+	if !models.IsValidFileID(fileID) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid file ID format", Code: "INVALID_FILE_ID"})
 		return
 	}
@@ -158,7 +157,7 @@ func (h *AndroidHandler) Download(c *gin.Context) {
 	}
 
 	fileID := c.Param("id")
-	if !isAndroidFileID(fileID) {
+	if !models.IsValidFileID(fileID) {
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{Error: "Invalid file ID format", Code: "INVALID_FILE_ID"})
 		return
 	}
@@ -578,14 +577,6 @@ func (h *AndroidHandler) publishEnrollmentChange(ctx context.Context, userID int
 	if h.deviceHub != nil {
 		h.deviceHub.broadcast(userID, payload)
 	}
-}
-
-func isAndroidFileID(id string) bool {
-	if len(id) != 17 {
-		return false
-	}
-	matched, _ := regexp.MatchString("^[a-z0-9]+$", id)
-	return matched
 }
 
 func normalizeDevicePublicKeyJWK(raw json.RawMessage) (json.RawMessage, error) {

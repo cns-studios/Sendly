@@ -48,7 +48,7 @@ Sendly is end-to-end encrypted: every key, ciphertext and wrapped key in this AP
 
 **Pagination.** List endpoints take `page` (default `1`) and `per_page` (default `10`, max `50`); invalid values return `400 INVALID_PAGINATION`. They answer with `{ items, page, per_page, total, total_pages }`; a `page` past the end is clamped to the last page.
 
-**Identifiers.** A file has an `id` (opaque, used in `/shared/:id` links) and a short `numeric_code` that can be typed in by hand. Tunnels have a UUID `id` and a short join `code`.
+**Identifiers.** A file has an `id` (opaque, used in `/shared/:id` links and derived from the token of `/s#<token>` links) and a short `numeric_code` that can be typed in by hand. Tunnels have a UUID `id` and a short join `code`.
 
 ## Auth routes (`/auth`)
 
@@ -83,10 +83,12 @@ A file is encrypted in the browser, cut into chunks, and sent through a session:
 Starts a session. Files above the tier limit are rejected with `FILE_TOO_LARGE`.
 
 ```json
-{ "file_name": "example.zip", "file_size": 1048576, "total_chunks": 4, "chunk_size": 262144, "tunnel_id": "optional" }
+{ "file_name": "example.zip", "file_size": 1048576, "total_chunks": 4, "chunk_size": 262144, "tunnel_id": "optional", "file_id": "optional" }
 ```
 
 Response: `{ "session_id", "file_id", "chunk_size", "total_chunks" }`. Pass `tunnel_id` to upload into a quick share tunnel.
+
+`file_id` is optional. Without it the server picks one. Short links (`/s#<token>`) send the id derived from their token (see [Share links](#share-links)); it must be 17 characters of `a-z0-9` (`400 INVALID_FILE_ID`) and not belong to a file or another upload (`409 FILE_ID_TAKEN`, retry with a new token).
 
 ### `POST /api/upload/chunk`
 `multipart/form-data` with `session_id`, `chunk_index` (zero-based) and `chunk` (bytes). Response: `{ "success": true, "chunk_index", "uploaded_chunks", "total_chunks" }`.
@@ -126,6 +128,14 @@ Send `tunnel_id` instead of `duration` for a tunnel upload (lifetime then follow
 A guest's quick share upload instead carries a copy wrapped for its throwaway participant key: `wrapped_dek_b64`, `dek_wrap_alg`, `dek_wrap_nonce_b64`, `dek_wrap_version`. These are ignored for signed-in uploads. Regular guest link uploads send no envelope: the key stays in the URL fragment.
 
 Response: `{ "file_id", "numeric_code", "share_url" }`, where `share_url` is `<BASE_URL>/shared/<file_id>`.
+
+### Share links
+Two link formats open the same download page. Both keep the key in the URL fragment, which browsers never send to the server.
+
+- **Short link** `<BASE_URL>/s#<token>`, made by the web app. `token` is 16 random bytes as unpadded base64url (22 characters) and is the file's passphrase. The browser derives the file id from it: the first 16 bytes of `HMAC-SHA256(key = token, message = "sendly-link-file-id-v1")` as a big-endian integer, modulo `36^17`, in base 36, left padded with `0` to 17 characters. The server only ever sees that id.
+- **Legacy link** `<BASE_URL>/shared/<file_id>#<passphrase>`, used by older links and by clients that let the server pick the id. It keeps working unchanged.
+
+The blob format and key derivation (PBKDF2-SHA256, AES-GCM) are the same for both, so any client that decrypts one can decrypt the other. Neither page puts the file name or size in its preview; the browser fills them in after it loads the metadata.
 
 ### `DELETE /api/upload/cancel`
 `{ "session_id": "..." }` → `{ "success": true }`. Removes the session and any chunks.
@@ -398,7 +408,7 @@ Account events from CNS for Sendly's OAuth client: `user.updated` (username or a
 | `GET /livez` | Process liveness only. |
 | `GET /static/*` | Static assets, including `wordlist.txt` (cached for a year). |
 | `GET /robots.txt`, `/sitemap.xml`, `/.well-known/security.txt` | SEO and security contact. |
-| `GET /`, `/quickshare`, `/link`, `/shared/:id`, `/uploaded`, `/transfers`, `/limits`, `/help`, `/data-encryption`, `/tos`, `/privacy`, `/legal-notice` | HTML pages. Each sets the `csrf_token` cookie and honors the locale (`en`, `de`). `/transfers` shows a sign-up teaser to guests. |
+| `GET /`, `/quickshare`, `/link`, `/s`, `/shared/:id`, `/uploaded`, `/transfers`, `/limits`, `/help`, `/data-encryption`, `/tos`, `/privacy`, `/legal-notice` | HTML pages. Each sets the `csrf_token` cookie and honors the locale (`en`, `de`). `/transfers` shows a sign-up teaser to guests. |
 
 ## Error codes
 

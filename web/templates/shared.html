@@ -30,9 +30,9 @@
     <meta name="twitter:image:alt" content="Download file from Sendly">
 
     <!-- hreflang for international SEO -->
-    <link rel="alternate" hreflang="en" href="{{.baseURL}}/shared/{{.fileID}}">
-    <link rel="alternate" hreflang="de" href="{{.baseURL}}/shared/{{.fileID}}?lang=de">
-    <link rel="alternate" hreflang="x-default" href="{{.baseURL}}/shared/{{.fileID}}">
+    <link rel="alternate" hreflang="en" href="{{.baseURL}}{{.sharePath}}">
+    <link rel="alternate" hreflang="de" href="{{.baseURL}}{{.sharePath}}?lang=de">
+    <link rel="alternate" hreflang="x-default" href="{{.baseURL}}{{.sharePath}}">
 
     <!-- Structured Data / JSON-LD -->
     <script type="application/ld+json">
@@ -112,7 +112,7 @@
                 </div>
             </div>
 
-            <div id="password-section" class="hidden">
+            <div id="file-section" class="hidden">
                 <p class="shared-heading">{{.t.shared_heading}}</p>
 
                 <div class="file-info-box download-card" id="download-card">
@@ -135,7 +135,7 @@
                     <div id="auto-decrypt-section" class="hidden">
                         <button id="download-auto-btn" class="download-btn">{{.t.shared_download}}</button>
                     </div>
-                    <div id="no-password-section" class="hidden">
+                    <div id="missing-key-section" class="hidden">
                         <div class="no-password-btn">{{.t.shared_wrong_link}}</div>
                     </div>
                 </div>

@@ -19,7 +19,7 @@ flowchart LR
 
 | Feature | What it does |
 |---|---|
-| **Link sharing** | Upload a file as a guest or signed-in user and get a link. The decryption key sits in the URL fragment, which browsers never send to the server. Files expire after 7 days (guests) or 90 days (accounts). Recipients can also open a file by its short numeric code. |
+| **Link sharing** | Upload a file as a guest or signed-in user and get a short link (`/s#<token>`). The decryption key sits in the URL fragment, which browsers never send to the server. Files expire after 7 days (guests) or 90 days (accounts). Recipients can also open a file by its short numeric code. |
 | **Quick share** | A temporary room (10 min to 24 h) that others join with a short code or QR. The host approves each joiner after comparing a key fingerprint, then everyone can exchange files. No account needed. |
 | **Transfers** | Signed-in users send a file directly to another user, who accepts or declines. The sender wraps the file key for the recipient's public key. |
 | **Accounts and devices** | Sign in via CNS Auth. Each browser is a device; new devices are approved by an existing trusted one with a verification code, or the account is recovered. |

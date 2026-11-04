@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"math/big"
+	"strings"
 	"time"
 )
 
@@ -220,6 +221,7 @@ type UploadInitRequest struct {
 	TotalChunks int    `json:"total_chunks" binding:"required,gt=0"`
 	ChunkSize   int64  `json:"chunk_size" binding:"required,gt=0"`
 	TunnelID    string `json:"tunnel_id"`
+	FileID      string `json:"file_id"`
 }
 
 type UploadInitResponse struct {
@@ -527,6 +529,8 @@ var (
 	ErrApproverDeviceRestricted = &AppError{Code: "APPROVER_DEVICE_RESTRICTED", Message: "an approver device can't set up or recover the identity key"}
 	ErrInvalidDeviceKind        = &AppError{Code: "INVALID_DEVICE_KIND", Message: "device_kind must be standard or approver"}
 	ErrVerificationCodeMismatch = &AppError{Code: "VERIFICATION_CODE_MISMATCH", Message: "verification code mismatch"}
+	ErrInvalidFileID            = &AppError{Code: "INVALID_FILE_ID", Message: "invalid file ID format"}
+	ErrFileIDTaken              = &AppError{Code: "FILE_ID_TAKEN", Message: "file ID is already in use"}
 	ErrSessionNotFound          = &AppError{Code: "SESSION_NOT_FOUND", Message: "upload session not found"}
 	ErrSessionExpired           = &AppError{Code: "SESSION_EXPIRED", Message: "upload session has expired"}
 	ErrUploadNotPending         = &AppError{Code: "UPLOAD_NOT_PENDING", Message: "upload is no longer pending"}
@@ -544,8 +548,25 @@ var (
 	ErrAccountSuspended  = &AppError{Code: "ACCOUNT_SUSPENDED", Message: "your account is currently suspended and cannot use Sendly"}
 )
 
+const (
+	FileIDLength  = 17
+	fileIDCharset = "abcdefghijklmnopqrstuvwxyz0123456789"
+)
+
+func IsValidFileID(id string) bool {
+	if len(id) != FileIDLength {
+		return false
+	}
+	for i := 0; i < len(id); i++ {
+		if !strings.ContainsRune(fileIDCharset, rune(id[i])) {
+			return false
+		}
+	}
+	return true
+}
+
 func GenerateID(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	const charset = fileIDCharset
 	result := make([]byte, length)
 	for i := range result {
 		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))

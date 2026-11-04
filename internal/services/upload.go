@@ -183,12 +183,14 @@ func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, 
 		return nil, models.ErrFileTooLarge
 	}
 
-	sessionID := models.GenerateSessionID()
-	fileID := models.GenerateID(17)
+	clientFileID := req.FileID != ""
+	if clientFileID && !models.IsValidFileID(req.FileID) {
+		return nil, models.ErrInvalidFileID
+	}
 
+	sessionID := models.GenerateSessionID()
 	session := &models.UploadSession{
 		SessionID:    sessionID,
-		FileID:       fileID,
 		OriginalName: req.FileName,
 		TotalSize:    req.FileSize,
 		TotalChunks:  req.TotalChunks,
@@ -197,10 +199,27 @@ func (u *Upload) InitUpload(ctx context.Context, req *models.UploadInitRequest, 
 		CreatedAt:    time.Now(),
 	}
 
-	if err := u.db.CreateUploadSession(ctx, session, uploadSessionTTL); err != nil {
-		log.Printf("ERROR CreateUploadSession: %v", err)
-		return nil, fmt.Errorf("error creating upload session: %w", err)
+	for attempt := 0; ; attempt++ {
+		session.FileID = req.FileID
+		if !clientFileID {
+			session.FileID = models.GenerateID(models.FileIDLength)
+		}
+		var err error = models.ErrFileIDTaken
+		if !u.fs.FileExists(session.FileID) {
+			err = u.db.CreateUploadSession(ctx, session, uploadSessionTTL)
+		}
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, models.ErrFileIDTaken) {
+			log.Printf("ERROR CreateUploadSession: %v", err)
+			return nil, fmt.Errorf("error creating upload session: %w", err)
+		}
+		if clientFileID || attempt >= 2 {
+			return nil, err
+		}
 	}
+	fileID := session.FileID
 
 	if err := u.fs.CreateChunkDir(sessionID); err != nil {
 		log.Printf("ERROR CreateChunkDir: %v", err)
